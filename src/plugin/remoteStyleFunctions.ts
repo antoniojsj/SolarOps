@@ -1,3 +1,9 @@
+import {
+  getLocalPaintStyles,
+  getLocalTextStyles,
+  getLocalEffectStyles
+} from "./styles";
+
 export async function fetchRemoteStyles(usedRemoteStyles: any) {
   try {
     const currentPage = figma.currentPage;
@@ -150,6 +156,29 @@ export async function fetchActiveComponentLibraries() {
     return result;
   } catch (error) {
     console.error("[fetchActiveComponentLibraries] Erro:", error);
+    return [];
+  }
+}
+
+// Detecta e agrupa bibliotecas de tokens por tipo (fills, text, effects, strokes)
+export async function detectTokenLibraries() {
+  try {
+    const fileName = figma.root.name || "Estilos Locais";
+    const [paintStyles, textStyles, effectStyles] = await Promise.all([
+      getLocalPaintStyles(),
+      getLocalTextStyles(),
+      getLocalEffectStyles()
+    ]);
+    const tokenLibrary = {
+      name: fileName,
+      fills: paintStyles || [],
+      text: textStyles || [],
+      effects: effectStyles || [],
+      strokes: paintStyles || []
+    };
+    return [tokenLibrary];
+  } catch (error) {
+    console.error("[detectTokenLibraries] Erro ao detectar tokens:", error);
     return [];
   }
 }

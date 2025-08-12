@@ -58,16 +58,32 @@ declare const figma: {
   clientStorage: {
     setAsync: (key: string, value: any) => Promise<void>;
   };
-  mixed: unique symbol;
+  readonly mixed: unique symbol;
 };
 
 async function getLocalPaintStyles() {
   const paintStyles = await figma.getLocalPaintStyles();
-  const paintStylesData = paintStyles.map(style => ({
-    id: style.id,
-    name: style.name,
-    paint: style.paints?.[0] || null
-  }));
+  const paintStylesData = paintStyles.map(style => {
+    const paint = style.paints?.[0] || null;
+    return {
+      id: style.id,
+      name: style.name,
+      value:
+        paint && paint.color
+          ? {
+              ...paint.color,
+              a:
+                paint.opacity !== undefined
+                  ? paint.opacity
+                  : paint.color.a !== undefined
+                  ? paint.color.a
+                  : 1
+            }
+          : null,
+      // Para compatibilidade, ainda inclui paint
+      paint: paint || null
+    };
+  });
 
   return paintStylesData;
 }

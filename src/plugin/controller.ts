@@ -59,7 +59,8 @@ declare const figma: {
 // Importações de estilos
 import {
   fetchRemoteStyles,
-  fetchActiveComponentLibraries
+  fetchActiveComponentLibraries,
+  detectTokenLibraries
 } from "./remoteStyleFunctions";
 
 const {
@@ -558,7 +559,6 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     // Initialize the app
     if (msg.type === "run-app") {
       console.log("[Controller] Iniciando aplicação");
-
       if (
         Array.isArray(figma.currentPage.selection) &&
         figma.currentPage.selection.length === 0
@@ -569,45 +569,69 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         });
         return;
       }
-
       console.log("[Controller] Enviando preloader");
       figma.ui.postMessage({ type: "show-preloader" });
-
       try {
         console.log("[Controller] Iniciando processo de linting");
         const nodes = figma.currentPage.selection;
-        console.log("[Controller] Nodes selecionados:", nodes.length);
-
-        // Coletar todos os nodes recursivamente
         const allNodes = collectAllNodes(nodes);
         const lintResults = lint(allNodes, msg.libraries || [], null);
         const groupedErrors = groupErrorsByNode(lintResults);
-        console.log(
-          "[Controller] Resultados do linting:",
-          groupedErrors.length,
-          "nodes com erro"
-        );
         const serializedNodes = serializeNodes(nodes);
-        console.log("[Controller] Nodes serializados:", serializedNodes.length);
-
-        // Buscar bibliotecas de componentes ativas
         const activeComponentLibraries = await fetchActiveComponentLibraries();
-
-        console.log("[Controller] Enviando step-3-complete com sucesso");
+        // Salva o resultado da análise no clientStorage
+        const inspectorData = {
+          errors: groupedErrors,
+          nodes: serializedNodes,
+          date: new Date().toISOString(),
+          summary: {
+            totalNodes: allNodes.length,
+            totalErrors: lintResults.length
+          }
+        };
+        await figma.clientStorage.setAsync("inspectorData", inspectorData);
         figma.ui.postMessage({
           type: "step-3-complete",
           errors: groupedErrors,
           message: serializedNodes,
           success: true,
-          activeComponentLibraries // <-- envia para a UI
+          activeComponentLibraries
         });
       } catch (errLint) {
         console.error("[Controller] Erro no linting:", errLint);
-        console.log("[Controller] Enviando step-3-complete com erro");
         figma.ui.postMessage({
           type: "step-3-complete",
           errors: [],
           error: errLint instanceof Error ? errLint.message : String(errLint),
+          success: false
+        });
+      }
+      return;
+    }
+
+    // Handler para exportar o JSON da análise do inspector
+    if (msg.type === "export-inspector-json") {
+      try {
+        const inspectorData = await figma.clientStorage.getAsync(
+          "inspectorData"
+        );
+        if (inspectorData) {
+          figma.ui.postMessage({
+            type: "inspector-json-exported",
+            data: inspectorData,
+            success: true
+          });
+        } else {
+          figma.ui.postMessage({
+            type: "inspector-json-exported",
+            error: "Nenhuma análise encontrada.",
+            success: false
+          });
+        }
+      } catch (error) {
+        figma.ui.postMessage({
+          type: "inspector-json-exported",
+          error: error instanceof Error ? error.message : String(error),
           success: false
         });
       }
@@ -638,6 +662,23 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         type: "fetched-active-libraries",
         activeComponentLibraries
       });
+    }
+
+    if (msg.type === "fetch-token-libraries") {
+      try {
+        const tokenLibraries = await detectTokenLibraries();
+        figma.ui.postMessage({
+          type: "fetched-token-libraries",
+          tokenLibraries
+        });
+      } catch (error) {
+        figma.ui.postMessage({
+          type: "fetched-token-libraries",
+          tokenLibraries: [],
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
     }
   } catch (error) {
     console.error("[Controller] Erro geral:", error);

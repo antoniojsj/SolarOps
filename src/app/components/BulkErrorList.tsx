@@ -405,6 +405,41 @@ function BulkErrorList(props) {
     return { conform, nonConform, percent };
   }
 
+  // Listener para receber o JSON exportado e baixar
+  React.useEffect(() => {
+    function handleExportedJson(event) {
+      if (
+        event.data &&
+        event.data.pluginMessage &&
+        event.data.pluginMessage.type === "inspector-json-exported"
+      ) {
+        if (event.data.pluginMessage.success && event.data.pluginMessage.data) {
+          const dataStr =
+            "data:text/json;charset=utf-8," +
+            encodeURIComponent(
+              JSON.stringify(event.data.pluginMessage.data, null, 2)
+            );
+          const downloadAnchorNode = document.createElement("a");
+          downloadAnchorNode.setAttribute("href", dataStr);
+          downloadAnchorNode.setAttribute(
+            "download",
+            "sherlock-inspector.json"
+          );
+          document.body.appendChild(downloadAnchorNode);
+          downloadAnchorNode.click();
+          downloadAnchorNode.remove();
+        } else {
+          alert(
+            event.data.pluginMessage.error ||
+              "Erro ao exportar JSON da análise. Nenhum dado encontrado."
+          );
+        }
+      }
+    }
+    window.addEventListener("message", handleExportedJson);
+    return () => window.removeEventListener("message", handleExportedJson);
+  }, []);
+
   return (
     <motion.div className="bulk-errors-list" key="bulk-list">
       {/* Switch de conteúdo */}
@@ -1127,6 +1162,18 @@ function BulkErrorList(props) {
           onClick={props.onExportReport || (() => alert("Exportar relatório!"))}
         >
           Exportar relatório
+        </button>
+        <button
+          className="button button--secondary analysis-export-json"
+          type="button"
+          onClick={() => {
+            parent.postMessage(
+              { pluginMessage: { type: "export-inspector-json" } },
+              "*"
+            );
+          }}
+        >
+          Exportar JSON da análise
         </button>
       </footer>
     </motion.div>
