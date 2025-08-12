@@ -556,6 +556,21 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
     }
 
+    if (msg.type === "save-user-libs") {
+      // Salva as bibliotecas do usuário no clientStorage do Figma
+      try {
+        const libs = (msg as any).libs || [];
+        figma.clientStorage.setAsync("sherlock_selected_libs", libs);
+        figma.ui.postMessage({ type: "user-libs-saved", success: true });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "user-libs-saved",
+          success: false,
+          error: String(e)
+        });
+      }
+    }
+
     // Initialize the app
     if (msg.type === "run-app") {
       console.log("[Controller] Iniciando aplicação");

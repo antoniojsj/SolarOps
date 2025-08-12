@@ -7,10 +7,29 @@ import "../styles/panel.css";
 function SettingsPanel(props) {
   const [loading, setLoading] = React.useState(false);
   const [libs, setLibs] = React.useState(props.activeComponentLibraries || []);
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [accessCode, setAccessCode] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  // Estado para controle do fluxo de importação de bibliotecas
+  const [showLibSelection, setShowLibSelection] = React.useState(false);
+  const [availableLibs, setAvailableLibs] = React.useState([]); // bibliotecas detectadas
+  const [selectedLibs, setSelectedLibs] = React.useState([]); // bibliotecas marcadas para importar
 
   React.useEffect(() => {
     setLibs(props.activeComponentLibraries || []);
   }, [props.activeComponentLibraries]);
+
+  // Simples verificação de código (pode ser trocado por chamada de API depois)
+  function handleLogin(e) {
+    e.preventDefault();
+    if (accessCode.trim() === "sherlock2024") {
+      setIsAuthenticated(true);
+      setError("");
+    } else {
+      setError("Código de acesso inválido.");
+    }
+  }
 
   function handleHide() {
     if (props.onHandlePanelVisible) {
@@ -18,13 +37,15 @@ function SettingsPanel(props) {
     }
   }
 
-  // Handler para buscar bibliotecas de tokens
-  function handleFetchLibraries() {
+  // Substitui o antigo handleFetchLibraries pelo novo fluxo
+  // Handler para buscar bibliotecas e exibir seleção
+  function handleFetchAndShowLibs() {
     setLoading(true);
     function handler(event) {
       const { pluginMessage } = event.data;
       if (pluginMessage && pluginMessage.type === "fetched-token-libraries") {
-        setLibs(pluginMessage.tokenLibraries || []);
+        setAvailableLibs(pluginMessage.tokenLibraries || []);
+        setShowLibSelection(true);
         setLoading(false);
         window.removeEventListener("message", handler);
       }
@@ -246,6 +267,102 @@ function SettingsPanel(props) {
     );
   }
 
+  // Alterna seleção de biblioteca
+  function toggleLib(lib) {
+    setSelectedLibs(prev => {
+      const exists = prev.find(l => l.name === lib.name);
+      if (exists) {
+        return prev.filter(l => l.name !== lib.name);
+      } else {
+        return [...prev, lib];
+      }
+    });
+  }
+
+  // Salva configuração no localStorage (ATENÇÃO: para persistência real em Figma, use figma.clientStorage no controller/plugin)
+  function saveLibsConfig(libs) {
+    // Envia para o plugin salvar no clientStorage
+    parent.postMessage(
+      { pluginMessage: { type: "save-user-libs", libs } },
+      "*"
+    );
+    // Mantém localStorage para fallback/UX instantâneo
+    window.localStorage.setItem("sherlock_selected_libs", JSON.stringify(libs));
+  }
+
+  // Recupera configuração do localStorage
+  function getSavedLibsConfig() {
+    try {
+      return (
+        JSON.parse(window.localStorage.getItem("sherlock_selected_libs")) || []
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  // Solicita ao plugin as bibliotecas salvas no clientStorage
+  function fetchUserLibsFromPlugin() {
+    parent.postMessage({ pluginMessage: { type: "get-user-libs" } }, "*");
+  }
+
+  // Ao autenticar, busca libs do plugin (clientStorage) e sincroniza
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserLibsFromPlugin();
+    }
+  }, [isAuthenticated]);
+
+  // Ao montar, se já autenticado, busca libs do plugin
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserLibsFromPlugin();
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // Listener para resposta do plugin ao carregar libs do clientStorage
+  React.useEffect(() => {
+    function handleUserLibsLoaded(event) {
+      const { pluginMessage } = event.data;
+      if (pluginMessage && pluginMessage.type === "user-libs-loaded") {
+        const libsFromPlugin = pluginMessage.libs || [];
+        setLibs(libsFromPlugin);
+        setShowLibSelection(false);
+        setAvailableLibs([]);
+        setSelectedLibs([]);
+        setLoading(false);
+        // Atualiza localStorage para manter fallback sincronizado
+        window.localStorage.setItem(
+          "sherlock_selected_libs",
+          JSON.stringify(libsFromPlugin)
+        );
+      }
+    }
+    window.addEventListener("message", handleUserLibsLoaded);
+    return () => window.removeEventListener("message", handleUserLibsLoaded);
+  }, []);
+
+  // Adiciona bibliotecas selecionadas e salva configuração
+  function handleAddSelectedLibs() {
+    setLoading(true);
+    saveLibsConfig(selectedLibs);
+  }
+
+  // Adiciona listener para resposta do plugin ao salvar libs
+  React.useEffect(() => {
+    function handleUserLibsSaved(event) {
+      const { pluginMessage } = event.data;
+      if (pluginMessage && pluginMessage.type === "user-libs-saved") {
+        // Após salvar, solicita novamente as libs do plugin para garantir sincronização
+        fetchUserLibsFromPlugin();
+      }
+    }
+    window.addEventListener("message", handleUserLibsSaved);
+    return () => window.removeEventListener("message", handleUserLibsSaved);
+  }, []);
+
+  // Renderiza o painel normalmente, mas exibe o campo de acesso no topo se não autenticado
   return (
     <React.Fragment>
       <motion.div
@@ -265,90 +382,309 @@ function SettingsPanel(props) {
         />
         <div
           className="info-panel-content settings-panel-content"
-          style={{ padding: "24px 16px 0 16px" }}
+          style={{
+            padding: "24px 16px 0 16px",
+            minHeight: "calc(100vh - 56px)",
+            display: !isAuthenticated ? "flex" : undefined,
+            flexDirection: !isAuthenticated ? "column" : undefined,
+            alignItems: !isAuthenticated ? "center" : undefined,
+            justifyContent: !isAuthenticated ? "center" : undefined
+          }}
         >
-          {/* Card de identificação do projeto e resumo de tokens */}
-          {libs.length > 0 && (
-            <div style={{ marginBottom: 20, width: "100%" }}>
-              <AnalysisResultsCard
-                projectName={libs[0].name}
-                analysisDate={(
-                  (libs[0].fills?.length || 0) +
-                  (libs[0].text?.length || 0) +
-                  (libs[0].effects?.length || 0) +
-                  (libs[0].strokes?.length || 0)
-                ).toString()}
-              />
-            </div>
-          )}
-          {libs.length > 0 ? (
-            <ul
-              className="library-list"
-              style={{ width: "100%", padding: 0, margin: 0 }}
-            >
-              {libs.map((lib, idx) => (
-                <li
-                  key={lib.name + idx}
-                  className="library-list-item"
-                  style={{
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    background: "none",
-                    borderRadius: 0,
-                    marginBottom: 0,
-                    padding: 0,
-                    width: "100%",
-                    border: "none"
-                  }}
-                >
-                  <div
-                    className="library-list-item-content"
-                    style={{ color: "#fff", width: "100%", padding: 0 }}
-                  >
-                    <div style={{ width: "100%" }}>
-                      {lib.text && lib.text.length > 0 && (
-                        <TokenAccordion
-                          category="Text styles"
-                          tokens={lib.text}
-                        />
-                      )}
-                      {lib.fills && lib.fills.length > 0 && (
-                        <TokenAccordion
-                          category="Color styles"
-                          tokens={lib.fills}
-                        />
-                      )}
-                      {lib.effects && lib.effects.length > 0 && (
-                        <TokenAccordion
-                          category="Effect styles"
-                          tokens={lib.effects}
-                        />
-                      )}
-                      {lib.strokes && lib.strokes.length > 0 && (
-                        <TokenAccordion
-                          category="Stroke styles"
-                          tokens={lib.strokes}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div
+          {/* Campo de acesso no topo se não autenticado */}
+          {!isAuthenticated && (
+            <form
+              onSubmit={handleLogin}
               style={{
-                color: "#aaa",
-                fontSize: 13,
-                marginBottom: 8,
-                textAlign: "center",
-                padding: 24
+                width: "100%",
+                maxWidth: 340,
+                borderRadius: 10,
+                boxShadow: "0 2px 12px #0002",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 8,
+                background: "none",
+                margin: 0,
+                transform: "translateY(-32px)"
               }}
             >
-              Nenhuma biblioteca de tokens detectada neste arquivo.
+              {/* Removido ícone acima do título */}
+              <h3
+                style={{
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 18,
+                  margin: 0,
+                  marginBottom: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6
+                }}
+              >
+                Acesso restrito{" "}
+                <span role="img" aria-label="cadeado">
+                  🔓
+                </span>
+              </h3>
+              <input
+                type="password"
+                placeholder="Digite o código de acesso"
+                value={accessCode}
+                onChange={e => setAccessCode(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 6,
+                  border: "1px solid #444",
+                  background: "#181818",
+                  color: "#fff",
+                  fontSize: 15,
+                  marginBottom: 4
+                }}
+                autoFocus
+                disabled={isAuthenticated}
+              />
+              {error && (
+                <div style={{ color: "#ff6b6b", fontSize: 14 }}>{error}</div>
+              )}
+              <button
+                type="submit"
+                style={{
+                  width: "100%",
+                  background: "#3b82f6",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "10px 0",
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: "pointer",
+                  marginTop: 4
+                }}
+                disabled={isAuthenticated}
+              >
+                Entrar
+              </button>
+            </form>
+          )}
+          {/* Listagem de bibliotecas para importar */}
+          {isAuthenticated && showLibSelection && (
+            <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
+              {/* Título com padrão do sistema (igual 'Sobre o Sherlock') */}
+              <h3
+                style={{
+                  color: "#fff",
+                  fontWeight: 700,
+                  marginBottom: 24,
+                  letterSpacing: 0,
+                  lineHeight: "28px"
+                }}
+              >
+                Selecione as bibliotecas para importar
+              </h3>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {availableLibs.map((lib, idx) => {
+                  const selected = selectedLibs.find(l => l.name === lib.name);
+                  return (
+                    <li
+                      key={lib.name + idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        background: "rgba(60,60,60,0.5)",
+                        borderRadius: 8,
+                        marginBottom: 20,
+                        padding: 16,
+                        boxShadow: "none",
+                        border: "1px solid rgba(255,255,255,0.1)"
+                      }}
+                    >
+                      {/* Área do ícone aumentada, centralizada, afastada do texto */}
+                      <div
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          background: "#f3f4f6",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 20
+                        }}
+                      >
+                        <img
+                          src={
+                            lib.thumb ||
+                            lib.image ||
+                            require("../assets/library.svg")
+                          }
+                          alt={lib.name}
+                          style={{
+                            width: 28,
+                            height: 28,
+                            objectFit: "contain",
+                            display: "block"
+                          }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: 16
+                          }}
+                        >
+                          {lib.name}
+                        </div>
+                        <div
+                          style={{
+                            color: "#bdbdbd",
+                            fontSize: 13,
+                            marginTop: 2
+                          }}
+                        >
+                          {lib.author || lib.provider || "Desconhecido"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleLib(lib)}
+                        style={{
+                          minWidth: 100,
+                          height: 40,
+                          borderRadius: 8,
+                          border: "none", // removido o stroke
+                          background: selected
+                            ? "rgba(34,197,94,0.13)"
+                            : "transparent",
+                          color: "#fff",
+                          fontWeight: 700,
+                          fontSize: 15,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
+                          cursor: "pointer",
+                          transition: "background 0.2s",
+                          outline: "none",
+                          boxShadow: "none",
+                          position: "relative",
+                          padding: "0 22px",
+                          marginLeft: 8
+                        }}
+                        onMouseEnter={e => {
+                          if (selected) {
+                            e.currentTarget.style.background =
+                              "rgba(239,68,68,0.13)"; // vermelho opaco
+                          } else {
+                            e.currentTarget.style.background =
+                              "rgba(255,255,255,0.08)";
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = selected
+                            ? "rgba(34,197,94,0.13)"
+                            : "transparent";
+                        }}
+                      >
+                        {selected ? <>Remover</> : <>Adicionar</>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
+          {/* Conteúdo do painel só aparece se autenticado e não está na seleção de libs */}
+          {isAuthenticated && !showLibSelection && (
+            <>
+              {/* Card de identificação do projeto e resumo de tokens */}
+              {libs.length > 0 && (
+                <div style={{ marginBottom: 20, width: "100%" }}>
+                  <AnalysisResultsCard
+                    projectName={libs[0].name}
+                    analysisDate={(
+                      (libs[0].fills?.length || 0) +
+                      (libs[0].text?.length || 0) +
+                      (libs[0].effects?.length || 0) +
+                      (libs[0].strokes?.length || 0)
+                    ).toString()}
+                  />
+                </div>
+              )}
+              {libs.length > 0 ? (
+                <ul
+                  className="library-list"
+                  style={{ width: "100%", padding: 0, margin: 0 }}
+                >
+                  {libs.map((lib, idx) => (
+                    <li
+                      key={lib.name + idx}
+                      className="library-list-item"
+                      style={{
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        background: "none",
+                        borderRadius: 0,
+                        marginBottom: 0,
+                        padding: 0,
+                        width: "100%",
+                        border: "none"
+                      }}
+                    >
+                      <div
+                        className="library-list-item-content"
+                        style={{ color: "#fff", width: "100%", padding: 0 }}
+                      >
+                        <div style={{ width: "100%" }}>
+                          {lib.text && lib.text.length > 0 && (
+                            <TokenAccordion
+                              category="Text styles"
+                              tokens={lib.text}
+                            />
+                          )}
+                          {lib.fills && lib.fills.length > 0 && (
+                            <TokenAccordion
+                              category="Color styles"
+                              tokens={lib.fills}
+                            />
+                          )}
+                          {lib.effects && lib.effects.length > 0 && (
+                            <TokenAccordion
+                              category="Effect styles"
+                              tokens={lib.effects}
+                            />
+                          )}
+                          {lib.strokes && lib.strokes.length > 0 && (
+                            <TokenAccordion
+                              category="Stroke styles"
+                              tokens={lib.strokes}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div
+                  style={{
+                    color: "#aaa",
+                    fontSize: 13,
+                    marginBottom: 8,
+                    textAlign: "center",
+                    padding: 24
+                  }}
+                >
+                  Busque as biblioteca para configurar o sistema.
+                </div>
+              )}
+            </>
+          )}
         </div>
+        {/* Footer dinâmico */}
         <footer
           className="initial-content-footer"
           style={{
@@ -363,14 +699,73 @@ function SettingsPanel(props) {
             padding: "16px"
           }}
         >
-          <button
-            className="button button--primary button--full"
-            style={{ width: "100%", fontWeight: 600, fontSize: 15, margin: 0 }}
-            onClick={handleFetchLibraries}
-            disabled={loading}
-          >
-            {loading ? "Buscando..." : "Buscar bibliotecas de tokens"}
-          </button>
+          {/* Passo 2: Seleção de bibliotecas */}
+          {isAuthenticated && showLibSelection ? (
+            <button
+              className="button button--primary button--full"
+              style={{
+                width: "100%",
+                fontWeight: 600,
+                fontSize: 15,
+                margin: 0,
+                background:
+                  selectedLibs.length === 0 || loading
+                    ? "rgba(255,255,255,0.16)"
+                    : "#3b82f6",
+                color: "#fff",
+                transition: "background 0.2s",
+                cursor:
+                  selectedLibs.length === 0 || loading
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: selectedLibs.length === 0 || loading ? 0.7 : 1
+              }}
+              onClick={handleAddSelectedLibs}
+              disabled={selectedLibs.length === 0 || loading}
+            >
+              {loading ? "Salvando..." : "Adicionar bibliotecas"}
+            </button>
+          ) : isAuthenticated && !showLibSelection && libs.length > 0 ? (
+            // Passo 3: Exibição dos tokens
+            <button
+              className="button button--primary button--full"
+              style={{
+                width: "100%",
+                fontWeight: 600,
+                fontSize: 15,
+                margin: 0,
+                background: "rgba(239,68,68,0.13)",
+                color: "#ef4444",
+                transition: "background 0.2s"
+              }}
+              onClick={() => {
+                resetLibsConfig();
+                setLibs([]);
+                setSelectedLibs([]);
+                setShowLibSelection(true);
+              }}
+            >
+              Resetar configurações
+            </button>
+          ) : isAuthenticated && !showLibSelection && libs.length === 0 ? (
+            // Passo 1: Buscar bibliotecas
+            <button
+              className="button button--primary button--full"
+              style={{
+                width: "100%",
+                fontWeight: 600,
+                fontSize: 15,
+                margin: 0,
+                background: "#3b82f6",
+                color: "#fff",
+                transition: "background 0.2s"
+              }}
+              onClick={handleFetchAndShowLibs}
+              disabled={loading}
+            >
+              {loading ? "Buscando..." : "Buscar bibliotecas"}
+            </button>
+          ) : null}
         </footer>
       </motion.div>
     </React.Fragment>
