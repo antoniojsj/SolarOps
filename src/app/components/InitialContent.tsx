@@ -3,6 +3,9 @@ import SettingsPanel from "./SettingsPanel";
 
 function InitialContent(props) {
   const [settingsPanelVisible, setSettingsPanelVisible] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria' ou 'acessibilidade'
+  const [accessibilityTab, setAccessibilityTab] = React.useState("contrast"); // 'contrast' ou 'docs'
+
   return (
     <div className="initial-content-root">
       <div
@@ -16,19 +19,49 @@ function InitialContent(props) {
           height: 48
         }}
       >
-        <div
-          className="pill selected initial-header-tab"
-          style={{
-            background: "rgba(255,255,255,0.08)",
-            color: "#fff",
-            fontWeight: 400,
-            fontSize: 14,
-            borderRadius: 4,
-            padding: "6px 12px",
-            lineHeight: "18px"
-          }}
-        >
-          Auditoria
+        <div style={{ display: "flex", gap: 8 }}>
+          <div
+            className={`pill initial-header-tab${
+              activeTab === "auditoria" ? " selected" : ""
+            }`}
+            style={{
+              background:
+                activeTab === "auditoria"
+                  ? "rgba(255,255,255,0.08)"
+                  : "transparent",
+              color: "#fff",
+              fontWeight: 400,
+              fontSize: 14,
+              borderRadius: 4,
+              padding: "6px 12px",
+              lineHeight: "18px",
+              cursor: "pointer"
+            }}
+            onClick={() => setActiveTab("auditoria")}
+          >
+            Auditoria
+          </div>
+          <div
+            className={`pill initial-header-tab${
+              activeTab === "acessibilidade" ? " selected" : ""
+            }`}
+            style={{
+              background:
+                activeTab === "acessibilidade"
+                  ? "rgba(255,255,255,0.08)"
+                  : "transparent",
+              color: "#fff",
+              fontWeight: 400,
+              fontSize: 14,
+              borderRadius: 4,
+              padding: "6px 12px",
+              lineHeight: "18px",
+              cursor: "pointer"
+            }}
+            onClick={() => setActiveTab("acessibilidade")}
+          >
+            Acessibilidade
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
@@ -105,183 +138,316 @@ function InitialContent(props) {
         </div>
       </div>
       <div className="initial-content-main">
-        <div className="scan-hero">
-          <div className="scan-icon-container">
-            <div className="scan-icon">
-              <div
-                className="scan-icon-orbital"
-                style={{ ["--delay" as any]: "0s" } as React.CSSProperties}
-              />
-              <div
-                className="scan-icon-orbital"
-                style={{ ["--delay" as any]: "0.5s" } as React.CSSProperties}
-              />
-              <div className="scan-icon-center">
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="scan-icon-svg"
-                >
-                  <path
-                    d="M3 9V6C3 4.34315 4.34315 3 6 3H9M15 3H18C19.6569 3 21 4.34315 21 6V9M21 15V18C21 19.6569 19.6569 21 18 21H15M9 21H6C4.34315 21 3 19.6569 3 18V15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+        {activeTab === "auditoria" && (
+          <React.Fragment>
+            <div className="scan-hero">
+              <div className="scan-icon-container">
+                <div className="scan-icon">
+                  <div
+                    className="scan-icon-orbital"
+                    style={{ ["--delay" as any]: "0s" } as React.CSSProperties}
                   />
-                  <path
-                    d="M17 12H12H7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                  <div
+                    className="scan-icon-orbital"
+                    style={
+                      { ["--delay" as any]: "0.5s" } as React.CSSProperties
+                    }
                   />
-                </svg>
+                  <div className="scan-icon-center">
+                    <svg
+                      width="32"
+                      height="32"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="scan-icon-svg"
+                    >
+                      <path
+                        d="M3 9V6C3 4.34315 4.34315 3 6 3H9M15 3H18C19.6569 3 21 4.34315 21 6V9M21 15V18C21 19.6569 19.6569 21 18 21H15M9 21H6C4.34315 21 3 19.6569 3 18V15"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M17 12H12H7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <h2 className="scan-title">
+                Verifique a conformidade do seu projeto
+              </h2>
+            </div>
+            <div className="features-grid">
+              <div className="feature-card">
+                <div className="feature-icon feature-icon-blue">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M12 16V12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M12 8H12.01"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <div className="feature-content">
+                  <h3 className="feature-title">Verificação</h3>
+                  <p className="feature-description">
+                    Cores, tipografia e espaçamento
+                  </p>
+                </div>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon feature-icon-green">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M22 12H18L15 21L9 3L6 12H2"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <div className="feature-content">
+                  <h3 className="feature-title">Relatórios</h3>
+                  <p className="feature-description">Métricas e gráficos</p>
+                </div>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon feature-icon-yellow">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M13 2L3 14H12L11 22L21 10H12L13 2Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <div className="feature-content">
+                  <h3 className="feature-title">Correções</h3>
+                  <p className="feature-description">Sugestões automáticas</p>
+                </div>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon feature-icon-purple">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                    <path
+                      d="M12 16V12M12 8H12.01"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <div className="feature-content">
+                  <h3 className="feature-title">Navegação</h3>
+                  <p className="feature-description">Ir para elementos</p>
+                </div>
               </div>
             </div>
-          </div>
-          <h2 className="scan-title">
-            Verifique a conformidade do seu projeto
-          </h2>
-        </div>
-        <div className="features-grid">
-          <div className="feature-card">
-            <div className="feature-icon feature-icon-blue">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+            <div className="tip-card">
+              <div className="tip-icon">💡</div>
+              <div className="tip-content">
+                <h4 className="tip-title">Importante</h4>
+                <p className="tip-text">
+                  Selecione um ou mais frames e depois clique no botão "iniciar
+                  análise" para gerar o relatório.
+                </p>
+              </div>
+            </div>
+          </React.Fragment>
+        )}
+        {activeTab === "acessibilidade" && (
+          <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+              <button
+                className={`pill${
+                  accessibilityTab === "contrast" ? " selected" : ""
+                }`}
+                style={{
+                  background:
+                    accessibilityTab === "contrast"
+                      ? "rgba(255,255,255,0.08)"
+                      : "transparent",
+                  color: "#fff",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  borderRadius: 4,
+                  padding: "6px 12px",
+                  lineHeight: "18px",
+                  cursor: "pointer"
+                }}
+                onClick={() => setAccessibilityTab("contrast")}
               >
-                <path
-                  d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M12 16V12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M12 8H12.01"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="feature-content">
-              <h3 className="feature-title">Verificação</h3>
-              <p className="feature-description">
-                Cores, tipografia e espaçamento
-              </p>
-            </div>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon feature-icon-green">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+                Contrast checker
+              </button>
+              <button
+                className={`pill${
+                  accessibilityTab === "docs" ? " selected" : ""
+                }`}
+                style={{
+                  background:
+                    accessibilityTab === "docs"
+                      ? "rgba(255,255,255,0.08)"
+                      : "transparent",
+                  color: "#fff",
+                  fontWeight: 400,
+                  fontSize: 14,
+                  borderRadius: 4,
+                  padding: "6px 12px",
+                  lineHeight: "18px",
+                  cursor: "pointer"
+                }}
+                onClick={() => setAccessibilityTab("docs")}
               >
-                <path
-                  d="M22 12H18L15 21L9 3L6 12H2"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+                Consultar documentações
+              </button>
             </div>
-            <div className="feature-content">
-              <h3 className="feature-title">Relatórios</h3>
-              <p className="feature-description">Métricas e gráficos</p>
+            <div style={{ minHeight: 220 }}>
+              {accessibilityTab === "contrast" && (
+                <div
+                  style={{ color: "#fff", textAlign: "center", padding: 32 }}
+                >
+                  <h3
+                    style={{
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 18,
+                      marginBottom: 16
+                    }}
+                  >
+                    Contrast Checker
+                  </h3>
+                  <p style={{ color: "#bdbdbd", fontSize: 14 }}>
+                    Ferramenta para checar contraste de cores. (Em breve)
+                  </p>
+                </div>
+              )}
+              {accessibilityTab === "docs" && (
+                <div
+                  style={{ color: "#fff", textAlign: "center", padding: 32 }}
+                >
+                  <h3
+                    style={{
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 18,
+                      marginBottom: 16
+                    }}
+                  >
+                    Documentações de Acessibilidade
+                  </h3>
+                  <ul
+                    style={{
+                      color: "#bdbdbd",
+                      fontSize: 14,
+                      textAlign: "left",
+                      maxWidth: 400,
+                      margin: "0 auto"
+                    }}
+                  >
+                    <li>
+                      <a
+                        href="https://www.w3.org/WAI/standards-guidelines/wcag/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#3b82f6" }}
+                      >
+                        WCAG - Web Content Accessibility Guidelines
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="https://contrast-ratio.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#3b82f6" }}
+                      >
+                        Contrast Ratio Checker
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="https://www.a11yproject.com/checklist/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#3b82f6" }}
+                      >
+                        A11Y Project Checklist
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
-          <div className="feature-card">
-            <div className="feature-icon feature-icon-yellow">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M13 2L3 14H12L11 22L21 10H12L13 2Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="feature-content">
-              <h3 className="feature-title">Correções</h3>
-              <p className="feature-description">Sugestões automáticas</p>
-            </div>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon feature-icon-purple">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M12 16V12M12 8H12.01"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="feature-content">
-              <h3 className="feature-title">Navegação</h3>
-              <p className="feature-description">Ir para elementos</p>
-            </div>
-          </div>
-        </div>
-        <div className="tip-card">
-          <div className="tip-icon">💡</div>
-          <div className="tip-content">
-            <h4 className="tip-title">Importante</h4>
-            <p className="tip-text">
-              Selecione um ou mais frames e depois clique no botão "iniciar
-              análise" para gerar o relatório.
-            </p>
-          </div>
-        </div>
+        )}
       </div>
-      <footer className="initial-content-footer">
-        <button
-          className="button button--primary"
-          onClick={props.onHandleRunApp}
-          disabled={!props.isFrameSelected}
-        >
-          Iniciar auditoria
-        </button>
-      </footer>
+      {activeTab === "auditoria" && (
+        <footer className="initial-content-footer">
+          <button
+            className="button button--primary"
+            onClick={props.onHandleRunApp}
+            disabled={!props.isFrameSelected}
+          >
+            Iniciar auditoria
+          </button>
+        </footer>
+      )}
     </div>
   );
 }
