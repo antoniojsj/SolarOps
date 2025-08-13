@@ -5,12 +5,10 @@ import Navigation from "./Navigation";
 import NodeList from "./NodeList";
 import LibraryPage from "./LibraryPage";
 import StylesPage from "./StylesPage";
-import PreloaderCSS from "./PreloaderCSS";
 import InitialContent from "./InitialContent";
 import Panel from "./Panel";
 import BulkErrorList from "./BulkErrorList";
 import InfoPanel from "./InfoPanel";
-import TotalErrorCount from "./TotalErrorCount";
 import SettingsPanel from "./SettingsPanel";
 
 import "../styles/figma.ds.css";
@@ -46,7 +44,6 @@ const App = ({}) => {
   const librariesRef = React.useRef([]);
   const activePageRef = React.useRef(activePage);
   const [auditStarted, setAuditStarted] = useState(false);
-  const [preloaderMessage, setPreloaderMessage] = useState("");
   const [infoPanelVisible, setInfoPanelVisible] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [activeComponentLibraries, setActiveComponentLibraries] = useState([]);
@@ -452,14 +449,13 @@ const App = ({}) => {
   const handleRunAudit = () => {
     setAuditStarted(true);
     setInitialLoad(false);
-    setPreloaderMessage("Rodando análise...");
     onRunApp();
   };
 
   React.useEffect(() => {
     console.log("[DEBUG] initialLoad:", initialLoad);
     if (!initialLoad && auditStarted) {
-      setPreloaderMessage("Aguarde, processando análise...");
+      // setPreloaderMessage("Aguarde, processando análise...");
     }
   }, [initialLoad, auditStarted]);
 
@@ -482,8 +478,8 @@ const App = ({}) => {
 
   return (
     <div className="container">
-      {/* Renderizar Navigation apenas após iniciar a análise */}
-      {auditStarted ? (
+      {/* Renderizar Navigation apenas se não estiver na página de relatório (bulk) */}
+      {auditStarted && activePage !== "bulk" ? (
         <Navigation
           onPageSelection={updateNavigation}
           activePage={activePage}
@@ -554,11 +550,12 @@ const App = ({}) => {
                   setIsVisible(true);
                 }
               }}
-              settingsPanelActive={activePage === "settings"}
             />
           );
         })()
-      ) : auditStarted && (initialLoad || analysisResult) ? (
+      ) : auditStarted &&
+        activePage === "bulk" &&
+        (initialLoad || analysisResult) ? (
         <BulkErrorList
           libraries={libraries}
           errorArray={Array.isArray(errorArray) ? errorArray : []}
@@ -570,7 +567,6 @@ const App = ({}) => {
           onClick={updateVisibility}
           onSelectedListUpdate={updateSelectedList}
           initialLoadComplete={initialLoad}
-          settingsPanelActive={activePage === "settings"}
           onHandleRunApp={handleRunAudit}
           disableRefazer={!activeNodeIds.length}
           nodeArray={nodeArray}

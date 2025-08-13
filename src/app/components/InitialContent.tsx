@@ -313,24 +313,12 @@ function InitialContent(props) {
         )}
         {activeTab === "acessibilidade" && (
           <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
-            <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+            <div className="filter-pills" style={{ gap: 8, marginBottom: 24 }}>
               <button
                 className={`pill${
                   accessibilityTab === "contrast" ? " selected" : ""
                 }`}
-                style={{
-                  background:
-                    accessibilityTab === "contrast"
-                      ? "rgba(255,255,255,0.08)"
-                      : "transparent",
-                  color: "#fff",
-                  fontWeight: 400,
-                  fontSize: 14,
-                  borderRadius: 4,
-                  padding: "6px 12px",
-                  lineHeight: "18px",
-                  cursor: "pointer"
-                }}
+                type="button"
                 onClick={() => setAccessibilityTab("contrast")}
               >
                 Contrast checker
@@ -339,19 +327,7 @@ function InitialContent(props) {
                 className={`pill${
                   accessibilityTab === "docs" ? " selected" : ""
                 }`}
-                style={{
-                  background:
-                    accessibilityTab === "docs"
-                      ? "rgba(255,255,255,0.08)"
-                      : "transparent",
-                  color: "#fff",
-                  fontWeight: 400,
-                  fontSize: 14,
-                  borderRadius: 4,
-                  padding: "6px 12px",
-                  lineHeight: "18px",
-                  cursor: "pointer"
-                }}
+                type="button"
                 onClick={() => setAccessibilityTab("docs")}
               >
                 Consultar documentações

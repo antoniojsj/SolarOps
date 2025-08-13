@@ -348,6 +348,17 @@ function BulkErrorList(props) {
     );
   }
 
+  // Fallback visual se não houver dados de análise
+  if (!Array.isArray(props.errorArray) || props.errorArray.length === 0) {
+    return (
+      <div style={{ color: "#fff", textAlign: "center", marginTop: 64 }}>
+        Nenhum dado de análise encontrado.
+        <br />
+        Tente refazer a análise ou selecione outros elementos.
+      </div>
+    );
+  }
+
   // Cálculo dinâmico dos cards principais
   const totalElements = props.errorArray.length;
   const nonConformElements = filteredErrorArray.length;
@@ -550,7 +561,12 @@ function BulkErrorList(props) {
               Resultados da análise
             </h2>
           </div>
-          <div>
+          <div style={{ height: 8 }} />
+          <div
+            style={{
+              margin: "0 16px 0 16px"
+            }}
+          >
             <AnalysisResultsCard
               projectName={projectName}
               analysisDate={formattedDate}
@@ -1162,18 +1178,6 @@ function BulkErrorList(props) {
           onClick={props.onExportReport || (() => alert("Exportar relatório!"))}
         >
           Exportar relatório
-        </button>
-        <button
-          className="button button--secondary analysis-export-json"
-          type="button"
-          onClick={() => {
-            parent.postMessage(
-              { pluginMessage: { type: "export-inspector-json" } },
-              "*"
-            );
-          }}
-        >
-          Exportar JSON da análise
         </button>
       </footer>
     </motion.div>

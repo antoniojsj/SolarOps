@@ -44,14 +44,17 @@ function SettingsPanel(props) {
     }
   }
 
-  // Ao autenticar, inicia no passo de busca
+  // Ao abrir o painel, sempre busca as bibliotecas salvas do plugin para garantir persistência
+  React.useEffect(() => {
+    if (props.panelVisible && isAuthenticated) {
+      fetchUserLibsFromPlugin();
+    }
+  }, [props.panelVisible, isAuthenticated]);
+
+  // Ao autenticar, inicia no passo de busca, mas só se não houver libs salvas
   React.useEffect(() => {
     if (isAuthenticated) {
-      setStep("select");
-      setShowLibSelection(false); // Não mostra seleção ainda
-      setHasFetchedLibs(false);
-      setLibs([]);
-      setSelectedLibs([]);
+      fetchUserLibsFromPlugin();
     }
   }, [isAuthenticated]);
 
@@ -304,20 +307,33 @@ function SettingsPanel(props) {
       { pluginMessage: { type: "save-user-libs", libs } },
       "*"
     );
-    // Mantém localStorage para fallback/UX instantâneo
-    window.localStorage.setItem("sherlock_selected_libs", JSON.stringify(libs));
   }
 
-  // Recupera configuração do localStorage
-  function getSavedLibsConfig() {
-    try {
-      return (
-        JSON.parse(window.localStorage.getItem("sherlock_selected_libs")) || []
-      );
-    } catch {
-      return [];
+  // Listener para resposta do plugin ao salvar libs
+  React.useEffect(() => {
+    function handleUserLibsSaved(event) {
+      const { pluginMessage } = event.data;
+      if (pluginMessage && pluginMessage.type === "user-libs-saved") {
+        setLoading(false);
+        setStep("saved");
+        // Após salvar, busca do plugin para garantir sincronismo
+        fetchUserLibsFromPlugin();
+      }
     }
-  }
+    window.addEventListener("message", handleUserLibsSaved);
+    return () => window.removeEventListener("message", handleUserLibsSaved);
+  }, []);
+
+  // Recupera configuração do localStorage
+  // function getSavedLibsConfig() {
+  //   try {
+  //     return (
+  //       JSON.parse(window.localStorage.getItem("sherlock_selected_libs")) || []
+  //     );
+  //   } catch {
+  //     return [];
+  //   }
+  // }
 
   // Solicita ao plugin as bibliotecas salvas no clientStorage
   function fetchUserLibsFromPlugin() {
@@ -330,20 +346,18 @@ function SettingsPanel(props) {
       const { pluginMessage } = event.data;
       if (pluginMessage && pluginMessage.type === "user-libs-loaded") {
         const libsFromPlugin = pluginMessage.libs || [];
+        console.log("[SettingsPanel] libsFromPlugin recebido:", libsFromPlugin);
         setLibs(libsFromPlugin);
         setShowLibSelection(false);
         setAvailableLibs([]);
         setSelectedLibs([]);
         setLoading(false);
-        // Atualiza localStorage para manter fallback sincronizado
-        window.localStorage.setItem(
-          "sherlock_selected_libs",
-          JSON.stringify(libsFromPlugin)
-        );
         if (libsFromPlugin.length > 0) {
           setStep("saved");
+          setHasFetchedLibs(true);
         } else {
           setStep("select");
+          setHasFetchedLibs(false);
         }
       }
     }
@@ -365,18 +379,32 @@ function SettingsPanel(props) {
     saveLibsConfig(libs);
   }
 
-  // Listener para resposta do plugin ao salvar libs
-  React.useEffect(() => {
-    function handleUserLibsSaved(event) {
+  // Função para resetar as bibliotecas salvas no plugin
+  function handleResetUserLibs() {
+    setLoading(true);
+    // Limpa o clientStorage do plugin e só então volta para o início
+    function handler(event) {
       const { pluginMessage } = event.data;
-      if (pluginMessage && pluginMessage.type === "user-libs-saved") {
+      if (
+        pluginMessage &&
+        pluginMessage.type === "user-libs-saved" &&
+        pluginMessage.success
+      ) {
+        setStep("select");
+        setLibs([]);
+        setSelectedLibs([]);
+        setShowLibSelection(false);
+        setHasFetchedLibs(false);
         setLoading(false);
-        setStep("saved");
+        window.removeEventListener("message", handler);
       }
     }
-    window.addEventListener("message", handleUserLibsSaved);
-    return () => window.removeEventListener("message", handleUserLibsSaved);
-  }, []);
+    window.addEventListener("message", handler);
+    parent.postMessage(
+      { pluginMessage: { type: "save-user-libs", libs: [] } },
+      "*"
+    );
+  }
 
   // Renderiza o painel normalmente, mas exibe o campo de acesso no topo se não autenticado
   return (
@@ -919,15 +947,10 @@ function SettingsPanel(props) {
                 color: "#ef4444",
                 transition: "background 0.2s"
               }}
-              onClick={() => {
-                setStep("select");
-                setLibs([]);
-                setSelectedLibs([]);
-                setShowLibSelection(false);
-                setHasFetchedLibs(false);
-              }}
+              onClick={handleResetUserLibs}
+              disabled={loading}
             >
-              Resetar configurações
+              {loading ? "Resetando..." : "Resetar configurações"}
             </button>
           ) : isAuthenticated &&
             !showLibSelection &&
