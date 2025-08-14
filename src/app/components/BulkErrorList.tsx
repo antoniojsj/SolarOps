@@ -1,4 +1,6 @@
 import * as React from "react";
+
+declare function require(path: string): any;
 import { motion } from "framer-motion/dist/framer-motion";
 import BulkErrorListItem from "./BulkErrorListItem";
 import Banner from "./Banner";
@@ -500,7 +502,7 @@ function BulkErrorList(props) {
           Frame
         </button>
       </div>
-      {tab === "Geral" ? (
+      {tab === "Geral" && (
         <div className="panel-body panel-body-errors">
           <div
             style={{
@@ -898,9 +900,10 @@ function BulkErrorList(props) {
               </motion.ul>
             )}
           </>
-          {/* )} */}
         </div>
-      ) : (
+      )}
+
+      {tab === "Frame" && (
         <div className="panel-body panel-body-errors">
           <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 16px" }}>
             {Array.isArray(props.nodeArray) && props.nodeArray.length > 0 ? (

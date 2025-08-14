@@ -1,3 +1,6 @@
+// Declaração para o require do Node.js
+declare const require: any;
+
 // Importações locais
 import {
   checkType,
@@ -418,6 +421,187 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     // Import local styles to use as recommendations
+    // Manipulador para obter o nó selecionado para verificação de contraste
+    if (msg.type === "get-selected-node") {
+      console.log(
+        "[Controller] Obtendo nó selecionado para verificação de contraste"
+      );
+      try {
+        const selectedNodes = figma.currentPage.selection;
+        if (selectedNodes.length === 0) {
+          figma.notify(
+            "Por favor, selecione um frame para verificar o contraste",
+            { timeout: 3000 }
+          );
+          return;
+        }
+
+        const node = selectedNodes[0];
+
+        // Função para extrair as propriedades relevantes do nó para verificação de contraste
+        const extractNodeData = (node: any, depth: number = 0): any => {
+          // Limitar a profundidade para evitar sobrecarga
+          if (depth > 5) return null;
+
+          try {
+            const nodeData: any = {
+              id: node.id,
+              name: node.name,
+              type: node.type,
+              visible: node.visible !== false,
+              locked: node.locked === true,
+              children: []
+            };
+
+            // Extrair propriedades de texto
+            if (node.type === "TEXT") {
+              // Dados básicos de texto
+              nodeData.characters = node.characters || "";
+              nodeData.fontSize = node.fontSize || 16; // Tamanho padrão se não definido
+              nodeData.fontWeight = node.fontWeight || 400; // Peso padrão se não definido
+              nodeData.textAlignHorizontal = node.textAlignHorizontal || "LEFT";
+              nodeData.textAlignVertical = node.textAlignVertical || "TOP";
+              nodeData.textAutoResize = node.textAutoResize || "NONE";
+
+              // Estilos de texto
+              if (typeof node.getStyledTextSegments === "function") {
+                nodeData.textSegments = node.getStyledTextSegments([
+                  "fontSize",
+                  "fontName",
+                  "fontWeight",
+                  "fills",
+                  "textCase",
+                  "textDecoration",
+                  "letterSpacing",
+                  "lineHeight",
+                  "listOptions"
+                ]);
+              }
+
+              // Preenchimentos (cores do texto)
+              if (node.fills && Array.isArray(node.fills)) {
+                nodeData.fills = node.fills.map((fill: any) => ({
+                  type: fill.type,
+                  visible: fill.visible !== false,
+                  opacity: fill.opacity,
+                  blendMode: fill.blendMode,
+                  color: fill.type === "SOLID" ? fill.color : null,
+                  gradientStops:
+                    fill.type === "GRADIENT_LINEAR" ||
+                    fill.type === "GRADIENT_RADIAL" ||
+                    fill.type === "GRADIENT_ANGULAR" ||
+                    fill.type === "GRADIENT_DIAMOND"
+                      ? fill.gradientStops
+                      : null
+                }));
+              }
+
+              // Efeitos (sombra, etc.)
+              if (node.effects && Array.isArray(node.effects)) {
+                nodeData.effects = node.effects.map((effect: any) => ({
+                  type: effect.type,
+                  visible: effect.visible !== false,
+                  radius: effect.radius,
+                  color: effect.color,
+                  offset: effect.offset,
+                  spread: effect.spread
+                }));
+              }
+            }
+
+            // Para todos os nós, extrair preenchimentos e traçados
+            if (node.fills && Array.isArray(node.fills)) {
+              nodeData.fills = node.fills.map((fill: any) => ({
+                type: fill.type,
+                visible: fill.visible !== false,
+                opacity: fill.opacity,
+                blendMode: fill.blendMode,
+                color: fill.type === "SOLID" ? fill.color : null,
+                gradientStops:
+                  fill.type === "GRADIENT_LINEAR" ||
+                  fill.type === "GRADIENT_RADIAL" ||
+                  fill.type === "GRADIENT_ANGULAR" ||
+                  fill.type === "GRADIENT_DIAMOND"
+                    ? fill.gradientStops
+                    : null
+              }));
+            }
+
+            // Extrair traçados (bordas)
+            if (node.strokes && Array.isArray(node.strokes)) {
+              nodeData.strokes = node.strokes.map((stroke: any) => ({
+                type: stroke.type,
+                visible: stroke.visible !== false,
+                color: stroke.type === "SOLID" ? stroke.color : null,
+                opacity: stroke.opacity,
+                blendMode: stroke.blendMode,
+                weight: node.strokeWeight || 1
+              }));
+            }
+
+            // Extrair cantos arredondados
+            if (
+              node.cornerRadius !== undefined ||
+              node.topLeftRadius !== undefined
+            ) {
+              nodeData.cornerRadius = {
+                topLeft: node.topLeftRadius || node.cornerRadius || 0,
+                topRight: node.topRightRadius || node.cornerRadius || 0,
+                bottomRight: node.bottomRightRadius || node.cornerRadius || 0,
+                bottomLeft: node.bottomLeftRadius || node.cornerRadius || 0
+              };
+            }
+
+            // Extrair opacidade
+            if (node.opacity !== undefined) {
+              nodeData.opacity = node.opacity;
+            }
+
+            // Extrair dimensões e posição
+            nodeData.absoluteBoundingBox = node.absoluteBoundingBox
+              ? {
+                  x: node.absoluteBoundingBox.x,
+                  y: node.absoluteBoundingBox.y,
+                  width: node.absoluteBoundingBox.width,
+                  height: node.absoluteBoundingBox.height
+                }
+              : null;
+
+            // Processar filhos recursivamente (com limite de profundidade)
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                if (child && child.visible !== false && child.locked !== true) {
+                  const childData = extractNodeData(child, depth + 1);
+                  if (childData) {
+                    nodeData.children.push(childData);
+                  }
+                }
+              }
+            }
+
+            return nodeData;
+          } catch (error) {
+            console.error(
+              `[extractNodeData] Erro ao processar nó ${node.id}:`,
+              error
+            );
+            return null;
+          }
+        };
+
+        const nodeData = extractNodeData(node, 0);
+
+        // Enviar dados do nó de volta para a UI
+        figma.ui.postMessage({
+          type: "selected-node",
+          node: nodeData
+        });
+      } catch (error) {
+        console.error("[Controller] Erro ao processar nó selecionado:", error);
+        figma.notify("Erro ao processar o frame selecionado", { error: true });
+      }
+    }
+
     if (msg.type === "find-local-styles") {
       console.log("[Controller] Buscando estilos locais");
       (async function() {

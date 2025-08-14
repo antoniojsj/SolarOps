@@ -1,13 +1,26 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import SettingsPanel from "./SettingsPanel";
+import DocumentationSearch from "./DocumentationSearch";
+import ContrastChecker from "./ContrastChecker";
 
 function InitialContent(props) {
   const [settingsPanelVisible, setSettingsPanelVisible] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria' ou 'acessibilidade'
   const [accessibilityTab, setAccessibilityTab] = React.useState("contrast"); // 'contrast' ou 'docs'
+  const [selectedNode, setSelectedNode] = React.useState<any>(null);
+  const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
 
   return (
-    <div className="initial-content-root">
+    <div
+      className="initial-content-root"
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        boxSizing: "border-box"
+      }}
+    >
       <div
         className="initial-header"
         style={{
@@ -137,9 +150,14 @@ function InitialContent(props) {
           )}
         </div>
       </div>
-      <div className="initial-content-main">
+      <div
+        className="initial-content-main"
+        style={{ flex: 1, overflow: "auto" }}
+      >
         {activeTab === "auditoria" && (
-          <React.Fragment>
+          <div
+            style={{ width: "100%", padding: "16px", boxSizing: "border-box" }}
+          >
             <div className="scan-hero">
               <div className="scan-icon-container">
                 <div className="scan-icon">
@@ -309,118 +327,219 @@ function InitialContent(props) {
                 </p>
               </div>
             </div>
-          </React.Fragment>
+          </div>
         )}
         {activeTab === "acessibilidade" && (
-          <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
-            <div className="filter-pills" style={{ gap: 8, marginBottom: 24 }}>
-              <button
-                className={`pill${
-                  accessibilityTab === "contrast" ? " selected" : ""
-                }`}
-                type="button"
-                onClick={() => setAccessibilityTab("contrast")}
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              padding: "0",
+              margin: "0",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden"
+            }}
+          >
+            {/* Tabs */}
+            <div
+              style={{
+                padding: "0",
+                margin: "0 0 16px 0",
+                width: "100%",
+                boxSizing: "border-box"
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  background: "rgba(255,255,255,0.04)",
+                  borderRadius: 4,
+                  padding: "2px",
+                  margin: "0",
+                  boxSizing: "border-box"
+                }}
               >
-                Contrast checker
-              </button>
-              <button
-                className={`pill${
-                  accessibilityTab === "docs" ? " selected" : ""
-                }`}
-                type="button"
-                onClick={() => setAccessibilityTab("docs")}
-              >
-                Consultar documentações
-              </button>
+                <button
+                  onClick={() => setAccessibilityTab("contrast")}
+                  style={{
+                    flex: 1,
+                    background:
+                      accessibilityTab === "contrast" ? "#fff" : "transparent",
+                    border: "none",
+                    borderRadius: 4,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    color: accessibilityTab === "contrast" ? "#222" : "#fff",
+                    padding: "6px 18px",
+                    boxShadow: "none",
+                    transition: "background 0.2s, color 0.2s",
+                    cursor: "pointer"
+                  }}
+                >
+                  Contraste
+                </button>
+                <button
+                  onClick={() => setAccessibilityTab("docs")}
+                  style={{
+                    flex: 1,
+                    background:
+                      accessibilityTab === "docs" ? "#fff" : "transparent",
+                    border: "none",
+                    borderRadius: 4,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    color: accessibilityTab === "docs" ? "#222" : "#fff",
+                    padding: "6px 18px",
+                    boxShadow: "none",
+                    transition: "background 0.2s, color 0.2s",
+                    cursor: "pointer"
+                  }}
+                >
+                  Documentações
+                </button>
+              </div>
             </div>
-            <div style={{ minHeight: 220 }}>
-              {accessibilityTab === "contrast" && (
+
+            {/* Content */}
+            <div
+              style={{
+                flex: 1,
+                width: "100%",
+                padding: "0",
+                margin: "0",
+                boxSizing: "border-box",
+                overflowY: "auto"
+              }}
+            >
+              {accessibilityTab === "contrast" ? (
+                <ContrastChecker
+                  isVisible={isCheckingContrast}
+                  selectedNode={selectedNode}
+                  onBack={() => setIsCheckingContrast(false)}
+                />
+              ) : (
                 <div
-                  style={{ color: "#fff", textAlign: "center", padding: 32 }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px"
+                  }}
                 >
-                  <h3
-                    style={{
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 18,
-                      marginBottom: 16
+                  <DocumentationSearch
+                    onSearch={query => {
+                      console.log("Buscar documento:", query);
                     }}
-                  >
-                    Contrast Checker
-                  </h3>
-                  <p style={{ color: "#bdbdbd", fontSize: 14 }}>
-                    Ferramenta para checar contraste de cores. (Em breve)
-                  </p>
-                </div>
-              )}
-              {accessibilityTab === "docs" && (
-                <div
-                  style={{ color: "#fff", textAlign: "center", padding: 32 }}
-                >
-                  <h3
-                    style={{
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 18,
-                      marginBottom: 16
+                    onDocumentSelect={docId => {
+                      console.log("Documento selecionado:", docId);
                     }}
-                  >
-                    Documentações de Acessibilidade
-                  </h3>
-                  <ul
-                    style={{
-                      color: "#bdbdbd",
-                      fontSize: 14,
-                      textAlign: "left",
-                      maxWidth: 400,
-                      margin: "0 auto"
-                    }}
-                  >
-                    <li>
-                      <a
-                        href="https://www.w3.org/WAI/standards-guidelines/wcag/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#3b82f6" }}
-                      >
-                        WCAG - Web Content Accessibility Guidelines
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="https://contrast-ratio.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#3b82f6" }}
-                      >
-                        Contrast Ratio Checker
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="https://www.a11yproject.com/checklist/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#3b82f6" }}
-                      >
-                        A11Y Project Checklist
-                      </a>
-                    </li>
-                  </ul>
+                  />
+                  <div style={{ color: "#bdbdbd", fontSize: 14 }}>
+                    <p>Documentações úteis:</p>
+                    <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                      <li>
+                        <a
+                          href="https://www.w3.org/WAI/standards-guidelines/wcag/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#3b82f6" }}
+                        >
+                          WCAG - Web Content Accessibility Guidelines
+                        </a>
+                      </li>
+                      <li>
+                        <a
+                          href="https://contrast-ratio.com/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#3b82f6" }}
+                        >
+                          Contrast Ratio Checker
+                        </a>
+                      </li>
+                      <li>
+                        <a
+                          href="https://www.a11yproject.com/checklist/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#3b82f6" }}
+                        >
+                          A11Y Project Checklist
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         )}
       </div>
-      {activeTab === "auditoria" && (
-        <footer className="initial-content-footer">
+      {(activeTab === "auditoria" ||
+        (activeTab === "acessibilidade" &&
+          accessibilityTab === "contrast")) && (
+        <footer
+          className="initial-content-footer"
+          style={{
+            padding: "16px",
+            background: "#2A2A2A",
+            borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: "auto"
+          }}
+        >
           <button
             className="button button--primary"
-            onClick={props.onHandleRunApp}
+            onClick={
+              activeTab === "auditoria"
+                ? props.onHandleRunApp
+                : () => {
+                    // Obter o nó selecionado do Figma
+                    parent.postMessage(
+                      {
+                        pluginMessage: {
+                          type: "get-selected-node"
+                        }
+                      },
+                      "*"
+                    );
+
+                    // Configurar listener para receber o nó selecionado
+                    const messageListener = (event: MessageEvent) => {
+                      if (event.data.pluginMessage?.type === "selected-node") {
+                        setSelectedNode(event.data.pluginMessage.node);
+                        setIsCheckingContrast(true);
+                        window.removeEventListener("message", messageListener);
+                      }
+                    };
+
+                    window.addEventListener("message", messageListener);
+                  }
+            }
             disabled={!props.isFrameSelected}
+            style={{
+              background: props.isFrameSelected ? "#18A0FB" : "#656565",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              padding: "8px 16px",
+              fontSize: "12px",
+              fontWeight: 500,
+              cursor: props.isFrameSelected ? "pointer" : "not-allowed",
+              opacity: props.isFrameSelected ? 1 : 0.7,
+              transition: "background 0.2s, opacity 0.2s",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              minWidth: "160px",
+              justifyContent: "center"
+            }}
           >
-            Iniciar auditoria
+            {activeTab === "auditoria"
+              ? "Iniciar auditoria"
+              : "Verificar contraste"}
           </button>
         </footer>
       )}
