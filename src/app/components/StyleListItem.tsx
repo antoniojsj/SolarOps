@@ -7,9 +7,9 @@ import { motion } from "framer-motion/dist/framer-motion";
 function ListItem({ style, index }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleToggle = () => {
-    setIsOpen(prevIsOpen => !prevIsOpen);
-  };
+  // const handleToggle = () => {
+  //   setIsOpen(prevIsOpen => !prevIsOpen);
+  // };
 
   function handleSelectAll(nodeArray) {
     if (!nodeArray) return;
@@ -17,7 +17,7 @@ function ListItem({ style, index }) {
     const arrays = Object.values(nodeArray);
 
     // Flatten the arrays into a single array using Array.prototype.flat
-    const combinedArray = arrays.flat();
+    const combinedArray = (arrays as any[]).flat();
 
     parent.postMessage(
       {

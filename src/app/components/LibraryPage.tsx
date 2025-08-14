@@ -10,7 +10,7 @@ const LibraryPage = ({
   activeComponentLibraries = []
 }) => {
   console.log("[LibraryPage] Renderizando. Bibliotecas recebidas:", libraries);
-  const hasLibraries = libraries && libraries.length > 0;
+  // const hasLibraries = libraries && libraries.length > 0;
 
   const onLibraryImport = () => {
     parent.postMessage({ pluginMessage: { type: "save-library" } }, "*");
@@ -75,17 +75,17 @@ const LibraryPage = ({
   );
 
   // Função para copiar o key da biblioteca
-  const [copiedKey, setCopiedKey] = useState("");
-  const handleCopyKey = key => {
-    navigator.clipboard.writeText(key);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(""), 1500);
-  };
+  // const [copiedKey, setCopiedKey] = useState("");
+  // const handleCopyKey = key => {
+  //   navigator.clipboard.writeText(key);
+  //   setCopiedKey(key);
+  //   setTimeout(() => setCopiedKey(""), 1500);
+  // };
 
   // Função para rodar a análise
-  const handleRunAnalysis = () => {
-    parent.postMessage({ pluginMessage: { type: "run-app" } }, "*");
-  };
+  // const handleRunAnalysis = () => {
+  //   parent.postMessage({ pluginMessage: { type: "run-app" } }, "*");
+  // };
 
   return (
     <div className="library-wrapper" style={{ color: "#fff" }}>
@@ -157,7 +157,7 @@ const LibraryPage = ({
                           }}
                         >
                           Keys:{" "}
-                          {lib.componentKeys.map((key, idx) => (
+                          {lib.componentKeys.map(key => (
                             <span
                               key={key}
                               style={{

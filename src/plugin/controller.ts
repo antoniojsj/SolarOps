@@ -72,28 +72,24 @@ const {
 figma.showUI(__html__, { width: 480, height: 700 });
 figma.ui.resize(480, 700);
 
-// Função principal de linting simplificada
+// Função principal de linting otimizada
 function lint(
   nodes: readonly any[],
   libraries: any[],
   parentFrameId: string | null = null
 ): any[] {
-  console.log("[Controller] Iniciando lint com", nodes.length, "nodes");
   let errors: any[] = [];
 
   try {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      console.log(
-        `[Controller] Processando node ${i + 1}/${nodes.length}:`,
-        node.type,
-        node.name
-      );
 
       if (node.visible === false || node.locked === true) {
-        console.log(
-          `[Controller] Node ${node.name} ignorado (invisível ou bloqueado)`
-        );
+        continue;
+      }
+
+      // Pular tipos de nodes que não precisam ser analisados
+      if (node.type === "SLICE" || node.type === "GROUP") {
         continue;
       }
 
@@ -109,9 +105,6 @@ function lint(
         libraries,
         currentFrameId
       );
-      console.log(
-        `[Controller] Node ${node.name} gerou ${nodeErrors.length} erros`
-      );
 
       if (nodeErrors && Array.isArray(nodeErrors)) {
         errors = errors.concat(nodeErrors);
@@ -126,8 +119,6 @@ function lint(
         errors = errors.concat(lint(node.children, libraries, currentFrameId));
       }
     }
-
-    console.log("[Controller] Lint concluído. Total de erros:", errors.length);
   } catch (error) {
     console.error("[Controller] Erro durante o linting:", error);
     // Retorna array vazio em caso de erro, mas não quebra o plugin
@@ -189,16 +180,9 @@ function determineTypeWithFrame(
 function lintComponentRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando fills para component: ${node.name}`);
-    newCheckFills(node, errors, libraries, undefined, undefined, undefined);
-    console.log(
-      `[Controller] Verificando effects para component: ${node.name}`
-    );
-    newCheckEffects(node, errors, libraries, undefined, undefined);
-    console.log(
-      `[Controller] Verificando strokes para component: ${node.name}`
-    );
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
+    newCheckFills(node, errors, libraries);
+    newCheckEffects(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries);
   } catch (error) {
     console.error("[Controller] Erro em component rules:", error);
   }
@@ -208,8 +192,7 @@ function lintComponentRules(node: any, libraries: any[]): any[] {
 function lintLineRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando strokes para line: ${node.name}`);
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
+    newCheckStrokes(node, errors, libraries);
   } catch (error) {
     console.error("[Controller] Erro em line rules:", error);
   }
@@ -219,12 +202,9 @@ function lintLineRules(node: any, libraries: any[]): any[] {
 function lintFrameRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando fills para frame: ${node.name}`);
-    newCheckFills(node, errors, libraries, undefined, undefined, undefined);
-    console.log(`[Controller] Verificando effects para frame: ${node.name}`);
-    newCheckEffects(node, errors, libraries, undefined, undefined);
-    console.log(`[Controller] Verificando strokes para frame: ${node.name}`);
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
+    newCheckFills(node, errors, libraries);
+    newCheckEffects(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries);
   } catch (error) {
     console.error("[Controller] Erro em frame rules:", error);
   }
@@ -234,14 +214,10 @@ function lintFrameRules(node: any, libraries: any[]): any[] {
 function lintTextRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando type para text: ${node.name}`);
-    checkType(node, errors, libraries, undefined, undefined);
-    console.log(`[Controller] Verificando fills para text: ${node.name}`);
-    newCheckFills(node, errors, libraries, undefined, undefined, undefined);
-    console.log(`[Controller] Verificando effects para text: ${node.name}`);
-    newCheckEffects(node, errors, libraries, undefined, undefined);
-    console.log(`[Controller] Verificando strokes para text: ${node.name}`);
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
+    checkType(node, errors, libraries);
+    newCheckFills(node, errors, libraries);
+    newCheckEffects(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries);
   } catch (error) {
     console.error("[Controller] Erro em text rules:", error);
   }
@@ -251,18 +227,10 @@ function lintTextRules(node: any, libraries: any[]): any[] {
 function lintRectangleRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando fills para rectangle: ${node.name}`);
-    newCheckFills(node, errors, libraries, undefined, undefined, undefined);
-    console.log(
-      `[Controller] Verificando effects para rectangle: ${node.name}`
-    );
-    newCheckEffects(node, errors, libraries, undefined, undefined);
-    console.log(
-      `[Controller] Verificando strokes para rectangle: ${node.name}`
-    );
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
-    console.log(`[Controller] Verificando radius para rectangle: ${node.name}`);
-    checkRadius(node, errors, undefined);
+    newCheckFills(node, errors, libraries);
+    newCheckEffects(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries);
+    checkRadius(node, errors);
   } catch (error) {
     console.error("[Controller] Erro em rectangle rules:", error);
   }
@@ -272,12 +240,9 @@ function lintRectangleRules(node: any, libraries: any[]): any[] {
 function lintShapeRules(node: any, libraries: any[]): any[] {
   let errors: any[] = [];
   try {
-    console.log(`[Controller] Verificando fills para shape: ${node.name}`);
-    newCheckFills(node, errors, libraries, undefined, undefined, undefined);
-    console.log(`[Controller] Verificando effects para shape: ${node.name}`);
-    newCheckEffects(node, errors, libraries, undefined, undefined);
-    console.log(`[Controller] Verificando strokes para shape: ${node.name}`);
-    newCheckStrokes(node, errors, libraries, undefined, undefined);
+    newCheckFills(node, errors, libraries);
+    newCheckEffects(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries);
   } catch (error) {
     console.error("[Controller] Erro em shape rules:", error);
   }
@@ -320,14 +285,8 @@ function serializeNodes(nodes: any[]): any[] {
         Array.isArray(node.children) &&
         node.children.length > 0
       ) {
-        console.log(
-          `[Controller] Node ${node.name} tem ${node.children.length} filhos`
-        );
         serializedNode.children = node.children.map((child: any) =>
           serializeNode(child)
-        );
-        console.log(
-          `[Controller] Node ${node.name} serializou ${serializedNode.children.length} filhos`
         );
       } else {
         serializedNode.children = [];
@@ -337,14 +296,6 @@ function serializeNodes(nodes: any[]): any[] {
     };
 
     const serialized = nodes.map(serializeNode);
-    console.log(
-      "[Controller] Serialização concluída. Total de nodes:",
-      serialized.length
-    );
-    console.log(
-      "[Controller] Estrutura final:",
-      serialized.map(n => ({ name: n.name, childrenCount: n.children.length }))
-    );
     return serialized;
   } catch (error) {
     console.error("[Controller] Erro na serialização:", error);
@@ -379,12 +330,6 @@ async function handleUpdateStylesPage(): Promise<void> {
 
 // Função para agrupar erros por nodeId
 function groupErrorsByNode(errors: any[]): any[] {
-  console.log("[Controller] groupErrorsByNode - erros recebidos:", errors);
-  console.log(
-    "[Controller] groupErrorsByNode - número de erros:",
-    errors.length
-  );
-
   // Retornar os erros diretamente, sem agrupar por node
   // O BulkErrorList espera um array de erros individuais
   const result = errors.map(err => {
@@ -404,23 +349,29 @@ function groupErrorsByNode(errors: any[]): any[] {
     };
   });
 
-  console.log("[Controller] groupErrorsByNode - resultado final:", result);
   return result;
 }
 
-// Função para coletar todos os nodes recursivamente
+// Função para coletar todos os nodes recursivamente (otimizada)
 function collectAllNodes(nodes: any[]): any[] {
-  let all: any[] = [];
-  for (const node of nodes) {
+  const all: any[] = [];
+  const maxNodes = 1000; // Limite para evitar processamento excessivo
+
+  function collect(node: any) {
+    if (all.length >= maxNodes) return; // Parar se atingir o limite
+
     all.push(node);
-    if (
-      node.children &&
-      Array.isArray(node.children) &&
-      node.children.length > 0
-    ) {
-      all = all.concat(collectAllNodes(node.children));
+    if (node.children && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        collect(child);
+      }
     }
   }
+
+  for (const node of nodes) {
+    collect(node);
+  }
+
   return all;
 }
 
@@ -573,27 +524,37 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
     // Initialize the app
     if (msg.type === "run-app") {
-      console.log("[Controller] Iniciando aplicação");
       if (
         Array.isArray(figma.currentPage.selection) &&
         figma.currentPage.selection.length === 0
       ) {
-        console.log("[Controller] Nenhuma seleção - mostrando estado vazio");
         figma.ui.postMessage({
           type: "show-empty-state"
         });
         return;
       }
-      console.log("[Controller] Enviando preloader");
       figma.ui.postMessage({ type: "show-preloader" });
       try {
-        console.log("[Controller] Iniciando processo de linting");
         const nodes = figma.currentPage.selection;
         const allNodes = collectAllNodes(nodes);
+
+        // Limitar o tempo de processamento
+        const startTime = Date.now();
+        const maxProcessingTime = 5000; // 5 segundos máximo
+
         const lintResults = lint(allNodes, msg.libraries || [], null);
+
+        // Verificar se o processamento demorou muito
+        if (Date.now() - startTime > maxProcessingTime) {
+          console.warn(
+            "[Controller] Processamento demorou mais que 5 segundos"
+          );
+        }
+
         const groupedErrors = groupErrorsByNode(lintResults);
         const serializedNodes = serializeNodes(nodes);
         const activeComponentLibraries = await fetchActiveComponentLibraries();
+
         // Salva o resultado da análise no clientStorage
         const inspectorData = {
           errors: groupedErrors,

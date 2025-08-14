@@ -2,7 +2,7 @@ import * as React from "react";
 import StyleListItem from "./StyleListItem";
 
 const StylesPage = ({ stylesInUse }) => {
-  const hasStylesInUse = stylesInUse && stylesInUse.length > 0;
+  // const hasStylesInUse = stylesInUse && stylesInUse.length > 0;
 
   const fills =
     stylesInUse && Array.isArray(stylesInUse.fills) ? stylesInUse.fills : [];

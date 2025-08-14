@@ -44,6 +44,7 @@ const App = ({}) => {
   const librariesRef = React.useRef([]);
   const activePageRef = React.useRef(activePage);
   const [auditStarted, setAuditStarted] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [infoPanelVisible, setInfoPanelVisible] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [activeComponentLibraries, setActiveComponentLibraries] = useState([]);
@@ -327,6 +328,7 @@ const App = ({}) => {
 
           // Marcar como carregado e sair do loading
           setInitialLoad(true);
+          setAuditLoading(false);
           setEmptyState(false);
           setActivePage("bulk");
           setAnalysisResult({
@@ -448,6 +450,8 @@ const App = ({}) => {
 
   const handleRunAudit = () => {
     setAuditStarted(true);
+    setAuditLoading(true);
+    setActivePage("bulk"); // Definir a página como bulk imediatamente
     setInitialLoad(false);
     onRunApp();
   };
@@ -478,8 +482,8 @@ const App = ({}) => {
 
   return (
     <div className="container">
-      {/* Renderizar Navigation apenas se não estiver na página de relatório (bulk) */}
-      {auditStarted && activePage !== "bulk" ? (
+      {/* Renderizar Navigation quando a auditoria foi iniciada */}
+      {auditStarted && (
         <Navigation
           onPageSelection={updateNavigation}
           activePage={activePage}
@@ -496,7 +500,7 @@ const App = ({}) => {
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
         />
-      ) : null}
+      )}
 
       {/* Se estiver na página de settings, renderize só o painel de settings */}
       {activePage === "settings" && (
@@ -553,9 +557,30 @@ const App = ({}) => {
             />
           );
         })()
-      ) : auditStarted &&
-        activePage === "bulk" &&
-        (initialLoad || analysisResult) ? (
+      ) : auditStarted && activePage === "bulk" && auditLoading ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "200px",
+            color: "#fff"
+          }}
+        >
+          <div style={{ marginBottom: "16px" }}>Analisando seu projeto...</div>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #333",
+              borderTop: "3px solid #fff",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
+            }}
+          ></div>
+        </div>
+      ) : auditStarted && activePage === "bulk" ? (
         <BulkErrorList
           libraries={libraries}
           errorArray={Array.isArray(errorArray) ? errorArray : []}
@@ -571,7 +596,7 @@ const App = ({}) => {
           disableRefazer={!activeNodeIds.length}
           nodeArray={nodeArray}
         />
-      ) : !auditStarted && (emptyState === false || emptyState === true) ? (
+      ) : !auditStarted ? (
         <InitialContent
           isFrameSelected={activeNodeIds.length > 0}
           onHandleRunApp={handleRunAudit}
@@ -580,16 +605,7 @@ const App = ({}) => {
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
         />
-      ) : (
-        <InitialContent
-          onHandleRunApp={handleRunAudit}
-          onScanEntirePage={onScanEntirePage}
-          isFrameSelected={activeNodeIds.length > 0}
-          libraries={libraries}
-          onUpdateLibraries={handleUpdateLibraries}
-          localStyles={localStyles}
-        />
-      )}
+      ) : null}
 
       {Object.keys(activeError).length !== 0 && errorArray.length ? (
         <Panel

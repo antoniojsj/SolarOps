@@ -7,7 +7,7 @@ import "../styles/panel.css";
 function StylesPanel(props) {
   const isVisible = props.panelVisible;
   const error = props.error;
-  let suggestion = null;
+  // let suggestion = null;
 
   const variants = {
     open: { opacity: 1, x: 0 },

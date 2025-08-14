@@ -6,9 +6,9 @@ const Modal = ({ isOpen, onClose, error }) => {
   const inputRef = useRef(); // Create a reference to the input element
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && inputRef.current) {
       // Focus the input element when the modal is opened
-      inputRef.current.focus();
+      inputRef.current?.focus();
     }
   }, [isOpen]);
 
@@ -77,7 +77,7 @@ const Modal = ({ isOpen, onClose, error }) => {
             onClick={e => e.stopPropagation()}
           >
             <h3 className="modal-title">Create Style</h3>
-            <p className="modal-subtitle">{error.value}</p>
+            <p className="modal-subtitle">{error?.value || ""}</p>
             <div className="modal-close" onClick={handleClose}>
               <img
                 className="modal-close-icon"

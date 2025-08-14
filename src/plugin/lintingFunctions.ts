@@ -103,18 +103,16 @@ function isEffectStyleInLibrary(styleId: string, library: any): boolean {
 export function checkType(
   node: any,
   errors: any[],
-  libraries: any[],
-  usedRemoteStyles?: any,
-  storageArray?: any
+  libraries: any[]
+  // usedRemoteStyles?: any,
+  // storageArray?: any
 ) {
   try {
     if (!node || !node.type) return;
-    console.log("[Lint] checkType chamada para", node.name, node.type);
 
     if (node.type === "TEXT") {
       // Verificar se o texto tem estilo definido
       if (!node.textStyleId || node.textStyleId === "") {
-        console.log("[Lint] Erro: Texto sem estilo definido em", node.name);
         errors.push({
           type: "text-style",
           message: "Texto sem estilo definido",
@@ -136,10 +134,6 @@ export function checkType(
         }
 
         if (!styleFound) {
-          console.log(
-            "[Lint] Erro: Estilo de texto não encontrado na biblioteca em",
-            node.name
-          );
           errors.push({
             type: "text-style-library",
             message: "Estilo de texto não está na biblioteca",
@@ -154,7 +148,6 @@ export function checkType(
       if (node.fontSize && typeof node.fontSize === "number") {
         // Verificar se o tamanho da fonte é um valor padrão problemático
         if (node.fontSize === 12 || node.fontSize === 14) {
-          console.log("[Lint] Erro: Tamanho de fonte padrão em", node.name);
           errors.push({
             type: "text-font-size",
             message: `Tamanho de fonte padrão (${node.fontSize}px)`,
@@ -174,14 +167,13 @@ export function checkType(
 export function newCheckFills(
   node: any,
   errors: any[],
-  libraries: any[],
-  usedRemoteStyles?: any,
-  storageArray?: any,
-  ignoredErrorArray?: any
+  libraries: any[]
+  // usedRemoteStyles?: any,
+  // storageArray?: any,
+  // ignoredErrorArray?: any
 ) {
   try {
     if (!node) return;
-    console.log("[Lint] newCheckFills chamada para", node.name);
 
     // Verificar se tem estilo de fill definido
     if (node.fillStyleId && node.fillStyleId !== "") {
@@ -196,10 +188,6 @@ export function newCheckFills(
         }
 
         if (!styleFound) {
-          console.log(
-            "[Lint] Erro: Estilo de fill não encontrado na biblioteca em",
-            node.name
-          );
           errors.push({
             type: "fill-style-library",
             message: "Estilo de preenchimento não está na biblioteca",
@@ -220,7 +208,6 @@ export function newCheckFills(
 
           // Verificar se é uma cor padrão problemática
           if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
-            console.log("[Lint] Erro: Fill com cor preta padrão em", node.name);
             errors.push({
               type: "fill-color-default",
               message: "Preenchimento com cor preta padrão",
@@ -229,10 +216,6 @@ export function newCheckFills(
               suggestions: []
             });
           } else if (colorsMatch(color, { r: 1, g: 1, b: 1, a: 1 })) {
-            console.log(
-              "[Lint] Erro: Fill com cor branca padrão em",
-              node.name
-            );
             errors.push({
               type: "fill-color-default",
               message: "Preenchimento com cor branca padrão",
@@ -252,10 +235,6 @@ export function newCheckFills(
               }
 
               if (!colorFound) {
-                console.log(
-                  "[Lint] Erro: Cor não encontrada na biblioteca em",
-                  node.name
-                );
                 errors.push({
                   type: "fill-color-library",
                   message: "Cor não está na biblioteca",
@@ -270,7 +249,6 @@ export function newCheckFills(
       }
     } else {
       // Node sem fill definido
-      console.log("[Lint] Erro: Node sem preenchimento em", node.name);
       errors.push({
         type: "fill-missing",
         message: "Elemento sem preenchimento definido",
@@ -302,13 +280,12 @@ function isColorStyleInLibrary(styleId: string, library: any): boolean {
 export function newCheckEffects(
   node: any,
   errors: any[],
-  libraries: any[],
-  usedRemoteStyles?: any,
-  storageArray?: any
+  libraries: any[]
+  // usedRemoteStyles?: any,
+  // storageArray?: any
 ) {
   try {
     if (!node) return;
-    console.log("[Lint] newCheckEffects chamada para", node.name);
 
     // Verificar se tem estilo de efeito definido
     if (node.effectStyleId && node.effectStyleId !== "") {
@@ -350,7 +327,6 @@ export function newCheckEffects(
         if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
           // Verificar se o efeito tem valores padrão problemáticos
           if (effect.offset && effect.offset.x === 0 && effect.offset.y === 0) {
-            console.log("[Lint] Erro: Efeito com offset zero em", node.name);
             errors.push({
               type: "effect-offset",
               message: "Efeito com offset zero",
@@ -371,13 +347,12 @@ export function newCheckEffects(
 export function newCheckStrokes(
   node: any,
   errors: any[],
-  libraries: any[],
-  usedRemoteStyles?: any,
-  storageArray?: any
+  libraries: any[]
+  // usedRemoteStyles?: any,
+  // storageArray?: any
 ) {
   try {
     if (!node) return;
-    console.log("[Lint] newCheckStrokes chamada para", node.name);
 
     // Verificar se tem estilo de stroke definido
     if (node.strokeStyleId && node.strokeStyleId !== "") {
@@ -466,17 +441,15 @@ export function newCheckStrokes(
 }
 
 // Função para verificar radius
-export function checkRadius(node: any, errors: any[], ignoredErrorArray?: any) {
+export function checkRadius(node: any, errors: any[]) {
   try {
     if (!node) return;
-    console.log("[Lint] checkRadius chamada para", node.name);
 
     // Verificar se o node tem cornerRadius
     if (node.cornerRadius !== undefined) {
       const radius = node.cornerRadius;
       if (typeof radius === "number") {
         if (radius < 0) {
-          console.log("[Lint] Erro: Corner radius negativo em", node.name);
           errors.push({
             type: "corner-radius-negative",
             message: "Corner radius negativo",
@@ -485,7 +458,6 @@ export function checkRadius(node: any, errors: any[], ignoredErrorArray?: any) {
             suggestions: []
           });
         } else if (radius > 100) {
-          console.log("[Lint] Erro: Corner radius muito alto em", node.name);
           errors.push({
             type: "corner-radius-high",
             message: "Corner radius muito alto",
@@ -495,7 +467,6 @@ export function checkRadius(node: any, errors: any[], ignoredErrorArray?: any) {
           });
         }
       } else {
-        console.log("[Lint] Erro: Corner radius inválido em", node.name);
         errors.push({
           type: "corner-radius-invalid",
           message: "Corner radius inválido",

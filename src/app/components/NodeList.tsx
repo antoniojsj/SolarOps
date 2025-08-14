@@ -2,7 +2,6 @@ import * as React from "react";
 import { motion } from "framer-motion/dist/framer-motion";
 
 import ListItem from "./ListItem";
-import TotalErrorCount from "./TotalErrorCount";
 
 function NodeList(props) {
   // Reduce the size of our array of errors by removing
@@ -54,10 +53,10 @@ function NodeList(props) {
     props.onSelectedListUpdate(id);
   };
 
-  const handleOpenFirstError = () => {
-    const lastItem = filteredErrorArray[filteredErrorArray.length - 1];
-    handleNodeClick(lastItem.id);
-  };
+  // const handleOpenFirstError = () => {
+  //   const lastItem = filteredErrorArray[filteredErrorArray.length - 1];
+  //   handleNodeClick(lastItem.id);
+  // };
 
   if (props.nodeArray.length) {
     let nodes = props.nodeArray;

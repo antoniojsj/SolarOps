@@ -132,8 +132,13 @@ export async function fetchActiveComponentLibraries() {
 
       if (node.type === "INSTANCE") {
         const mainComponent = node.mainComponent;
-        if (mainComponent && mainComponent.remote) {
-          const libraryName = mainComponent.remote.name ?? "Desconhecida";
+        if (
+          mainComponent &&
+          mainComponent.remote &&
+          typeof mainComponent.remote === "object"
+        ) {
+          const libraryName =
+            (mainComponent.remote as any).name ?? "Desconhecida";
           const componentKey = mainComponent.key;
           if (!libraryUsage[libraryName]) {
             libraryUsage[libraryName] = { count: 0, keys: new Set() };
@@ -144,7 +149,7 @@ export async function fetchActiveComponentLibraries() {
       }
     }
 
-    findAllInstances(figma.root);
+    findAllInstances(figma.root as any);
 
     // Monta o array para a UI
     const result = Object.entries(libraryUsage).map(([name, data]) => ({

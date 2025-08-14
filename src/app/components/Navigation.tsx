@@ -14,9 +14,9 @@ function Navigation(props) {
     props.onPageSelection("bulk");
   };
 
-  const libraryClick = () => {
-    props.onPageSelection("library");
-  };
+  // const libraryClick = () => {
+  //   props.onPageSelection("library");
+  // };
 
   const stylesClick = () => {
     props.onPageSelection("styles");
@@ -40,9 +40,9 @@ function Navigation(props) {
     setPanelVisible(boolean);
   };
 
-  const handleRefreshSelection = () => {
-    props.onRefreshSelection();
-  };
+  // const handleRefreshSelection = () => {
+  //   props.onRefreshSelection();
+  // };
 
   return (
     <div key="nav">

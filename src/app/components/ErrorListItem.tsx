@@ -3,30 +3,30 @@ import { useState, useRef, useEffect } from "react";
 
 function ErrorListItem(props) {
   const ref = useRef();
-  const [menuState, setMenuState] = useState(false);
+  // const [menuState, setMenuState] = useState(false);
   let error = props.error;
 
   useOnClickOutside(ref, () => hideMenu());
 
-  const showMenu = () => {
-    setMenuState(true);
-  };
+  // const showMenu = () => {
+  //   setMenuState(true);
+  // };
 
   const hideMenu = () => {
-    setMenuState(false);
+    // setMenuState(false);
   };
 
-  function handleIgnoreChange(error) {
-    props.handleIgnoreChange(error);
-  }
+  // function handleIgnoreChange(error) {
+  //   props.handleIgnoreChange(error);
+  // }
 
-  function handleSelectAll(error) {
-    props.handleSelectAll(error);
-  }
+  // function handleSelectAll(error) {
+  //   props.handleSelectAll(error);
+  // }
 
-  function handleIgnoreAll(error) {
-    props.handleIgnoreAll(error);
-  }
+  // function handleIgnoreAll(error) {
+  //   props.handleIgnoreAll(error);
+  // }
 
   return (
     <li className="error-list-item" ref={ref} style={{ userSelect: "none" }}>

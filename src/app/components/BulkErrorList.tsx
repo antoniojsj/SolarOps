@@ -1,8 +1,6 @@
 import * as React from "react";
+import { motion } from "framer-motion/dist/framer-motion";
 import BulkErrorListItem from "./BulkErrorListItem";
-import TotalErrorCount from "./TotalErrorCount";
-import { AnimatePresence, motion } from "framer-motion/dist/framer-motion";
-import PreloaderCSS from "./PreloaderCSS";
 import Banner from "./Banner";
 import Modal from "./Modal";
 import StylesPanel from "./StylesPanel";
@@ -57,14 +55,14 @@ function BulkErrorList(props) {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-  const availableFilters = [
-    "Geral",
-    "text",
-    "fill",
-    "stroke",
-    "radius",
-    "effects"
-  ];
+  // const availableFilters = [
+  //   "Geral",
+  //   "text",
+  //   "fill",
+  //   "stroke",
+  //   "radius",
+  //   "effects"
+  // ];
 
   const errorArray = Array.isArray(props.errorArray) ? props.errorArray : [];
   const ignoredErrorArray = Array.isArray(props.ignoredErrorArray)
@@ -242,9 +240,9 @@ function BulkErrorList(props) {
 
   const [selectedFilter, setSelectedFilter] = React.useState("Geral");
 
-  const handleFilterClick = filter => {
-    setSelectedFilter(filter);
-  };
+  // const handleFilterClick = filter => {
+  //   setSelectedFilter(filter);
+  // };
 
   // Filter the bulkErrorList based on the selected filter
   const filteredErrorList = bulkErrorList.filter(error => {
@@ -930,10 +928,10 @@ function BulkErrorList(props) {
                 }, 0);
                 // Score de conformidade
                 const correct = Math.max(totalElements - nonConformElements, 0);
-                const score =
-                  totalElements > 0
-                    ? Math.round((correct / totalElements) * 100)
-                    : 0;
+                // const score =
+                //   totalElements > 0
+                //     ? Math.round((correct / totalElements) * 100)
+                //     : 0;
                 // Handler do botão
                 const handleVerificarErros = () => {
                   if (props.onSelectedListUpdate && frame.id) {
