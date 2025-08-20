@@ -653,20 +653,21 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20px 0;
+  padding: 12px 0; /* reduce vertical padding to avoid clipping */
   background: #2a2a2a;
   z-index: 1001;
   text-align: center;
-  height: 80px;
+  height: auto; /* let content define height */
+  min-height: 56px; /* at least the SVG viewBox height */
   box-sizing: border-box;
 }
 
 .logo-container svg {
   max-width: 200px;
   width: 200px;
-  height: 55px;
-  display: inline-block;
-  vertical-align: middle;
+  height: auto; /* maintain aspect ratio to avoid cropping */
+  display: block;
+  margin: 0 auto;
 }
 
 .info-panel-root .panel-header {
