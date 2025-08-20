@@ -594,8 +594,7 @@
   background: #2a2a2a !important;
   color: #fff !important;
   min-height: 100vh;
-  width: 100vw;
-  max-width: 100vw;
+  width: 100%;
   position: fixed;
   top: 0;
   right: 0;
@@ -605,6 +604,7 @@
   flex-direction: column;
   box-sizing: border-box;
   z-index: 1000;
+  overflow-y: auto;
 }
 
 .info-panel-header {
@@ -612,16 +612,19 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .info-panel-content {
-  padding: 24px 24px 0 24px;
+  padding: 24px;
   background: #2a2a2a !important;
   color: #fff !important;
   font-size: 14px;
-  min-height: calc(100vh - 120px);
+  flex: 1;
   box-sizing: border-box;
   text-align: left;
+  overflow-y: auto;
+  padding-bottom: 120px; /* Espaço para o logo */
 }
 
 .info-panel-content h3 {
@@ -644,14 +647,26 @@
   margin-bottom: 0;
 }
 
-.info-panel-logo {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 23px;
-  width: 64px;
-  height: auto;
-  opacity: 0.9;
+/* Estilo para o container do logo */
+.logo-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px 0;
+  background: #2a2a2a;
+  z-index: 1001;
+  text-align: center;
+  height: 80px;
+  box-sizing: border-box;
+}
+
+.logo-container svg {
+  max-width: 200px;
+  width: 200px;
+  height: 55px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .info-panel-root .panel-header {

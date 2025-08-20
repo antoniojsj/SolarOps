@@ -10,6 +10,83 @@ function InitialContent(props) {
   const [selectedNode, setSelectedNode] = React.useState<any>(null);
   const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
 
+  // Adicionar logs para rastrear mudanças no selectedNode
+  React.useEffect(() => {
+    console.log("selectedNode atualizado:", selectedNode);
+  }, [selectedNode]);
+
+  // Configurar o listener para mensagens do Figma
+  React.useEffect(() => {
+    const messageListener = (event: MessageEvent) => {
+      console.log("[InitialContent] Mensagem recebida:", event.data);
+
+      // Aceitar mensagens tanto no formato { pluginMessage } quanto direto { type }
+      const pm = event?.data?.pluginMessage ?? event?.data;
+      if (pm && pm.type) {
+        console.log("[InitialContent] Mensagem do plugin recebida:", pm.type);
+
+        if (pm.type === "selected-node") {
+          console.log("[InitialContent] Nó selecionado recebido:", pm.node);
+
+          // Atualizar o estado com o novo nó selecionado
+          setSelectedNode(prevNode => {
+            console.log(
+              "[InitialContent] Estado anterior do selectedNode:",
+              prevNode
+            );
+            console.log("[InitialContent] Novo nó recebido:", pm.node);
+            return pm.node;
+          });
+
+          // Garantir que a aba correta esteja visível e iniciar a checagem de contraste
+          setActiveTab("acessibilidade");
+          setAccessibilityTab("contrast");
+          setIsCheckingContrast(true);
+        } else if (pm.type === "no-selection") {
+          console.log("[InitialContent] Nenhum nó selecionado no Figma");
+          setSelectedNode(null);
+          setIsCheckingContrast(false);
+        } else if (pm.type === "selection-update") {
+          console.log(
+            "[InitialContent] Atualização de seleção recebida:",
+            pm.selectedNodeIds
+          );
+
+          // Se não houver nós selecionados, limpar o estado
+          if (!pm.selectedNodeIds || pm.selectedNodeIds.length === 0) {
+            console.log(
+              "[InitialContent] Nenhum nó selecionado - limpando estado"
+            );
+            setSelectedNode(null);
+            setIsCheckingContrast(false);
+          }
+        }
+      }
+    };
+
+    console.log("[InitialContent] Registrando listener de mensagens...");
+    window.addEventListener("message", messageListener);
+
+    // Solicitar o estado atual da seleção ao carregar o componente
+    console.log("[InitialContent] Solicitando estado atual da seleção...");
+    parent.postMessage({ pluginMessage: { type: "get-selection" } }, "*");
+
+    // Limpar o listener quando o componente for desmontado
+    return () => {
+      console.log("[InitialContent] Removendo listener de mensagens...");
+      window.removeEventListener("message", messageListener);
+    };
+  }, []);
+
+  // Efeito para monitorar mudanças no selectedNode
+  React.useEffect(() => {
+    console.log("[InitialContent] selectedNode mudou:", {
+      hasNode: !!selectedNode,
+      nodeId: selectedNode?.id,
+      nodeType: selectedNode?.type
+    });
+  }, [selectedNode]);
+
   return (
     <div
       className="initial-content-root"
@@ -399,6 +476,7 @@ function InitialContent(props) {
                 >
                   Documentações
                 </button>
+                {null}
               </div>
             </div>
 
@@ -413,13 +491,15 @@ function InitialContent(props) {
                 overflowY: "auto"
               }}
             >
-              {accessibilityTab === "contrast" ? (
+              {accessibilityTab === "contrast" && (
                 <ContrastChecker
                   isVisible={isCheckingContrast}
                   selectedNode={selectedNode}
                   onBack={() => setIsCheckingContrast(false)}
                 />
-              ) : (
+              )}
+
+              {accessibilityTab === "docs" && (
                 <div
                   style={{
                     display: "flex",
@@ -472,6 +552,8 @@ function InitialContent(props) {
                   </div>
                 </div>
               )}
+
+              {null}
             </div>
           </div>
         )}
@@ -506,16 +588,21 @@ function InitialContent(props) {
                       "*"
                     );
 
-                    // Configurar listener para receber o nó selecionado
-                    const messageListener = (event: MessageEvent) => {
-                      if (event.data.pluginMessage?.type === "selected-node") {
-                        setSelectedNode(event.data.pluginMessage.node);
-                        setIsCheckingContrast(true);
-                        window.removeEventListener("message", messageListener);
-                      }
-                    };
+                    // Solicitar o nó selecionado ao Figma
+                    console.log("Solicitando nó selecionado ao Figma...");
+                    parent.postMessage(
+                      {
+                        pluginMessage: {
+                          type: "get-selected-node"
+                        }
+                      },
+                      "*"
+                    );
 
-                    window.addEventListener("message", messageListener);
+                    // Exibir imediatamente a aba de contraste enquanto aguardamos a resposta
+                    setActiveTab("acessibilidade");
+                    setAccessibilityTab("contrast");
+                    setIsCheckingContrast(true);
                   }
             }
             disabled={!props.isFrameSelected}

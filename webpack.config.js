@@ -1,5 +1,6 @@
 const HtmlWebpackInlineSourcePlugin = require("html-webpack-inline-source-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 const path = require("path");
 
 module.exports = (env, argv) => ({
@@ -34,8 +35,31 @@ module.exports = (env, argv) => ({
         loader: [{ loader: "style-loader" }, { loader: "css-loader" }]
       },
 
-      // Allows you to use "<%= require('./file.svg') %>" in your HTML code to get a data URI
-      { test: /\.(png|jpg|gif|webp|svg)$/, loader: [{ loader: "url-loader" }] }
+      // Configuração para arquivos SVG
+      {
+        test: /\.svg$/,
+        use: [
+          {
+            loader: '@svgr/webpack',
+            options: {
+              svgo: false, // Desabilita o SVGO se não for necessário
+            },
+          },
+        ],
+      },
+      // Configuração para outros tipos de imagem
+      { 
+        test: /\.(png|jpg|gif|webp)$/, 
+        use: [
+          {
+            loader: 'url-loader',
+            options: {
+              limit: 8192, // Converte para base64 se for menor que 8KB
+              name: 'images/[name].[ext]',
+            },
+          },
+        ],
+      }
     ]
   },
 
@@ -55,7 +79,12 @@ module.exports = (env, argv) => ({
       inlineSource: ".(js)$",
       chunks: ["ui"]
     }),
-    new HtmlWebpackInlineSourcePlugin()
+    new HtmlWebpackInlineSourcePlugin(),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'public', to: '' }
+      ]
+    })
   ],
 
   // Optimization settings for production - simplified to avoid conflicts

@@ -10,14 +10,28 @@
     "noImplicitAny": false,
     "moduleResolution": "node",
     "typeRoots": [
-      "./node_modules/@figma"
+      "./node_modules/@types",
+      "./src/types"
     ],
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "lib": ["es2017", "dom"],
-    "noEmitOnError": false
+    "noEmitOnError": false,
+    "module": "commonjs",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "*": ["node_modules/*", "src/types/*"]
+    }
   },
   "include": [
-    "src/**/*"
-  ]
+    "src/**/*",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
 }

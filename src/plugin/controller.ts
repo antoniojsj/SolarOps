@@ -439,7 +439,11 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         const node = selectedNodes[0];
 
         // Função para extrair as propriedades relevantes do nó para verificação de contraste
-        const extractNodeData = (node: any, depth: number = 0): any => {
+        const extractNodeData = (
+          node: any,
+          depth: number = 0,
+          parentSummary: any = null
+        ): any => {
           // Limitar a profundidade para evitar sobrecarga
           if (depth > 5) return null;
 
@@ -450,6 +454,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
               type: node.type,
               visible: node.visible !== false,
               locked: node.locked === true,
+              // Snapshot mínimo do pai para que a UI consiga subir a hierarquia
+              parent: parentSummary,
               children: []
             };
 
@@ -571,7 +577,48 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             if (node.children && Array.isArray(node.children)) {
               for (const child of node.children) {
                 if (child && child.visible !== false && child.locked !== true) {
-                  const childData = extractNodeData(child, depth + 1);
+                  // Resumo mínimo do nó atual para ser utilizado como "parent" pelo filho
+                  const parentSnapshot = {
+                    id: node.id,
+                    name: node.name,
+                    type: node.type,
+                    visible: node.visible !== false,
+                    locked: node.locked === true,
+                    // Replicar apenas o essencial necessário para cálculo de fundo
+                    fills: Array.isArray(node.fills)
+                      ? node.fills.map((fill: any) => ({
+                          type: fill.type,
+                          visible: fill.visible !== false,
+                          opacity: fill.opacity,
+                          blendMode: fill.blendMode,
+                          color: fill.type === "SOLID" ? fill.color : null,
+                          gradientStops:
+                            fill.type === "GRADIENT_LINEAR" ||
+                            fill.type === "GRADIENT_RADIAL" ||
+                            fill.type === "GRADIENT_ANGULAR" ||
+                            fill.type === "GRADIENT_DIAMOND"
+                              ? fill.gradientStops
+                              : null
+                        }))
+                      : undefined,
+                    strokes: Array.isArray(node.strokes)
+                      ? node.strokes.map((stroke: any) => ({
+                          type: stroke.type,
+                          visible: stroke.visible !== false,
+                          color: stroke.type === "SOLID" ? stroke.color : null,
+                          opacity: stroke.opacity,
+                          blendMode: stroke.blendMode,
+                          weight: node.strokeWeight || 1
+                        }))
+                      : undefined,
+                    opacity: node.opacity
+                  };
+
+                  const childData = extractNodeData(
+                    child,
+                    depth + 1,
+                    parentSnapshot
+                  );
                   if (childData) {
                     nodeData.children.push(childData);
                   }
@@ -855,9 +902,57 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
 // Listener para mudanças de seleção no Figma
 figma.on("selectionchange", () => {
-  const selectedIds = figma.currentPage.selection.map(node => node.id);
-  figma.ui.postMessage({
-    type: "selection-update",
-    selectedNodeIds: selectedIds
-  });
+  console.log("Evento selectionchange acionado no Figma");
+
+  try {
+    const selectedNodes = figma.currentPage.selection;
+    console.log(`Nós selecionados: ${selectedNodes.length} nós`);
+
+    const selectedIds = selectedNodes.map(node => node.id);
+    console.log("IDs dos nós selecionados:", selectedIds);
+
+    if (selectedNodes.length > 0) {
+      console.log("Primeiro nó selecionado:", {
+        id: selectedNodes[0].id,
+        name: selectedNodes[0].name,
+        type: selectedNodes[0].type
+      });
+
+      // Enviar mensagem de nó selecionado
+      figma.ui.postMessage({
+        type: "selected-node",
+        node: {
+          id: selectedNodes[0].id,
+          name: selectedNodes[0].name,
+          type: selectedNodes[0].type,
+          // Adicionar mais propriedades conforme necessário
+          fills: selectedNodes[0].fills,
+          strokes: selectedNodes[0].strokes
+        }
+      });
+    } else {
+      console.log("Nenhum nó selecionado");
+      figma.ui.postMessage({
+        type: "no-selection"
+      });
+    }
+
+    // Manter a mensagem original para compatibilidade
+    figma.ui.postMessage({
+      type: "selection-update",
+      selectedNodeIds: selectedIds
+    });
+
+    console.log("Mensagens de seleção enviadas para a UI");
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Erro desconhecido";
+    console.error("Erro no listener de seleção:", errorMessage);
+
+    // Enviar mensagem de erro para a UI
+    figma.ui.postMessage({
+      type: "selection-error",
+      error: errorMessage
+    });
+  }
 });

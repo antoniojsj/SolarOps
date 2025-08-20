@@ -1,5 +1,63 @@
 import React, { useEffect, useState } from "react";
 
+// Função para misturar cores considerando transparência
+const blendColors = (
+  bg: { r: number; g: number; b: number; a: number },
+  fg: { r: number; g: number; b: number; a: number },
+  alpha: number
+) => {
+  const a = fg.a * alpha;
+  const r = (1 - a) * bg.r + a * fg.r;
+  const g = (1 - a) * bg.g + a * fg.g;
+  const b = (1 - a) * bg.b + a * fg.b;
+  const finalA = bg.a + a * (1 - bg.a);
+  return {
+    r: Math.max(0, Math.min(1, r)),
+    g: Math.max(0, Math.min(1, g)),
+    b: Math.max(0, Math.min(1, b)),
+    a: Math.max(0, Math.min(1, finalA))
+  };
+};
+
+// Função para calcular a cor média de um conjunto de cores com pesos
+const getAverageColor = (
+  colors: Array<{
+    color: { r: number; g: number; b: number; a?: number };
+    weight: number;
+  }>
+) => {
+  let totalR = 0,
+    totalG = 0,
+    totalB = 0,
+    totalA = 0,
+    totalWeight = 0;
+
+  for (const item of colors) {
+    if (!item || !item.color) continue;
+
+    const weight = item.weight > 0 ? item.weight : 1;
+    const alpha = item.color.a !== undefined ? item.color.a : 1;
+    const r = item.color.r !== undefined ? item.color.r : 0;
+    const g = item.color.g !== undefined ? item.color.g : 0;
+    const b = item.color.b !== undefined ? item.color.b : 0;
+
+    totalR += r * weight * alpha;
+    totalG += g * weight * alpha;
+    totalB += b * weight * alpha;
+    totalA += weight * alpha;
+    totalWeight += weight;
+  }
+
+  if (totalWeight <= 0) return { r: 0, g: 0, b: 0, a: 0 };
+
+  return {
+    r: Math.max(0, Math.min(1, totalR / totalWeight)),
+    g: Math.max(0, Math.min(1, totalG / totalWeight)),
+    b: Math.max(0, Math.min(1, totalB / totalWeight)),
+    a: Math.max(0, Math.min(1, totalA / totalWeight))
+  };
+};
+
 // Interface para o resultado de contraste
 interface ContrastResult {
   id: string;
@@ -138,121 +196,380 @@ const isLargeText = (
 // Função para encontrar a cor de fundo de um nó
 const findBackgroundColor = (
   node: any,
-  defaultColor = { r: 1, g: 1, b: 1 },
+  defaultColor: { r: number; g: number; b: number } | null = null,
   depth = 0,
-  isRoot = false
-): { color: { r: number; g: number; b: number }; opacity: number } => {
-  // Limitar a profundidade da recursão para evitar loops infinitos
-  if (!node || depth > 10) return { color: defaultColor, opacity: 1 };
-
-  // Se for o nó raiz (frame selecionado), tenta pegar a cor de fundo dele primeiro
-  if (isRoot) {
-    const rootBg = getNodeBackground(node);
-    if (rootBg) return rootBg;
+  isRoot = false,
+  visitedNodes = new Set<string>(),
+  isTextNode = false
+): {
+  color: { r: number; g: number; b: number } | null;
+  opacity: number;
+} | null => {
+  // Evitar loops infinitos e recursão muito profunda
+  if (!node || depth > 20 || (node.id && visitedNodes.has(node.id))) {
+    return defaultColor ? { color: defaultColor, opacity: 1 } : null;
   }
 
-  // Verifica se o nó tem preenchimento visível
+  // Adicionar o nó atual ao conjunto de nós visitados
+  if (node.id) {
+    visitedNodes.add(node.id);
+  }
+
+  // 1. Verifica se o nó atual tem um fundo visível
   if (node.fills && Array.isArray(node.fills)) {
-    // Encontra o primeiro preenchimento visível (não transparente)
-    const fill = node.fills.find((f: any) => {
-      if (!f.visible) return false;
-      // Se for cor sólida
-      if (f.color) return f.color.a > 0;
-      // Se for gradiente, verifica se tem cores visíveis
-      if (f.gradientStops && f.gradientStops.length > 0) {
-        return f.gradientStops.some(
-          (stop: any) => stop.color && stop.color.a > 0
+    const bg = getNodeBackground(node);
+    if (bg && bg.opacity > 0.1) {
+      // Ignorar fundos quase transparentes
+      // Se for um nó de texto, verificar se o preenchimento é realmente visível
+      if (
+        node.type !== "TEXT" ||
+        (node.type === "TEXT" &&
+          node.fills.some((f: any) => f.visible && f.type !== "SOLID"))
+      ) {
+        return bg;
+      }
+    }
+  }
+
+  // 2. Verificar se o nó tem uma cor de fundo definida em outras propriedades
+  if (node.backgroundColor) {
+    return {
+      color: node.backgroundColor,
+      opacity: node.opacity !== undefined ? node.opacity : 1
+    };
+  }
+
+  // 3. Verificar efeitos de fundo (sombra, desfoque, etc.)
+  if (node.effects && Array.isArray(node.effects)) {
+    // Filtrar apenas efeitos visíveis que afetam a aparência do fundo
+    const visibleEffects = node.effects.filter((e: any) => {
+      if (!e.visible) return false;
+
+      // Considerar diferentes tipos de efeitos que podem afetar o fundo
+      return [
+        "DROP_SHADOW",
+        "INNER_SHADOW",
+        "LAYER_BLUR",
+        "BACKGROUND_BLUR"
+      ].includes(e.type);
+    });
+
+    if (visibleEffects.length > 0) {
+      // Calcular a cor média dos efeitos
+      let totalR = 0,
+        totalG = 0,
+        totalB = 0,
+        totalA = 0;
+      let hasColor = false;
+
+      for (const effect of visibleEffects) {
+        if (effect.color) {
+          const color = effect.color;
+          const alpha = color.a || 1;
+          const weight = effect.type.includes("BLUR") ? 0.3 : 0.7; // Peso menor para desfoques
+
+          totalR += color.r * alpha * weight;
+          totalG += color.g * alpha * weight;
+          totalB += color.b * alpha * weight;
+          totalA += alpha * weight;
+          hasColor = true;
+        } else if (
+          effect.type === "LAYER_BLUR" ||
+          effect.type === "BACKGROUND_BLUR"
+        ) {
+          // Para desfoques sem cor definida, usar uma cor neutra com baixa opacidade
+          totalR += 0.8;
+          totalG += 0.8;
+          totalB += 0.8;
+          totalA += 0.3;
+          hasColor = true;
+        }
+      }
+
+      if (hasColor) {
+        const avgR = Math.min(1, totalR / visibleEffects.length);
+        const avgG = Math.min(1, totalG / visibleEffects.length);
+        const avgB = Math.min(1, totalB / visibleEffects.length);
+        const avgA = Math.min(1, (totalA / visibleEffects.length) * 1.5); // Aumentar um pouco a opacidade
+
+        return {
+          color: { r: avgR, g: avgG, b: avgB },
+          opacity: avgA
+        };
+      }
+    }
+  }
+
+  // 4. Se for um nó raiz e não encontramos nenhum fundo, retornar null (não assumir branco)
+  if (isRoot && depth === 0) {
+    return null;
+  }
+
+  // 5. Verificar se o nó tem um efeito de fundo (sombra, desfoque, etc.)
+  if (node.effects && Array.isArray(node.effects)) {
+    const visibleEffects = node.effects.filter((e: any) => {
+      if (e.visible === false) return false;
+      if (e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW") {
+        return (
+          e.color &&
+          (e.color.a === undefined || e.color.a > 0) &&
+          e.visible !== false
         );
       }
       return false;
     });
 
-    if (fill) {
-      // Se for gradiente, pega a cor mais escura
-      if (fill.gradientStops && fill.gradientStops.length > 0) {
-        const sortedStops = [...fill.gradientStops].sort((a, b) => {
-          const luminanceA =
-            (a.color.r * 299 + a.color.g * 587 + a.color.b * 114) / 1000;
-          const luminanceB =
-            (b.color.r * 299 + b.color.g * 587 + b.color.b * 114) / 1000;
-          return luminanceA - luminanceB; // Ordena do mais escuro para o mais claro
-        });
-        return {
-          color: sortedStops[0].color,
-          opacity:
-            fill.opacity !== undefined
-              ? fill.opacity * (sortedStops[0].color.a || 1)
-              : sortedStops[0].color.a || 1
-        };
+    if (visibleEffects.length > 0) {
+      // Se houver sombras, considerar a cor mais escura
+      let darkestEffect = null;
+
+      // Encontrar o efeito mais escuro
+      for (const effect of visibleEffects) {
+        if (!effect || !effect.color) continue;
+
+        if (!darkestEffect) {
+          darkestEffect = effect;
+          continue;
+        }
+
+        const currentLum =
+          (effect.color.r + effect.color.g + effect.color.b) / 3;
+        const darkestLum =
+          (darkestEffect.color.r +
+            darkestEffect.color.g +
+            darkestEffect.color.b) /
+          3;
+
+        if (currentLum < darkestLum) {
+          darkestEffect = effect;
+        }
       }
 
-      // Se for cor sólida
-      if (fill.color) {
-        return {
-          color: fill.color,
-          opacity:
-            fill.opacity !== undefined
-              ? fill.opacity * (fill.color.a !== undefined ? fill.color.a : 1)
-              : 1
-        };
+      // Processar o efeito mais escuro encontrado
+      if (darkestEffect && darkestEffect.color) {
+        const effectOpacity =
+          (darkestEffect.opacity !== undefined ? darkestEffect.opacity : 1) *
+          (darkestEffect.color.a !== undefined ? darkestEffect.color.a : 1);
+
+        // Se a sombra for muito opaca, considerar como fundo
+        if (effectOpacity > 0.3) {
+          return {
+            color: {
+              r: darkestEffect.color.r || 0,
+              g: darkestEffect.color.g || 0,
+              b: darkestEffect.color.b || 0
+            },
+            opacity: effectOpacity
+          };
+        }
       }
     }
   }
 
-  // Se não encontrar, verifica o nó pai, mas não é mais o root
-  return findBackgroundColor(node.parent, defaultColor, depth + 1, false);
+  // 5. Se for um texto, verificar o nó pai
+  if (isTextNode && node.parent) {
+    return findBackgroundColor(
+      node.parent,
+      defaultColor,
+      depth + 1,
+      false,
+      new Set(visitedNodes),
+      true
+    );
+  }
+
+  // 6. Verificar o nó pai
+  if (node.parent) {
+    return findBackgroundColor(
+      node.parent,
+      defaultColor,
+      depth + 1,
+      false,
+      new Set(visitedNodes),
+      false
+    );
+  }
+
+  // 7. Se for o nó raiz, verificar configurações de fundo
+  if (isRoot) {
+    // Verificar preenchimentos do próprio nó
+    if (node.fills && Array.isArray(node.fills)) {
+      const bg = getNodeBackground(node);
+      if (bg && bg.opacity > 0.1) {
+        return bg;
+      }
+    }
+
+    // Verificar configurações de fundo específicas
+    if (node.backgrounds && Array.isArray(node.backgrounds)) {
+      const bg = getNodeBackground({ fills: node.backgrounds });
+      if (bg && bg.opacity > 0.1) {
+        return bg;
+      }
+    }
+  }
+
+  // 8. Se for um componente ou instância, verificar o componente principal
+  if (
+    (node.type === "INSTANCE" || node.type === "COMPONENT") &&
+    node.mainComponent
+  ) {
+    const mainBg = findBackgroundColor(
+      node.mainComponent,
+      defaultColor,
+      depth + 1,
+      false,
+      new Set(visitedNodes),
+      false
+    );
+    if (mainBg.opacity > 0.1) {
+      return mainBg;
+    }
+  }
+
+  // 9. Se for um documento ou página, tentar detectar o tema
+  if (node.type === "DOCUMENT" || node.type === "PAGE") {
+    // Verificar configurações de tema do documento
+    if (node.backgroundColor) {
+      return {
+        color: {
+          r: node.backgroundColor.r !== undefined ? node.backgroundColor.r : 1,
+          g: node.backgroundColor.g !== undefined ? node.backgroundColor.g : 1,
+          b: node.backgroundColor.b !== undefined ? node.backgroundColor.b : 1
+        },
+        opacity:
+          node.backgroundColor.a !== undefined ? node.backgroundColor.a : 1
+      };
+    }
+
+    // Se não houver cor de fundo definida, não assumir branco
+    return null;
+  }
+
+  // 10. Se não encontrou nenhum fundo, não inventar cor
+  return defaultColor ? { color: defaultColor, opacity: 0 } : null;
 };
 
 // Função auxiliar para extrair cor de fundo de um nó
 const getNodeBackground = (node: any) => {
-  if (!node || !node.fills || !Array.isArray(node.fills)) return null;
+  if (!node) return null;
 
-  // Encontra o primeiro preenchimento visível (não transparente)
-  const fill = node.fills.find((f: any) => {
-    if (!f.visible) return false;
-    // Se for cor sólida
-    if (f.color) return f.color.a > 0;
-    // Se for gradiente, verifica se tem cores visíveis
-    if (f.gradientStops && f.gradientStops.length > 0) {
-      return f.gradientStops.some(
-        (stop: any) => stop.color && stop.color.a > 0
-      );
-    }
-    return false;
+  // Se o nó tiver uma propriedade de cor de fundo direta
+  if (node.backgroundColor) {
+    const color = node.backgroundColor;
+    return {
+      color: {
+        r: color.r !== undefined ? color.r : 0,
+        g: color.g !== undefined ? color.g : 0,
+        b: color.b !== undefined ? color.b : 0
+      },
+      opacity:
+        (color.a !== undefined ? color.a : 1) *
+        (node.opacity !== undefined ? node.opacity : 1)
+    };
+  }
+
+  // Verificar preenchimentos (fills)
+  if (!node.fills || !Array.isArray(node.fills) || node.fills.length === 0) {
+    return null;
+  }
+
+  // Encontrar preenchimentos visíveis
+  const visibleFills = node.fills.filter((f: any) => {
+    if (f.visible === false) return false;
+    return [
+      "SOLID",
+      "GRADIENT_LINEAR",
+      "GRADIENT_RADIAL",
+      "GRADIENT_ANGULAR",
+      "GRADIENT_DIAMOND",
+      "IMAGE",
+      "EMOJI"
+    ].includes(f.type);
   });
 
-  if (!fill) return null;
+  if (visibleFills.length === 0) return null;
 
-  // Se for gradiente, pega a cor mais escura
-  if (fill.gradientStops && fill.gradientStops.length > 0) {
-    const sortedStops = [...fill.gradientStops].sort((a, b) => {
-      const luminanceA =
-        (a.color.r * 299 + a.color.g * 587 + a.color.b * 114) / 1000;
-      const luminanceB =
-        (b.color.r * 299 + b.color.g * 587 + b.color.b * 114) / 1000;
-      return luminanceA - luminanceB; // Ordena do mais escuro para o mais claro
-    });
-    return {
-      color: sortedStops[0].color,
-      opacity:
-        fill.opacity !== undefined
-          ? fill.opacity * (sortedStops[0].color.a || 1)
-          : sortedStops[0].color.a || 1
-    };
+  // Processar cada camada de preenchimento (da última para a primeira)
+  let combinedColor = { r: 0, g: 0, b: 0, a: 0 };
+
+  for (let i = visibleFills.length - 1; i >= 0; i--) {
+    const fill = visibleFills[i];
+    const fillOpacity = fill.opacity !== undefined ? fill.opacity : 1;
+    const nodeOpacity = node.opacity !== undefined ? node.opacity : 1;
+    const totalOpacity = fillOpacity * nodeOpacity;
+
+    // Se já temos um fundo opaco, não precisamos processar mais nada
+    if (combinedColor.a >= 0.99) break;
+
+    // Processar diferentes tipos de preenchimento
+    if (fill.type === "SOLID" && fill.color) {
+      const color = fill.color;
+      const alpha = (color.a !== undefined ? color.a : 1) * totalOpacity;
+      combinedColor = blendColors(
+        combinedColor,
+        {
+          r: color.r !== undefined ? color.r : 0,
+          g: color.g !== undefined ? color.g : 0,
+          b: color.b !== undefined ? color.b : 0,
+          a: 1
+        },
+        alpha
+      );
+    } else if (
+      (fill.type.includes("GRADIENT") || fill.type === "EMOJI") &&
+      fill.gradientStops
+    ) {
+      // Processar gradientes
+      const gradientColors = fill.gradientStops
+        .filter(
+          (s: any) => s.color && (s.color.a === undefined || s.color.a > 0)
+        )
+        .map((s: any) => ({
+          color: {
+            r: s.color.r !== undefined ? s.color.r : 0,
+            g: s.color.g !== undefined ? s.color.g : 0,
+            b: s.color.b !== undefined ? s.color.b : 0,
+            a: s.color.a !== undefined ? s.color.a : 1
+          },
+          weight: s.position !== undefined ? s.position : 0.5
+        }));
+
+      if (gradientColors.length > 0) {
+        const avgColor = getAverageColor(gradientColors);
+        const alpha = totalOpacity * (avgColor.a || 1);
+        combinedColor = blendColors(
+          combinedColor,
+          {
+            r: avgColor.r,
+            g: avgColor.g,
+            b: avgColor.b,
+            a: 1
+          },
+          alpha
+        );
+      }
+    } else if (fill.type === "IMAGE") {
+      // Para imagens, usar uma cor neutra com opacidade reduzida
+      combinedColor = blendColors(
+        combinedColor,
+        { r: 0.9, g: 0.9, b: 0.9, a: 1 },
+        0.7 * totalOpacity
+      );
+    }
   }
 
-  // Se for cor sólida
-  if (fill.color) {
-    return {
-      color: fill.color,
-      opacity:
-        fill.opacity !== undefined
-          ? fill.opacity * (fill.color.a !== undefined ? fill.color.a : 1)
-          : 1
-    };
-  }
+  // Se a cor combinada for completamente transparente, retorna null
+  if (combinedColor.a <= 0.05) return null;
 
-  return null;
+  return {
+    color: {
+      r: Math.max(0, Math.min(1, combinedColor.r)),
+      g: Math.max(0, Math.min(1, combinedColor.g)),
+      b: Math.max(0, Math.min(1, combinedColor.b))
+    },
+    opacity: Math.max(0, Math.min(1, combinedColor.a))
+  };
 };
 
 const ContrastChecker: React.FC<ContrastCheckerProps> = ({
@@ -407,157 +724,250 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
 
         // Usando a função findBackgroundColor original, que já está definida no escopo do módulo
 
+        // Função para verificar se um nó deve ser ignorado na análise
+        const shouldSkipNode = (node: any): boolean => {
+          // Ignorar nós invisíveis
+          if (node.visible === false) return true;
+
+          // Ignorar tipos que não são relevantes para verificação de contraste
+          const ignoredTypes = [
+            "PAGE",
+            "DOCUMENT",
+            "SLICE",
+            "STICKY",
+            "CONNECTOR",
+            "WIDGET",
+            "EMBED",
+            "LINK_UNFURL",
+            "MEDIA",
+            "CODE_BLOCK"
+          ];
+
+          return ignoredTypes.includes(node.type);
+        };
+
+        // Função para extrair texto de um nó e seus filhos
+        const extractNodeText = (node: any): string => {
+          if (!node) return "";
+
+          // Se for um nó de texto, retorna o conteúdo
+          if (node.type === "TEXT" && node.characters) {
+            return node.characters.trim();
+          }
+
+          // Se tiver filhos, extrai o texto de cada um
+          if (node.children && Array.isArray(node.children)) {
+            return node.children
+              .map((child: any) => extractNodeText(child))
+              .filter((text: string) => text.length > 0)
+              .join(" ");
+          }
+
+          return "";
+        };
+
         // Função para processar nós filhos recursivamente
         const processChildNodes = (
           node: any,
-          results: ContrastResult[] = []
+          results: ContrastResult[] = [],
+          depth = 0
         ) => {
-          if (!node || !node.visible) return results;
-
-          // Processar nós de texto
-          if (
-            node.type === "TEXT" &&
-            node.characters &&
-            node.characters.trim() !== ""
-          ) {
-            const textColor = extractFillColor(node.fills || []);
-            // Ao verificar o fundo do texto, não é o nó raiz
-            const bgColor = findBackgroundColor(
-              node.parent,
-              { r: 1, g: 1, b: 1 },
-              0,
-              false
-            );
-
-            if (textColor) {
-              const contrast = checkContrast(
-                textColor,
-                bgColor.color,
-                node.fontSize || 16,
-                node.fontWeight || 400
+          try {
+            // Limitar profundidade de recursão para evitar estouro de pilha
+            if (depth > 20) {
+              console.warn(
+                "Profundidade máxima de recursão atingida para o nó:",
+                node.id
               );
-
-              const textRGB = toRGB(textColor);
-              const bgRGB = toRGB(bgColor.color);
-
-              const result: ContrastResult = {
-                id: node.id,
-                nodeName: node.name || "Texto",
-                nodeType: "TEXT",
-                text: node.characters,
-                textColor: rgbToHex(textRGB.r, textRGB.g, textRGB.b),
-                bgColor: rgbToHex(bgRGB.r, bgRGB.g, bgRGB.b),
-                contrastRatio: contrast.ratio,
-                aa: contrast.aa,
-                aaa: contrast.aaa,
-                aaLarge: contrast.aaLarge,
-                hasIssues: !contrast.aa,
-                issues: !contrast.aa
-                  ? [
-                      `Contraste insuficiente ${contrast.ratio}:1 (mínimo ${
-                        contrast.aaLarge ? "3:1 para texto grande" : "4.5:1"
-                      })`
-                    ]
-                  : [],
-                fontSize: node.fontSize || 16,
-                fontWeight: node.fontWeight || 400,
-                textOpacity: textColor.a || 1,
-                bgOpacity: bgColor.opacity || 1
-              };
-
-              results.push(result);
+              return results;
             }
-          }
-          // Processar elementos gráficos
-          else if (
-            [
-              "RECTANGLE",
-              "ELLIPSE",
-              "POLYGON",
-              "STAR",
-              "VECTOR",
-              "LINE",
-              "SHAPE_WITH_TEXT"
-            ].includes(node.type)
-          ) {
+
+            // Pular nós que não devem ser processados
+            if (shouldSkipNode(node)) {
+              return results;
+            }
+
+            const nodeText = extractNodeText(node);
+            const hasText = nodeText.length > 0;
             const elementFill = extractFillColor(node.fills || []);
-
-            if (elementFill && elementFill.a > 0) {
-              // Ao verificar o fundo de elementos gráficos, não é o nó raiz
-              const parentBg = findBackgroundColor(
-                node.parent,
-                { r: 1, g: 1, b: 1 },
-                0,
-                false
-              );
-              const contrast = checkContrast(
-                elementFill,
-                parentBg.color,
-                16, // Tamanho padrão para elementos não-texto
-                400 // Peso padrão
+            const hasFill = elementFill && elementFill.a > 0;
+            const hasStrokes =
+              node.strokes &&
+              Array.isArray(node.strokes) &&
+              node.strokes.some(
+                (s: any) => s.visible && s.color && s.color.a > 0
               );
 
-              // Para elementos gráficos, verificar contraste mínimo de 3:1
-              if (contrast.ratio < 3) {
-                const elementRGB = toRGB(elementFill);
-                const bgRGB = toRGB(parentBg.color);
+            // Processar nós de texto
+            if (hasText) {
+              // Iniciar busca de fundo a partir do próprio nó, subindo pela cadeia de pais serializada
+              const bgColor = findBackgroundColor(node, null, 0, false);
+
+              if (elementFill && bgColor && bgColor.color) {
+                const contrast = checkContrast(
+                  elementFill,
+                  bgColor.color,
+                  node.fontSize || 16,
+                  node.fontWeight || 400
+                );
+
+                const textRGB = toRGB(elementFill);
+                const bgRGB = toRGB(bgColor.color);
 
                 const result: ContrastResult = {
                   id: node.id,
-                  nodeName: node.name || "Elemento Gráfico",
-                  nodeType: "GRAPHIC",
-                  text: "",
-                  textColor: rgbToHex(elementRGB.r, elementRGB.g, elementRGB.b),
+                  nodeName: node.name || "Texto",
+                  nodeType: "TEXT",
+                  text: nodeText,
+                  textColor: rgbToHex(textRGB.r, textRGB.g, textRGB.b),
                   bgColor: rgbToHex(bgRGB.r, bgRGB.g, bgRGB.b),
                   contrastRatio: contrast.ratio,
-                  aa: contrast.ratio >= 3,
-                  aaa: contrast.ratio >= 4.5,
-                  aaLarge: false,
-                  hasIssues: contrast.ratio < 3,
-                  issues:
-                    contrast.ratio < 3
-                      ? [
-                          `Contraste insuficiente ${contrast.ratio}:1 (mínimo 3:1 para elementos gráficos)`
-                        ]
-                      : [],
-                  fontSize: 0,
-                  fontWeight: 400,
+                  aa: contrast.aa,
+                  aaa: contrast.aaa,
+                  aaLarge: contrast.aaLarge,
+                  hasIssues: !contrast.aa,
+                  issues: !contrast.aa
+                    ? [
+                        `Contraste insuficiente ${contrast.ratio.toFixed(
+                          1
+                        )}:1 (mínimo ${
+                          contrast.aaLarge ? "3:1 para texto grande" : "4.5:1"
+                        })`
+                      ]
+                    : [],
+                  fontSize: node.fontSize || 16,
+                  fontWeight: node.fontWeight || 400,
                   textOpacity: elementFill.a || 1,
-                  bgOpacity: parentBg.opacity || 1
+                  bgOpacity: bgColor.opacity || 1
                 };
 
                 results.push(result);
               }
             }
-          }
 
-          // Processar filhos recursivamente
-          if (node.children) {
-            node.children.forEach((child: any) =>
-              processChildNodes(child, results)
-            );
-          }
+            // Processar elementos com preenchimento (não-texto)
+            if (hasFill && (!hasText || node.type !== "TEXT")) {
+              // Iniciar busca do fundo a partir do elemento atual
+              const parentBg = findBackgroundColor(node, null, 0, false);
+              if (parentBg && parentBg.color) {
+                const contrast = checkContrast(
+                  elementFill,
+                  parentBg.color,
+                  16,
+                  400
+                );
+                if (contrast.ratio < 3) {
+                  const elementRGB = toRGB(elementFill);
+                  const bgRGB = toRGB(parentBg.color);
+                  const result: ContrastResult = {
+                    id: node.id,
+                    nodeName:
+                      node.name ||
+                      `Elemento ${node.type?.toLowerCase() || ""}`.trim(),
+                    nodeType: node.type || "ELEMENT",
+                    text: nodeText,
+                    textColor: rgbToHex(
+                      elementRGB.r,
+                      elementRGB.g,
+                      elementRGB.b
+                    ),
+                    bgColor: rgbToHex(bgRGB.r, bgRGB.g, bgRGB.b),
+                    contrastRatio: contrast.ratio,
+                    aa: contrast.ratio >= 3,
+                    aaa: contrast.ratio >= 4.5,
+                    aaLarge: false,
+                    hasIssues: contrast.ratio < 3,
+                    issues:
+                      contrast.ratio < 3
+                        ? [
+                            `Contraste insuficiente ${contrast.ratio.toFixed(
+                              1
+                            )}:1 (mínimo 3:1 para elementos gráficos)`
+                          ]
+                        : [],
+                    fontSize: 0,
+                    fontWeight: 400,
+                    textOpacity: elementFill.a || 1,
+                    bgOpacity: parentBg.opacity || 1
+                  };
+                  results.push(result);
+                }
+              }
+            }
 
-          return results;
+            // Processar bordas (strokes)
+            if (hasStrokes) {
+              const strokeFill = extractFillColor(node.strokes || []);
+              if (strokeFill && strokeFill.a > 0) {
+                const parentBg = findBackgroundColor(node, null, 0, false);
+                if (parentBg && parentBg.color) {
+                  const contrast = checkContrast(
+                    strokeFill,
+                    parentBg.color,
+                    16,
+                    400
+                  );
+                  if (contrast.ratio < 3) {
+                    const strokeRGB = toRGB(strokeFill);
+                    const bgRGB = toRGB(parentBg.color);
+                    const result: ContrastResult = {
+                      id: `${node.id}-stroke`,
+                      nodeName: `${node.name || "Elemento"} (Borda)`,
+                      nodeType: "STROKE",
+                      text: "",
+                      textColor: rgbToHex(
+                        strokeRGB.r,
+                        strokeRGB.g,
+                        strokeRGB.b
+                      ),
+                      bgColor: rgbToHex(bgRGB.r, bgRGB.g, bgRGB.b),
+                      contrastRatio: contrast.ratio,
+                      aa: contrast.ratio >= 3,
+                      aaa: contrast.ratio >= 4.5,
+                      aaLarge: false,
+                      hasIssues: contrast.ratio < 3,
+                      issues:
+                        contrast.ratio < 3
+                          ? [
+                              `Contraste insuficiente na borda ${contrast.ratio.toFixed(
+                                1
+                              )}:1 (mínimo 3:1)`
+                            ]
+                          : [],
+                      fontSize: 0,
+                      fontWeight: 400,
+                      textOpacity: strokeFill.a,
+                      bgOpacity: parentBg.opacity || 1
+                    };
+                    results.push(result);
+                  }
+                }
+              }
+            }
+
+            // Recursão nos filhos
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                processChildNodes(child, results, depth + 1);
+              }
+            }
+
+            return results;
+          } catch (e) {
+            console.warn("Falha ao processar nó para contraste:", node?.id, e);
+            return results;
+          }
         };
 
-        // Processar o nó selecionado e seus filhos
-        // Primeiro, verifica a cor de fundo do frame selecionado (nó raiz)
-        const frameBgColor = findBackgroundColor(
-          selectedNode,
-          { r: 1, g: 1, b: 1 },
-          0,
-          true
-        );
+        // Executa análise a partir do nó selecionado
+        const analysisResults: ContrastResult[] = [];
+        processChildNodes(selectedNode, analysisResults, 0);
 
-        // Processa os filhos do nó selecionado
-        const analysisResults = await processChildNodes(selectedNode);
-
-        // Ordenar por problemas (os com problemas primeiro) e depois por razão de contraste
+        // Ordenar por problemas (os com problemas primeiro) e depois por razão de contraste (menor primeiro)
         analysisResults.sort((a, b) => {
           if (a.hasIssues && !b.hasIssues) return -1;
           if (!a.hasIssues && b.hasIssues) return 1;
-          return a.contrastRatio - b.contrastRatio; // Menor contraste primeiro
+          return a.contrastRatio - b.contrastRatio;
         });
 
         setResults(analysisResults);
