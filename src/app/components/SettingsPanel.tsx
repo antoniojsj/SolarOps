@@ -6,15 +6,17 @@ import "../styles/panel.css";
 
 function SettingsPanel(props) {
   const [loading, setLoading] = React.useState(false);
-  const [libs, setLibs] = React.useState(props.activeComponentLibraries || []);
+  const [libs, setLibs] = React.useState<any[]>(
+    (props.activeComponentLibraries as any[]) || []
+  );
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [accessCode, setAccessCode] = React.useState("");
   const [error, setError] = React.useState("");
 
   // Estado para controle do fluxo de importação de bibliotecas
   const [showLibSelection, setShowLibSelection] = React.useState(false);
-  const [availableLibs, setAvailableLibs] = React.useState([]); // bibliotecas detectadas
-  const [selectedLibs, setSelectedLibs] = React.useState([]); // bibliotecas marcadas para importar
+  const [availableLibs, setAvailableLibs] = React.useState<any[]>([]); // bibliotecas detectadas
+  const [selectedLibs, setSelectedLibs] = React.useState<any[]>([]); // bibliotecas marcadas para importar
 
   // Novo estado para controlar se está na tela de revisão/listagem antes de salvar
   type Step = "select" | "review" | "saved";
@@ -126,13 +128,15 @@ function SettingsPanel(props) {
           <span
             style={{ display: "flex", alignItems: "center", marginRight: 8 }}
           >
-            <img
-              src={require("../assets/chevron.svg")}
-              alt="expand"
+            <svg
+              width={16}
+              height={16}
+              viewBox="0 0 16 16"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
               style={{
                 width: 16,
                 height: 16,
-                filter: "invert(80%)",
                 marginRight: 8,
                 transition: "transform 0.2s",
                 // Chevron right: fechado (rotate(-90deg)), aberto para baixo (rotate(0deg))
@@ -140,7 +144,14 @@ function SettingsPanel(props) {
                 display: "inline-block",
                 verticalAlign: "middle"
               }}
-            />
+            >
+              <path
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M7.46899 10.6486L2.96899 6.36285L4.03099 5.35143L7.99999 9.13285L11.969 5.35143L13.031 6.36285L8.53099 10.6486L7.99999 11.1529L7.46899 10.6486Z"
+                fill="#BDBDBD"
+              />
+            </svg>
             <span style={{ color: "#bdbdbd", fontWeight: 600 }}>
               {category}
             </span>
@@ -289,7 +300,7 @@ function SettingsPanel(props) {
   }
 
   // Alterna seleção de biblioteca
-  function toggleLib(lib) {
+  function toggleLib(lib: any) {
     setSelectedLibs(prev => {
       const exists = prev.find(l => l.name === lib.name);
       if (exists) {
@@ -686,7 +697,11 @@ function SettingsPanel(props) {
                       (libs[0].fills?.length || 0) +
                       (libs[0].text?.length || 0) +
                       (libs[0].effects?.length || 0) +
-                      (libs[0].strokes?.length || 0)
+                      (libs[0].strokes?.length || 0) +
+                      (libs[0].gaps?.length || 0) +
+                      (libs[0].paddings?.length || 0) +
+                      (libs[0].strokeWidths?.length || 0) +
+                      (libs[0].grids?.length || 0)
                     ).toString()}
                   />
                 </div>
@@ -740,6 +755,54 @@ function SettingsPanel(props) {
                               tokens={lib.strokes}
                             />
                           )}
+                          {lib.gaps && lib.gaps.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Gaps"
+                              tokens={lib.gaps}
+                            />
+                          )}
+                          {lib.paddings && lib.paddings.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Paddings"
+                              tokens={lib.paddings}
+                            />
+                          )}
+                          {lib.strokeWidths && lib.strokeWidths.length > 0 && (
+                            <TokenAccordion
+                              category="Stroke Widths"
+                              tokens={lib.strokeWidths}
+                            />
+                          )}
+                          {lib.grids && lib.grids.length > 0 && (
+                            <TokenAccordion
+                              category="Grids"
+                              tokens={lib.grids}
+                            />
+                          )}
+                          {lib.gaps && lib.gaps.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Gaps"
+                              tokens={lib.gaps}
+                            />
+                          )}
+                          {lib.paddings && lib.paddings.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Paddings"
+                              tokens={lib.paddings}
+                            />
+                          )}
+                          {lib.strokeWidths && lib.strokeWidths.length > 0 && (
+                            <TokenAccordion
+                              category="Stroke Widths"
+                              tokens={lib.strokeWidths}
+                            />
+                          )}
+                          {lib.grids && lib.grids.length > 0 && (
+                            <TokenAccordion
+                              category="Grids"
+                              tokens={lib.grids}
+                            />
+                          )}
                         </div>
                       </div>
                     </li>
@@ -772,7 +835,11 @@ function SettingsPanel(props) {
                       (libs[0].fills?.length || 0) +
                       (libs[0].text?.length || 0) +
                       (libs[0].effects?.length || 0) +
-                      (libs[0].strokes?.length || 0)
+                      (libs[0].strokes?.length || 0) +
+                      (libs[0].gaps?.length || 0) +
+                      (libs[0].paddings?.length || 0) +
+                      (libs[0].strokeWidths?.length || 0) +
+                      (libs[0].grids?.length || 0)
                     ).toString()}
                   />
                 </div>

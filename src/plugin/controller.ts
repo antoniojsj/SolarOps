@@ -753,6 +753,17 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
     }
 
+    if (msg.type === "get-user-libs") {
+      // Retorna as bibliotecas salvas do usuário
+      try {
+        const libs =
+          (await figma.clientStorage.getAsync("sherlock_selected_libs")) || [];
+        figma.ui.postMessage({ type: "user-libs-loaded", libs });
+      } catch (e) {
+        figma.ui.postMessage({ type: "user-libs-loaded", libs: [] });
+      }
+    }
+
     // Initialize the app
     if (msg.type === "run-app") {
       if (
