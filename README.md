@@ -1,6 +1,13 @@
 # Sherlock - Plugin para Figma
 
-O Sherlock é um poderoso plugin para o Figma projetado para aprimorar o fluxo de trabalho de design com recursos avançados e utilitários. Construído com tecnologias web modernas, o Sherlock oferece uma experiência fluida para designers e desenvolvedores.
+O Sherlock é um poderoso plugin para o Figma projetado para aprimorar o fluxo de trabalho de design com recursos avançados e utilitários. Construído com tecnologias web modernas, o Sherlock oferece uma experiência fluida para designers e desenvolvedores, com foco especial em acessibilidade e conformidade com WCAG.
+
+## ✨ Funcionalidades
+
+- **Verificador de Contraste**: Analise e valide o contraste entre cores de acordo com as diretrizes WCAG
+- **Guia WCAG**: Consulte critérios de acessibilidade WCAG com descrições detalhadas em português
+- **Filtragem por Categorias**: Navegue pelos critérios WCAG usando filtros por categorias
+- **Documentação Integrada**: Acesse documentação completa sobre acessibilidade e boas práticas
 
 
 ## 🛠 Tecnologias Utilizadas

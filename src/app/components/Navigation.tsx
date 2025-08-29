@@ -7,6 +7,17 @@ function Navigation(props) {
   let activePage = props.activePage;
 
   const layersClick = () => {
+    // Antes de navegar para a página de camadas, verificamos se os dados estão disponíveis
+    // Se não estiverem, solicitamos uma atualização dos dados
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "update-errors",
+          libraries: props.libraries
+        }
+      },
+      "*"
+    );
     props.onPageSelection("layers");
   };
 
@@ -14,23 +25,10 @@ function Navigation(props) {
     props.onPageSelection("bulk");
   };
 
-  // const libraryClick = () => {
-  //   props.onPageSelection("library");
-  // };
-
-  const stylesClick = () => {
-    props.onPageSelection("styles");
-    if (activePage !== "styles") {
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "update-styles-page"
-          }
-        },
-        "*"
-      );
-    }
-  };
+  // Funções removidas pois as abas correspondentes foram removidas:
+  // - devModeClick
+  // - stylesClick
+  // - Funções relacionadas a abas que não estão mais sendo usadas
 
   const handleLintRulesChange = boolean => {
     props.updateLintRules(boolean);
@@ -93,14 +91,6 @@ function Navigation(props) {
             style={{ cursor: "pointer" }}
           >
             Camadas
-          </motion.div>
-          <motion.div
-            className={`nav-item ${activePage === "styles" ? "active" : ""}`}
-            onClick={stylesClick}
-            whileTap={{ scale: 0.98, opacity: 0.8 }}
-            style={{ cursor: "pointer" }}
-          >
-            Styles
           </motion.div>
 
           <div className="nav-icon-wrapper" style={{ paddingRight: 16 }}>

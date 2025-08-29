@@ -2,10 +2,12 @@ import React, { useState, useCallback } from "react";
 import SettingsPanel from "./SettingsPanel";
 import DocumentationSearch from "./DocumentationSearch";
 import ContrastChecker from "./ContrastChecker";
+import DevModeTab from "./DevModeTab";
+import WCAGContent from "./WCAGContent";
 
 function InitialContent(props) {
   const [settingsPanelVisible, setSettingsPanelVisible] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria' ou 'acessibilidade'
+  const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria', 'acessibilidade' ou 'devmode'
   const [accessibilityTab, setAccessibilityTab] = React.useState("contrast"); // 'contrast' ou 'docs'
   const [selectedNode, setSelectedNode] = React.useState<any>(null);
   const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
@@ -37,11 +39,8 @@ function InitialContent(props) {
             console.log("[InitialContent] Novo nó recebido:", pm.node);
             return pm.node;
           });
-
-          // Garantir que a aba correta esteja visível e iniciar a checagem de contraste
-          setActiveTab("acessibilidade");
-          setAccessibilityTab("contrast");
-          setIsCheckingContrast(true);
+          // Não realizar troca automática de aba. O contraste só inicia se a aba de acessibilidade estiver ativa
+          // (controlado por um efeito separado que observa activeTab e selectedNode)
         } else if (pm.type === "no-selection") {
           console.log("[InitialContent] Nenhum nó selecionado no Figma");
           setSelectedNode(null);
@@ -86,6 +85,18 @@ function InitialContent(props) {
       nodeType: selectedNode?.type
     });
   }, [selectedNode]);
+
+  // Iniciar checagem de contraste somente quando a aba de acessibilidade estiver ativa
+  React.useEffect(() => {
+    if (activeTab === "acessibilidade" && selectedNode) {
+      // garantir sub-aba contrast ativa
+      setAccessibilityTab("contrast");
+      setIsCheckingContrast(true);
+    } else if (activeTab !== "acessibilidade") {
+      // ao sair da aba de acessibilidade, interromper checagem
+      setIsCheckingContrast(false);
+    }
+  }, [activeTab, selectedNode]);
 
   return (
     <div
@@ -151,6 +162,27 @@ function InitialContent(props) {
             onClick={() => setActiveTab("acessibilidade")}
           >
             Acessibilidade
+          </div>
+          <div
+            className={`pill initial-header-tab${
+              activeTab === "devmode" ? " selected" : ""
+            }`}
+            style={{
+              background:
+                activeTab === "devmode"
+                  ? "rgba(255,255,255,0.08)"
+                  : "transparent",
+              color: "#fff",
+              fontWeight: 400,
+              fontSize: 14,
+              borderRadius: 4,
+              padding: "6px 12px",
+              lineHeight: "18px",
+              cursor: "pointer"
+            }}
+            onClick={() => setActiveTab("devmode")}
+          >
+            DevMode
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -297,14 +329,7 @@ function InitialContent(props) {
                       strokeLinejoin="round"
                     />
                     <path
-                      d="M12 16V12"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M12 8H12.01"
+                      d="M12 16V12M12 8H12.01"
                       stroke="currentColor"
                       strokeWidth="2"
                       strokeLinecap="round"
@@ -314,9 +339,7 @@ function InitialContent(props) {
                 </div>
                 <div className="feature-content">
                   <h3 className="feature-title">Verificação</h3>
-                  <p className="feature-description">
-                    Cores, tipografia e espaçamento
-                  </p>
+                  <p className="feature-description">Uso dos tokens</p>
                 </div>
               </div>
               <div className="feature-card">
@@ -362,7 +385,9 @@ function InitialContent(props) {
                 </div>
                 <div className="feature-content">
                   <h3 className="feature-title">Correções</h3>
-                  <p className="feature-description">Sugestões automáticas</p>
+                  <p className="feature-description">
+                    Simplifique as correções
+                  </p>
                 </div>
               </div>
               <div className="feature-card">
@@ -390,7 +415,7 @@ function InitialContent(props) {
                 </div>
                 <div className="feature-content">
                   <h3 className="feature-title">Navegação</h3>
-                  <p className="feature-description">Ir para elementos</p>
+                  <p className="feature-description">Verifique os elementos</p>
                 </div>
               </div>
             </div>
@@ -411,7 +436,7 @@ function InitialContent(props) {
             style={{
               width: "100%",
               height: "100%",
-              padding: "0",
+              padding: "0 16px",
               margin: "0",
               boxSizing: "border-box",
               display: "flex",
@@ -422,8 +447,8 @@ function InitialContent(props) {
             {/* Tabs */}
             <div
               style={{
-                padding: "0",
-                margin: "0 0 16px 0",
+                padding: "24px 0 16px 0",
+                margin: "0",
                 width: "100%",
                 boxSizing: "border-box"
               }}
@@ -500,134 +525,265 @@ function InitialContent(props) {
               )}
 
               {accessibilityTab === "docs" && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "16px"
+                <WCAGContent
+                  onSearch={query => {
+                    console.log("Buscar documento:", query);
                   }}
-                >
-                  <DocumentationSearch
-                    onSearch={query => {
-                      console.log("Buscar documento:", query);
-                    }}
-                    onDocumentSelect={docId => {
-                      console.log("Documento selecionado:", docId);
-                    }}
-                  />
-                  <div style={{ color: "#bdbdbd", fontSize: 14 }}>
-                    <p>Documentações úteis:</p>
-                    <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                      <li>
-                        <a
-                          href="https://www.w3.org/WAI/standards-guidelines/wcag/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#3b82f6" }}
-                        >
-                          WCAG - Web Content Accessibility Guidelines
-                        </a>
-                      </li>
-                      <li>
-                        <a
-                          href="https://contrast-ratio.com/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#3b82f6" }}
-                        >
-                          Contrast Ratio Checker
-                        </a>
-                      </li>
-                      <li>
-                        <a
-                          href="https://www.a11yproject.com/checklist/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#3b82f6" }}
-                        >
-                          A11Y Project Checklist
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
+                  onDocumentSelect={docId => {
+                    console.log("Documento selecionado:", docId);
+                  }}
+                />
               )}
-
-              {null}
             </div>
           </div>
         )}
       </div>
+      {activeTab === "devmode" ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            overflow: "hidden"
+          }}
+        >
+          {selectedNode ? (
+            <DevModeTab
+              selectedNode={selectedNode}
+              onInspectClick={() => {
+                console.log("Iniciando modo de inspeção...");
+                parent.postMessage(
+                  {
+                    pluginMessage: {
+                      type: "start-inspection"
+                    }
+                  },
+                  "*"
+                );
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "40px 20px",
+                textAlign: "center",
+                flex: 1
+              }}
+            >
+              <div
+                style={{
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "50%",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: "16px"
+                }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M12 3C12.5523 3 13 3.44772 13 4V5C13 5.55228 12.5523 6 12 6C11.4477 6 11 5.55228 11 5V4C11 3.44772 11.4477 3 12 3Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M12 18C12.5523 18 13 18.4477 13 19V20C13 20.5523 12.5523 21 12 21C11.4477 21 11 20.5523 11 20V19C11 18.4477 11.4477 18 12 18Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M4.92893 4.92894C5.31946 4.53841 5.95262 4.53841 6.34315 4.92894L6.70711 5.29289C7.09763 5.68342 7.09763 6.31658 6.70711 6.70711C6.31658 7.09763 5.68342 7.09763 5.29289 6.70711L4.92893 6.34315C4.53841 5.95262 4.53841 5.31946 4.92893 4.92894Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M17.6569 17.6569C18.0474 17.2663 18.6805 17.2663 19.0711 17.6569L19.435 18.0208C19.8256 18.4114 19.8256 19.0445 19.435 19.4351C19.0445 19.8256 18.4113 19.8256 18.0208 19.4351L17.6569 19.0711C17.2663 18.6806 17.2663 18.0474 17.6569 17.6569Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M3 12C3 11.4477 3.44772 11 4 11H5C5.55229 11 6 11.4477 6 12C6 12.5523 5.55229 13 5 13H4C3.44772 13 3 12.5523 3 12Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M18 12C18 11.4477 18.4477 11 19 11H20C20.5523 11 21 11.4477 21 12C21 12.5523 20.5523 13 20 13H19C18.4477 13 18 12.5523 18 12Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M6.70711 17.6569C6.31658 17.2663 5.68342 17.2663 5.29289 17.6569L4.92893 18.0208C4.53841 18.4114 4.53841 19.0445 4.92893 19.4351C5.31946 19.8256 5.95262 19.8256 6.34315 19.4351L6.70711 19.0711C7.09763 18.6806 7.09763 18.0474 6.70711 17.6569Z"
+                    fill="#fff"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M19.0711 4.92894C19.4616 5.31946 19.4616 5.95262 19.0711 6.34315L18.7071 6.70711C18.3166 7.09763 17.6834 7.09763 17.2929 6.70711C16.9024 6.31658 16.9024 5.68342 17.2929 5.29289L17.6569 4.92894C18.0474 4.53841 18.6805 4.53841 19.0711 4.92894Z"
+                    fill="#fff"
+                  />
+                </svg>
+              </div>
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: "14px",
+                  lineHeight: "20px",
+                  maxWidth: "240px",
+                  color: "#ffffff"
+                }}
+              >
+                Selecione um elemento na tela para inspecionar suas propriedades
+                e estilos
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
       {(activeTab === "auditoria" ||
+        activeTab === "devmode" ||
         (activeTab === "acessibilidade" &&
-          accessibilityTab === "contrast")) && (
+          (accessibilityTab === "contrast" ||
+            accessibilityTab === "docs"))) && (
         <footer
           className="initial-content-footer"
           style={{
-            padding: "16px",
+            padding: "0px",
+            height: accessibilityTab === "docs" ? "4px" : "auto",
             background: "#2A2A2A",
             borderTop: "1px solid rgba(255, 255, 255, 0.1)",
-            display: "flex",
-            justifyContent: "flex-end",
-            marginTop: "auto"
+            display: "block"
           }}
         >
-          <button
-            className="button button--primary"
-            onClick={
-              activeTab === "auditoria"
-                ? props.onHandleRunApp
-                : () => {
-                    // Obter o nó selecionado do Figma
+          {accessibilityTab !== "docs" && (
+            <div
+              style={{
+                padding: "16px",
+                display: "flex",
+                justifyContent: "center"
+              }}
+            >
+              {activeTab === "devmode" ? (
+                <button
+                  className="button button--primary"
+                  onClick={() => {
+                    console.log("Iniciando modo de inspeção...");
                     parent.postMessage(
                       {
                         pluginMessage: {
-                          type: "get-selected-node"
+                          type: "start-inspection"
                         }
                       },
                       "*"
                     );
+                  }}
+                  style={{
+                    background: "#18A0FB",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "10px 16px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "background 0.2s, opacity 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    width: "100%",
+                    maxWidth: "100%",
+                    justifyContent: "center",
+                    boxSizing: "border-box",
+                    height: "40px"
+                  }}
+                >
+                  {selectedNode ? "Atualizar elemento" : "Selecionar elemento"}
+                </button>
+              ) : (
+                <button
+                  className="button button--primary"
+                  onClick={
+                    activeTab === "auditoria"
+                      ? props.onHandleRunApp
+                      : () => {
+                          // Obter o nó selecionado do Figma
+                          parent.postMessage(
+                            {
+                              pluginMessage: {
+                                type: "get-selected-node"
+                              }
+                            },
+                            "*"
+                          );
 
-                    // Solicitar o nó selecionado ao Figma
-                    console.log("Solicitando nó selecionado ao Figma...");
-                    parent.postMessage(
-                      {
-                        pluginMessage: {
-                          type: "get-selected-node"
+                          // Solicitar o nó selecionado ao Figma
+                          console.log("Solicitando nó selecionado ao Figma...");
+                          parent.postMessage(
+                            {
+                              pluginMessage: {
+                                type: "get-selected-node"
+                              }
+                            },
+                            "*"
+                          );
+
+                          // Exibir imediatamente a aba de contraste enquanto aguardamos a resposta
+                          setActiveTab("acessibilidade");
+                          setAccessibilityTab("contrast");
+                          setIsCheckingContrast(true);
                         }
-                      },
-                      "*"
-                    );
-
-                    // Exibir imediatamente a aba de contraste enquanto aguardamos a resposta
-                    setActiveTab("acessibilidade");
-                    setAccessibilityTab("contrast");
-                    setIsCheckingContrast(true);
                   }
-            }
-            disabled={!props.isFrameSelected}
-            style={{
-              background: props.isFrameSelected ? "#18A0FB" : "#656565",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              padding: "8px 16px",
-              fontSize: "12px",
-              fontWeight: 500,
-              cursor: props.isFrameSelected ? "pointer" : "not-allowed",
-              opacity: props.isFrameSelected ? 1 : 0.7,
-              transition: "background 0.2s, opacity 0.2s",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              minWidth: "160px",
-              justifyContent: "center"
-            }}
-          >
-            {activeTab === "auditoria"
-              ? "Iniciar auditoria"
-              : "Verificar contraste"}
-          </button>
+                  disabled={!props.isFrameSelected}
+                  style={{
+                    background: props.isFrameSelected ? "#18A0FB" : "#656565",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "12px 16px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor: props.isFrameSelected ? "pointer" : "not-allowed",
+                    opacity: props.isFrameSelected ? 1 : 0.7,
+                    transition: "background 0.2s, opacity 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    width: "100%",
+                    maxWidth: "100%",
+                    justifyContent: "center",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  {activeTab === "auditoria"
+                    ? "Iniciar auditoria"
+                    : "Verificar contraste"}
+                </button>
+              )}
+            </div>
+          )}
         </footer>
       )}
     </div>

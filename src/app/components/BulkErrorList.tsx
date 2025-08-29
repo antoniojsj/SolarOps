@@ -42,7 +42,7 @@ function BulkErrorList(props) {
       },
       "*"
     );
-  }, []);
+  }, []); // Added closing braces and dependency array
 
   // Listen for project name response
   React.useEffect(() => {
@@ -66,12 +66,13 @@ function BulkErrorList(props) {
   //   "effects"
   // ];
 
+  // Node-level array coming from plugin (each item has id and errors[])
   const errorArray = Array.isArray(props.errorArray) ? props.errorArray : [];
   const ignoredErrorArray = Array.isArray(props.ignoredErrorArray)
     ? props.ignoredErrorArray
     : [];
 
-  const ignoredErrorsMap = {};
+  const ignoredErrorsMap = {} as Record<string, Set<any>>;
   ignoredErrorArray.forEach(ignoredError => {
     const nodeId = ignoredError.node.id;
     if (!ignoredErrorsMap[nodeId]) {
@@ -80,23 +81,62 @@ function BulkErrorList(props) {
     ignoredErrorsMap[nodeId].add(ignoredError.value);
   });
 
-  // Filter out ignored errors
-  const filteredErrorArray = errorArray.filter(item => {
-    const nodeId = item.id;
+  // Helper: normalize error object fields
+  const getErrorNodeId = (err: any) =>
+    err.nodeId || (err.node && err.node.id) || err.id;
+  const getErrorValue = (err: any) => err.value;
+  const getErrorType = (err: any) => err.type || err.errorType || err.category;
+
+  // Derive a flat list of errors from the node-level structure
+  const flatErrors: any[] = React.useMemo(() => {
+    const list: any[] = [];
+    errorArray.forEach(node => {
+      const nid = node?.id;
+      if (!nid || !Array.isArray(node?.errors)) return;
+      node.errors.forEach((e: any) => {
+        list.push({ ...e, nodeId: e.nodeId || nid, node: node });
+      });
+    });
+    return list;
+  }, [errorArray]);
+
+  // Filter out ignored errors for flat error list
+  const filteredFlatErrors = flatErrors.filter(err => {
+    const nodeId = getErrorNodeId(err);
+    if (!nodeId) return false;
     const ignoredErrorValues = ignoredErrorsMap[nodeId] || new Set();
-    // Protege item.errors
-    item.errors = Array.isArray(item.errors) ? item.errors : [];
-    item.errors = item.errors.filter(
-      error => !ignoredErrorValues.has(error.value)
-    );
-    return item.errors.length >= 1;
+    // Always keep 'unvalidated' errors visible unless the exact value was explicitly ignored
+    const type = getErrorType(err);
+    if (type === "unvalidated") return true;
+    return !ignoredErrorValues.has(getErrorValue(err));
   });
 
-  const createBulkErrorList = (errorArray, ignoredErrorsMap) => {
-    console.log("[createBulkErrorList] Iniciando com errorArray:", errorArray);
+  // Filter nodes: keep nodes that still have at least one non-ignored error
+  const filteredErrorArray = Array.isArray(props.errorArray)
+    ? props.errorArray
+        .map(node => {
+          const id = node.id;
+          const ignoredValues = ignoredErrorsMap[id] || new Set();
+          const nextErrors = Array.isArray(node.errors)
+            ? node.errors.filter(e => {
+                const type = getErrorType(e);
+                if (type === "unvalidated") return true;
+                return !ignoredValues.has(e.value);
+              })
+            : [];
+          return { ...node, errors: nextErrors };
+        })
+        .filter(node => Array.isArray(node.errors) && node.errors.length > 0)
+    : [];
+
+  const createBulkErrorList = (flatErrorArray, ignoredErrorsMap) => {
+    console.log(
+      "[createBulkErrorList] Iniciando com errorArray:",
+      flatErrorArray
+    );
     console.log("[createBulkErrorList] ignoredErrorsMap:", ignoredErrorsMap);
 
-    if (!Array.isArray(errorArray) || errorArray.length === 0) {
+    if (!Array.isArray(flatErrorArray) || flatErrorArray.length === 0) {
       console.log(
         "[createBulkErrorList] errorArray inválido ou vazio, retornando array vazio"
       );
@@ -104,20 +144,94 @@ function BulkErrorList(props) {
     }
 
     // Cada erro já é um erro individual, só precisa filtrar ignorados
-    return errorArray.filter(error => {
-      const nodeId = error.nodeId || (error.node && error.node.id);
+    return flatErrorArray.filter(error => {
+      const nodeId = getErrorNodeId(error);
       if (!nodeId) return false;
       const ignoredErrorValues = ignoredErrorsMap[nodeId] || new Set();
-      return !ignoredErrorValues.has(error.value);
+      const type = getErrorType(error);
+      if (type === "unvalidated") return true;
+      return !ignoredErrorValues.has(getErrorValue(error));
     });
   };
 
   // Create the bulk error list using the createBulkErrorList function
   const bulkErrorList = createBulkErrorList(
-    filteredErrorArray as any[],
+    filteredFlatErrors as any[],
     ignoredErrorsMap
   ) as any[];
   bulkErrorList.sort((a: any, b: any) => b.count - a.count);
+
+  // ---------------- Conformity calculations by unique nodes ----------------
+  // Traverse nodeArray to collect all scanned node IDs
+  const allScannedNodeIds: Set<string> = React.useMemo(() => {
+    const ids = new Set<string>();
+    const walk = (node: any) => {
+      if (!node || !node.id) return;
+      ids.add(node.id);
+      if (Array.isArray(node.children)) {
+        node.children.forEach(walk);
+      }
+    };
+    if (Array.isArray(props.nodeArray)) {
+      props.nodeArray.forEach(walk);
+    }
+    return ids;
+  }, [props.nodeArray]);
+
+  const nodeById: Record<string, any> = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    const walk = (node: any) => {
+      if (!node || !node.id) return;
+      map[node.id] = node;
+      if (Array.isArray(node.children)) {
+        node.children.forEach(walk);
+      }
+    };
+    if (Array.isArray(props.nodeArray)) {
+      props.nodeArray.forEach(walk);
+    }
+    return map;
+  }, [props.nodeArray]);
+
+  // Map nodeId -> has at least one (filtered) error.
+  // Ensure 'unvalidated' errors ALWAYS count toward conformity, even if ignored in UI lists.
+  const nodesWithErrors: Set<string> = React.useMemo(() => {
+    const s = new Set<string>();
+    // Include all filtered errors
+    filteredFlatErrors.forEach(err => {
+      const nid = getErrorNodeId(err);
+      if (nid) s.add(nid);
+    });
+    // Force-include critical error types regardless of ignore state
+    flatErrors.forEach(err => {
+      const t = getErrorType(err);
+      // Treat any "*-unvalidated" as critical
+      if (typeof t === "string" && t.endsWith("-unvalidated")) {
+        const nid = getErrorNodeId(err);
+        if (nid) s.add(nid);
+      }
+    });
+    return s;
+  }, [filteredFlatErrors, errorArray]);
+
+  const totalElements = allScannedNodeIds.size;
+  const nonConformElements = nodesWithErrors.size;
+  const conformElements = Math.max(totalElements - nonConformElements, 0);
+  const detachCount = bulkErrorList.reduce((acc: number, err: any) => {
+    return acc + (err.type === "detach" ? err.count || 1 : 0);
+  }, 0);
+
+  // Helper: collect all descendant ids for a given frame/node
+  const getFrameNodeIds = React.useCallback((frame: any): Set<string> => {
+    const ids = new Set<string>();
+    const walk = (node: any) => {
+      if (!node || !node.id) return;
+      ids.add(node.id);
+      if (Array.isArray(node.children)) node.children.forEach(walk);
+    };
+    walk(frame);
+    return ids;
+  }, []);
 
   // Create an array of errors that have matches
   const errorsWithMatches = bulkErrorList.filter((error: any) => {
@@ -221,7 +335,7 @@ function BulkErrorList(props) {
   }
 
   function handleIgnoreAll(error) {
-    let errorsToBeIgnored = [];
+    const errorsToBeIgnored: any[] = [];
 
     filteredErrorArray.forEach(node => {
       if (node && node.errors && Array.isArray(node.errors)) {
@@ -235,8 +349,8 @@ function BulkErrorList(props) {
       }
     });
 
-    if (errorsToBeIgnored.length) {
-      props.onIgnoreAll(errorsToBeIgnored);
+    if (errorsToBeIgnored.length && typeof props.onIgnoreAll === "function") {
+      props.onIgnoreAll(errorsToBeIgnored as any);
     }
   }
 
@@ -277,42 +391,68 @@ function BulkErrorList(props) {
 
   // Drag-to-scroll para tabs
   React.useEffect(() => {
-    const pills = document.querySelector(".filter-pills");
-    if (!pills) return;
+    const pillsEl = document.querySelector(
+      ".filter-pills"
+    ) as HTMLElement | null;
+    if (!pillsEl) return;
     let isDown = false;
     let startX: number;
     let scrollLeft: number;
 
     const onMouseDown = (e: MouseEvent) => {
       isDown = true;
-      pills.classList.add("dragging");
-      startX = e.pageX - (pills as HTMLElement).offsetLeft;
-      scrollLeft = (pills as HTMLElement).scrollLeft;
+      pillsEl.classList.add("dragging");
+      startX = e.pageX - pillsEl.offsetLeft;
+      scrollLeft = pillsEl.scrollLeft;
     };
     const onMouseLeave = () => {
       isDown = false;
-      pills.classList.remove("dragging");
+      pillsEl.classList.remove("dragging");
     };
     const onMouseUp = () => {
       isDown = false;
-      pills.classList.remove("dragging");
+      pillsEl.classList.remove("dragging");
     };
     const onMouseMove = (e: MouseEvent) => {
       if (!isDown) return;
       e.preventDefault();
-      const x = e.pageX - (pills as HTMLElement).offsetLeft;
+      const x = e.pageX - pillsEl.offsetLeft;
       const walk = (x - startX) * 1.5; // scroll speed
-      (pills as HTMLElement).scrollLeft = scrollLeft - walk;
+      pillsEl.scrollLeft = scrollLeft - walk;
     };
-    pills.addEventListener("mousedown", onMouseDown);
-    pills.addEventListener("mouseleave", onMouseLeave);
-    pills.addEventListener("mouseup", onMouseUp);
-    pills.addEventListener("mousemove", onMouseMove);
+    pillsEl.addEventListener(
+      "mousedown",
+      (onMouseDown as unknown) as EventListener
+    );
+    pillsEl.addEventListener(
+      "mouseleave",
+      (onMouseLeave as unknown) as EventListener
+    );
+    pillsEl.addEventListener(
+      "mouseup",
+      (onMouseUp as unknown) as EventListener
+    );
+    pillsEl.addEventListener(
+      "mousemove",
+      (onMouseMove as unknown) as EventListener
+    );
     return () => {
-      pills.removeEventListener("mousedown", onMouseDown);
-      pills.removeEventListener("mouseleave", onMouseLeave);
-      pills.removeEventListener("mouseup", onMouseUp);
-      pills.removeEventListener("mousemove", onMouseMove);
+      pillsEl.removeEventListener(
+        "mousedown",
+        (onMouseDown as unknown) as EventListener
+      );
+      pillsEl.removeEventListener(
+        "mouseleave",
+        (onMouseLeave as unknown) as EventListener
+      );
+      pillsEl.removeEventListener(
+        "mouseup",
+        (onMouseUp as unknown) as EventListener
+      );
+      pillsEl.removeEventListener(
+        "mousemove",
+        (onMouseMove as unknown) as EventListener
+      );
     };
   }, []);
 
@@ -359,18 +499,7 @@ function BulkErrorList(props) {
     );
   }
 
-  // Cálculo dinâmico dos cards principais
-  const totalElements = props.errorArray.length;
-  const nonConformElements = filteredErrorArray.length;
-  const conformElements = totalElements - nonConformElements;
-
-  // Detach de componente: contar erros do tipo 'detach' (ou similar)
-  const detachCount = props.errorArray.reduce((acc, item) => {
-    if (Array.isArray(item.errors)) {
-      return acc + item.errors.filter(e => e.type === "detach").length;
-    }
-    return acc;
-  }, 0);
+  // Cálculo dinâmico dos cards principais: já computado acima
 
   // Tipos para os cards de conformidade por item
   const itemTypes = [
@@ -383,36 +512,215 @@ function BulkErrorList(props) {
     { key: "text", label: "Tipografia", icon: require("../assets/text.svg") },
     {
       key: "radius",
-      label: "Padding",
+      label: "Radius",
       icon: require("../assets/paragraph-spacing.svg")
     },
     { key: "gap", label: "Gap", icon: require("../assets/gap.svg") },
     { key: "stroke", label: "Border", icon: require("../assets/border.svg") },
-    {
-      key: "stroker",
-      label: "Stroker",
-      icon: require("../assets/stroker.svg")
-    },
     { key: "effects", label: "Efeitos", icon: require("../assets/effects.svg") }
   ];
 
   // Função para calcular conformidade por tipo
+  function errorTypeMatchesCategory(errorType: string, category: string) {
+    if (!errorType || !category) return false;
+    switch (category) {
+      case "fill":
+        return errorType.startsWith("fill-");
+      case "text":
+        return errorType.startsWith("text-");
+      case "stroke":
+        return errorType.startsWith("stroke-");
+      case "effects":
+        return errorType.startsWith("effect-");
+      case "radius":
+        return errorType.startsWith("corner-radius");
+      case "component":
+        return errorType === "detach" || errorType.startsWith("component-");
+      case "gap":
+        return errorType.startsWith("gap-");
+      default:
+        return false;
+    }
+  }
+
   function getConformityByType(typeKey) {
+    // Constrói sets de tokens por categoria
+    const styleIdSet = new Set<string>();
+    const valueSet = new Set<number>();
+
+    if (props.libraries && Array.isArray(props.libraries)) {
+      props.libraries.forEach(lib => {
+        switch (typeKey) {
+          case "fill":
+            (lib.fills || []).forEach(
+              (t: any) => t?.id && styleIdSet.add(t.id)
+            );
+            break;
+          case "text":
+            (lib.text || []).forEach((t: any) => t?.id && styleIdSet.add(t.id));
+            break;
+          case "stroke":
+            (lib.strokes || []).forEach(
+              (t: any) => t?.id && styleIdSet.add(t.id)
+            );
+            break;
+          case "effects":
+            (lib.effects || []).forEach(
+              (t: any) => t?.id && styleIdSet.add(t.id)
+            );
+            break;
+          case "gap":
+            (lib.gaps || []).forEach((t: any) => {
+              if (t?.value !== undefined) valueSet.add(t.value);
+            });
+            break;
+          case "radius":
+            (lib.radius || []).forEach((t: any) => {
+              if (t?.value !== undefined) valueSet.add(t.value);
+            });
+            break;
+        }
+      });
+    }
+
+    // Se não há tokens salvos para a categoria, retorna 0%
+    const hasAnyToken = styleIdSet.size > 0 || valueSet.size > 0;
+    if (!hasAnyToken) {
+      return { conform: 0, nonConform: 0, percent: 0 };
+    }
+
+    // Função auxiliar: determina se o nó é aplicável à categoria
+    const isApplicable = (node: any): boolean => {
+      if (!node) return false;
+      switch (typeKey) {
+        case "fill":
+          return !!(node.fillStyleId || (node.fills && node.fills.length));
+        case "text":
+          return !!(node.textStyleId || node.type === "TEXT");
+        case "stroke":
+          return !!(
+            node.strokeStyleId ||
+            (node.strokes && node.strokes.length)
+          );
+        case "effects":
+          return !!(
+            node.effectStyleId ||
+            (node.effects && node.effects.length)
+          );
+        case "gap":
+          return node.gap !== undefined && node.gap !== null;
+        case "radius":
+          return node.cornerRadius !== undefined && node.cornerRadius !== null;
+        default:
+          return false;
+      }
+    };
+
     let conform = 0;
     let nonConform = 0;
-    props.errorArray.forEach(item => {
-      const hasTypeError =
-        Array.isArray(item.errors) && item.errors.some(e => e.type === typeKey);
-      if (hasTypeError) {
-        nonConform++;
-      } else {
+
+    allScannedNodeIds.forEach(nid => {
+      const node = nodeById[nid];
+      if (!isApplicable(node)) return;
+
+      let usesToken = false;
+      const styleTokens = node.styleTokens || {};
+
+      // Primeiro verifica styleId direto
+      switch (typeKey) {
+        case "fill": {
+          if (Array.isArray(node.fills)) {
+            usesToken = node.fills.some(
+              fill =>
+                typeof fill.fillStyleId === "string" &&
+                styleIdSet.has(fill.fillStyleId)
+            );
+          } else {
+            usesToken =
+              typeof node.fillStyleId === "string" &&
+              styleIdSet.has(node.fillStyleId);
+          }
+          break;
+        }
+        case "text": {
+          usesToken =
+            typeof node.textStyleId === "string" &&
+            styleIdSet.has(node.textStyleId);
+          break;
+        }
+        case "stroke": {
+          if (Array.isArray(node.strokes)) {
+            usesToken = node.strokes.some(
+              stroke =>
+                typeof stroke.strokeStyleId === "string" &&
+                styleIdSet.has(stroke.strokeStyleId)
+            );
+          } else {
+            usesToken =
+              typeof node.strokeStyleId === "string" &&
+              styleIdSet.has(node.strokeStyleId);
+          }
+          break;
+        }
+        case "effects": {
+          if (Array.isArray(node.effects)) {
+            usesToken = node.effects.some(
+              effect =>
+                typeof effect.effectStyleId === "string" &&
+                styleIdSet.has(effect.effectStyleId)
+            );
+          } else {
+            usesToken =
+              typeof node.effectStyleId === "string" &&
+              styleIdSet.has(node.effectStyleId);
+          }
+          break;
+        }
+        case "gap": {
+          usesToken = typeof node.gap === "number" && valueSet.has(node.gap);
+          break;
+        }
+        case "radius": {
+          usesToken =
+            typeof node.cornerRadius === "number" &&
+            valueSet.has(node.cornerRadius);
+          break;
+        }
+      }
+
+      // Se não usa token direto, verifica styleTokens
+      if (!usesToken && styleTokens) {
+        switch (typeKey) {
+          case "fill":
+            usesToken =
+              styleTokens.fillStyle && styleIdSet.has(styleTokens.fillStyle);
+            break;
+          case "text":
+            usesToken =
+              styleTokens.textStyle && styleIdSet.has(styleTokens.textStyle);
+            break;
+          case "stroke":
+            usesToken =
+              styleTokens.strokeStyle &&
+              styleIdSet.has(styleTokens.strokeStyle);
+            break;
+          case "effects":
+            usesToken =
+              styleTokens.effectStyle &&
+              styleIdSet.has(styleTokens.effectStyle);
+            break;
+        }
+      }
+
+      if (usesToken) {
         conform++;
+      } else {
+        nonConform++;
       }
     });
-    const percent =
-      conform + nonConform > 0
-        ? Math.round((conform / (conform + nonConform)) * 100)
-        : 100;
+
+    const total = conform + nonConform;
+    const percent = total > 0 ? Math.round((conform / total) * 100) : 0;
     return { conform, nonConform, percent };
   }
 
@@ -639,8 +947,8 @@ function BulkErrorList(props) {
                   style={{ border: "1px solid rgba(255, 255, 255, 0.1)" }}
                 >
                   <ConformityScoreBar
-                    total={props.errorArray.length}
-                    errors={filteredErrorArray.length}
+                    total={totalElements}
+                    errors={nonConformElements}
                   />
                 </div>
               </li>
@@ -911,26 +1219,21 @@ function BulkErrorList(props) {
                 // Log para depuração da estrutura dos dados
                 console.log("Frame:", frame);
                 console.log("ErrorArray:", errorArray);
-                // Tentar encontrar elementos do frame por vários campos possíveis
-                const frameElements = errorArray.filter(
-                  e => e.parentFrameId === frame.id
+                // Calcular elementos do frame por varredura de descendentes
+                const frameIds = getFrameNodeIds(frame);
+                const totalElements = frameIds.size;
+                const nonConformElements = Array.from(frameIds).filter(id =>
+                  nodesWithErrors.has(id)
+                ).length;
+                const conformElements = Math.max(
+                  totalElements - nonConformElements,
+                  0
                 );
-                const frameFilteredElements = filteredErrorArray.filter(
-                  e => e.parentFrameId === frame.id
-                );
-                const totalElements = frameElements.length;
-                const nonConformElements = frameFilteredElements.length;
-                const conformElements = totalElements - nonConformElements;
-                const detachCount = frameElements.reduce((acc, item) => {
-                  if (Array.isArray(item.errors)) {
-                    return (
-                      acc + item.errors.filter(e => e.type === "detach").length
-                    );
-                  }
-                  return acc;
-                }, 0);
+                const detachCount = filteredFlatErrors.filter(
+                  e => e.type === "detach" && frameIds.has(getErrorNodeId(e))
+                ).length;
                 // Score de conformidade
-                const correct = Math.max(totalElements - nonConformElements, 0);
+                const correct = conformElements;
                 // const score =
                 //   totalElements > 0
                 //     ? Math.round((correct / totalElements) * 100)
@@ -938,7 +1241,7 @@ function BulkErrorList(props) {
                 // Handler do botão
                 const handleVerificarErros = () => {
                   if (props.onSelectedListUpdate && frame.id) {
-                    props.onSelectedListUpdate(frame.id);
+                    props.onSelectedListUpdate([frame.id]);
                   }
                 };
                 return (

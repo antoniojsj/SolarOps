@@ -10,22 +10,40 @@ import Panel from "./Panel";
 import BulkErrorList from "./BulkErrorList";
 import InfoPanel from "./InfoPanel";
 import SettingsPanel from "./SettingsPanel";
+import DevMode from "./DevMode";
 
 import "../styles/figma.ds.css";
 import "../styles/ui.css";
 import "../styles/empty-state.css";
 import "react-tooltip/dist/react-tooltip.css";
 
+// Definição de tipos para melhorar a tipagem
+interface ErrorItem {
+  node?: { id: string };
+  value?: string;
+  type?: string;
+  [key: string]: any;
+}
+
+interface NodeItem {
+  id: string;
+  name?: string;
+  fills?: any[];
+  text?: any;
+  effects?: any[];
+  [key: string]: any;
+}
+
 const App = ({}) => {
-  const [errorArray, setErrorArray] = useState([]);
+  const [errorArray, setErrorArray] = useState<any[]>([]);
   const [activePage, setActivePage] = useState("page");
-  const [ignoredErrorArray, setIgnoreErrorArray] = useState([]);
-  const [activeError, setActiveError] = React.useState({});
-  const [selectedNode, setSelectedNode] = React.useState({});
+  const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
+  const [activeError, setActiveError] = React.useState<any>({});
+  const [selectedNode, setSelectedNode] = React.useState<any>({});
   const [isVisible, setIsVisible] = React.useState(false);
-  const [nodeArray, setNodeArray] = useState([]);
-  const [selectedListItems, setSelectedListItem] = React.useState([]);
-  const [activeNodeIds, setActiveNodeIds] = React.useState([]);
+  const [nodeArray, setNodeArray] = useState<NodeItem[]>([]);
+  const [selectedListItems, setSelectedListItem] = React.useState<string[]>([]);
+  const [activeNodeIds, setActiveNodeIds] = React.useState<string[]>([]);
   const [borderRadiusValues, setBorderRadiusValues] = useState([
     0,
     2,
@@ -187,17 +205,30 @@ const App = ({}) => {
   }, [ignoredErrorArray]);
 
   const onRunApp = React.useCallback(() => {
+    console.log("[App] onRunApp chamado. Bibliotecas:", libraries);
+    console.log("[App] Número de bibliotecas:", libraries.length);
+    if (libraries.length > 0) {
+      console.log("[App] Estrutura da primeira biblioteca:", {
+        name: libraries[0].name,
+        fillsCount: libraries[0].fills?.length || 0,
+        textCount: libraries[0].text?.length || 0,
+        effectsCount: libraries[0].effects?.length || 0
+      });
+    }
+
     parent.postMessage(
       {
         pluginMessage: {
           type: "run-app",
           lintVectors: lintVectors,
-          selection: "user"
+          selection: "user",
+          // Envia as bibliotecas/tokens selecionados para a auditoria
+          libraries: libraries
         }
       },
       "*"
     );
-  }, []);
+  }, [libraries, lintVectors]);
 
   const onScanEntirePage = React.useCallback(() => {
     parent.postMessage(
@@ -205,12 +236,13 @@ const App = ({}) => {
         pluginMessage: {
           type: "run-app",
           lintVectors: lintVectors,
-          selection: "page"
+          selection: "page",
+          libraries: libraries
         }
       },
       "*"
     );
-  }, []);
+  }, [libraries, lintVectors]);
 
   // We need to always be able to access this set of arrays
   // in order to provide it to the linting array for magic fixes.
@@ -421,6 +453,30 @@ const App = ({}) => {
         console.log("[LOG] updated errors", { t: performance.now() - t0 });
         // Once the errors are returned, update the error array.
         updateErrorArray(errors);
+
+        // Atualizar também o nodeArray quando receber a resposta de update-errors
+        if (message && Array.isArray(message) && message.length > 0) {
+          console.log("[App] Atualizando nodeArray com", message.length, "nós");
+          setNodeArray(message);
+
+          // Se estiver na página de camadas, selecionar o primeiro nó
+          if (activePageRef.current === "layers" && message.length > 0) {
+            console.log(
+              "[DEBUG] Selecionando primeiro nó na página de camadas",
+              message[0].id
+            );
+            setSelectedListItem([message[0].id]);
+            setActiveNodeIds([message[0].id]);
+
+            // Solicitar dados da camada selecionada
+            parent.postMessage(
+              {
+                pluginMessage: { type: "fetch-layer-data", id: message[0].id }
+              },
+              "*"
+            );
+          }
+        }
       } else if (type === "library-imported") {
         console.log("[App] library-imported recebido. Bibliotecas:", message);
         setLibraries(message);
@@ -525,7 +581,9 @@ const App = ({}) => {
           activeComponentLibraries={activeComponentLibraries}
         />
       )}
-      {activePage === "styles" ? (
+      {activePage === "devmode" ? (
+        <DevMode />
+      ) : activePage === "styles" ? (
         <StylesPage stylesInUse={stylesInUse} />
       ) : activePage === "layers" ? (
         (() => {
@@ -534,6 +592,50 @@ const App = ({}) => {
             activeNodeIds,
             selectedListItems
           });
+
+          // Verificar se o nodeArray está vazio
+          if (!nodeArray || nodeArray.length === 0) {
+            // Se estiver vazio, solicitar atualização dos dados
+            console.log("[DEBUG] nodeArray vazio, solicitando atualização");
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "update-errors",
+                  libraries: librariesRef.current
+                }
+              },
+              "*"
+            );
+
+            // Mostrar mensagem de carregamento enquanto aguarda os dados
+            return (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "200px",
+                  color: "#fff"
+                }}
+              >
+                <div style={{ marginBottom: "16px" }}>
+                  Carregando camadas...
+                </div>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    border: "3px solid #333",
+                    borderTop: "3px solid #fff",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }}
+                ></div>
+              </div>
+            );
+          }
+
           return (
             <NodeList
               onErrorUpdate={updateActiveError}

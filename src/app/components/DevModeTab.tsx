@@ -1,0 +1,696 @@
+import React from "react";
+
+// Add CSS for scrollbar
+const scrollbarStyles = `
+  .scrollable-content {
+    scrollbar-width: thin;
+    scrollbar-color: #4A4A4A #252526;
+  }
+  
+  .scrollable-content::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollable-content::-webkit-scrollbar-track {
+    background: #252526;
+    border-radius: 4px;
+  }
+  
+  .scrollable-content::-webkit-scrollbar-thumb {
+    background: #4A4A4A;
+    border-radius: 4px;
+  }
+  
+  .scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: #5E5E5E;
+  }
+`;
+
+// Add the styles to the document
+const styleElement = document.createElement("style");
+styleElement.textContent = scrollbarStyles;
+document.head.appendChild(styleElement);
+
+interface DevModeTabProps {
+  selectedNode: any;
+  onInspectClick: () => void;
+}
+
+const DevModeTab: React.FC<DevModeTabProps> = ({
+  selectedNode,
+  onInspectClick
+}) => {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        backgroundColor: "#1E1E1E",
+        borderRadius: "6px"
+      }}
+    >
+      <div
+        style={{
+          padding: "12px 16px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+          backgroundColor: "#252526",
+          position: "sticky",
+          top: 0,
+          zIndex: 1
+        }}
+      >
+        <h3
+          style={{
+            margin: 0,
+            color: "#fff",
+            fontSize: "14px",
+            fontWeight: 500,
+            lineHeight: "24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          Inspetor de Elementos
+        </h3>
+      </div>
+
+      <div
+        className="scrollable-content"
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px",
+          backgroundColor: "#1E1E1E"
+        }}
+      >
+        {selectedNode ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px"
+            }}
+          >
+            {/* Element Preview Section */}
+            <div
+              style={{
+                background: "rgba(0, 0, 0, 0.2)",
+                borderRadius: "8px",
+                padding: "16px",
+                border: "1px solid rgba(255, 255, 255, 0.1)"
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  margin: "0 0 12px 0",
+                  color: "#fff",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                <span>Element Preview</span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    background: "rgba(255, 255, 255, 0.1)",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    fontWeight: "500",
+                    color: "#aaa"
+                  }}
+                >
+                  {selectedNode.type || "element"}
+                </span>
+              </h3>
+
+              {/* Visual Element Box */}
+              <div
+                style={{
+                  position: "relative",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px dashed rgba(255, 255, 255, 0.2)",
+                  borderRadius: "4px",
+                  padding: selectedNode.padding?.top || "16px",
+                  minHeight: "100px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: "16px",
+                  overflow: "hidden"
+                }}
+              >
+                <div
+                  style={{
+                    background: "rgba(255, 255, 255, 0.1)",
+                    width: "100%",
+                    height: "100%",
+                    minHeight: "60px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "rgba(255, 255, 255, 0.6)",
+                    fontSize: "12px",
+                    fontStyle: "italic"
+                  }}
+                >
+                  {selectedNode.name || "Element Content"}
+                </div>
+
+                {/* Padding indicators */}
+                {selectedNode.padding && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        background: "rgba(255, 165, 0, 0.7)",
+                        color: "#000",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        borderBottomLeftRadius: "4px",
+                        borderBottomRightRadius: "4px",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      Padding: {selectedNode.padding.top || 0}px
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: "8px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "rgba(255, 165, 0, 0.7)",
+                        color: "#000",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        borderTopLeftRadius: "4px",
+                        borderBottomLeftRadius: "4px",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {selectedNode.padding.right || 0}px
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        background: "rgba(255, 165, 0, 0.7)",
+                        color: "#000",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        borderTopLeftRadius: "4px",
+                        borderTopRightRadius: "4px",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {selectedNode.padding.bottom || 0}px
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "8px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "rgba(255, 165, 0, 0.7)",
+                        color: "#000",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        borderTopRightRadius: "4px",
+                        borderBottomRightRadius: "4px",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {selectedNode.padding.left || 0}px
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Dimensions */}
+              {selectedNode.bounds && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "8px",
+                    fontSize: "11px",
+                    color: "#aaa",
+                    padding: "4px 0",
+                    borderTop: "1px dashed rgba(255, 255, 255, 0.1)"
+                  }}
+                >
+                  <span>Width: {Math.round(selectedNode.bounds.width)}px</span>
+                  <span>
+                    Height: {Math.round(selectedNode.bounds.height)}px
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Component Properties Section */}
+            {selectedNode.componentProperties && (
+              <div
+                style={{
+                  background: "#1E1E1E",
+                  borderRadius: "6px",
+                  border: "1px solid #333",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                  marginBottom: "16px"
+                }}
+              >
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    borderBottom: "1px solid #333",
+                    backgroundColor: "#252526",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#9CDCFE",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px"
+                    }}
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                    </svg>
+                    Propriedades do Componente
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    maxHeight: "300px",
+                    overflowY: "auto",
+                    fontSize: "12px"
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      color: "#D4D4D4"
+                    }}
+                  >
+                    <thead>
+                      <tr
+                        style={{
+                          backgroundColor: "#2A2D2E",
+                          fontSize: "11px",
+                          textAlign: "left",
+                          color: "#9CDCFE",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px"
+                        }}
+                      >
+                        <th
+                          style={{
+                            padding: "8px 12px",
+                            borderBottom: "1px solid #333"
+                          }}
+                        >
+                          Propriedade
+                        </th>
+                        <th
+                          style={{
+                            padding: "8px 12px",
+                            borderBottom: "1px solid #333"
+                          }}
+                        >
+                          Valor
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        // Parse the name property to extract key-value pairs
+                        const name =
+                          selectedNode.componentProperties.name || "";
+                        const properties: Array<{
+                          key: string;
+                          value: string;
+                        }> = [];
+
+                        // Split by comma to get individual properties
+                        const propStrings = name.split(",").map(s => s.trim());
+
+                        // Process each property
+                        propStrings.forEach(prop => {
+                          const match = prop.match(/^([^=]+)=(.+)$/);
+                          if (match) {
+                            const key = match[1].trim();
+                            const value = match[2].trim();
+                            properties.push({ key, value });
+                          } else if (prop) {
+                            // If no = sign, use the whole string as value with empty key
+                            properties.push({ key: "", value: prop });
+                          }
+                        });
+
+                        // Add other properties that aren't name, key, or description
+                        Object.entries(selectedNode.componentProperties)
+                          .filter(
+                            ([key]) =>
+                              !["name", "key", "description"].includes(key)
+                          )
+                          .forEach(([key, value]) => {
+                            properties.push({
+                              key,
+                              value:
+                                typeof value === "object"
+                                  ? JSON.stringify(value)
+                                  : String(value)
+                            });
+                          });
+
+                        return properties.map(({ key, value }, index) => (
+                          <tr
+                            key={index}
+                            style={{
+                              borderBottom: "1px solid #252526",
+                              transition: "background-color 0.2s"
+                            }}
+                            onMouseEnter={e => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor =
+                                "rgba(255, 255, 255, 0.03)";
+                            }}
+                            onMouseLeave={e => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor =
+                                "transparent";
+                            }}
+                          >
+                            <td
+                              style={{
+                                padding: "8px 12px",
+                                fontFamily: "monospace",
+                                color: "#9CDCFE",
+                                verticalAlign: "top",
+                                borderRight: "1px solid #252526",
+                                whiteSpace: "nowrap"
+                              }}
+                            >
+                              {key || "text"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 12px",
+                                fontFamily: "monospace",
+                                color: "#CE9178",
+                                wordBreak: "break-word"
+                              }}
+                            >
+                              {value}
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Other Properties Section */}
+            <div
+              style={{
+                background: "#1E1E1E",
+                borderRadius: "6px",
+                border: "1px solid #333",
+                overflow: "hidden",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderBottom: "1px solid #333",
+                  backgroundColor: "#252526",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#9CDCFE",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px"
+                  }}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                  </svg>
+                  Outras Propriedades
+                </div>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: "200px",
+                  overflowY: "auto",
+                  fontSize: "12px"
+                }}
+              >
+                {Object.entries(selectedNode)
+                  .filter(
+                    ([key]) =>
+                      ![
+                        "bounds",
+                        "padding",
+                        "name",
+                        "type",
+                        "styles",
+                        "children",
+                        "componentProperties"
+                      ].includes(key)
+                  )
+                  .map(([key, value]) => {
+                    let displayValue = value;
+                    if (value === null || value === undefined) {
+                      displayValue = "null";
+                    } else if (typeof value === "boolean") {
+                      displayValue = value ? "true" : "false";
+                    } else if (Array.isArray(value)) {
+                      displayValue = `[${value.join(", ")}]`;
+                    } else if (typeof value === "object") {
+                      displayValue = JSON.stringify(value, null, 2);
+                    }
+
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          display: "flex",
+                          padding: "6px 12px",
+                          borderBottom: "1px solid #252526",
+                          cursor: "default",
+                          transition: "background-color 0.2s"
+                        }}
+                        onMouseEnter={e => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor =
+                            "rgba(255, 255, 255, 0.03)";
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor =
+                            "transparent";
+                        }}
+                      >
+                        <div
+                          style={{
+                            flex: "0 0 140px",
+                            color: "#9CDCFE",
+                            fontFamily: "monospace",
+                            paddingRight: "12px",
+                            wordBreak: "break-word"
+                          }}
+                        >
+                          {key}
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            color: "#CE9178",
+                            fontFamily: "monospace",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word"
+                          }}
+                        >
+                          {String(displayValue)}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {Object.keys(selectedNode).filter(
+                  key =>
+                    ![
+                      "bounds",
+                      "padding",
+                      "name",
+                      "type",
+                      "styles",
+                      "children",
+                      "componentProperties"
+                    ].includes(key)
+                ).length === 0 && (
+                  <div
+                    style={{
+                      padding: "16px",
+                      textAlign: "center",
+                      color: "#888",
+                      fontSize: "11px",
+                      fontStyle: "italic"
+                    }}
+                  >
+                    Nenhuma propriedade adicional disponível
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              color: "#888",
+              textAlign: "center",
+              padding: "32px 16px"
+            }}
+          >
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <p style={{ margin: "16px 0 0 0", fontSize: "14px" }}>
+              Nenhum elemento selecionado
+            </p>
+            <p style={{ margin: "8px 0 0 0", fontSize: "12px", opacity: 0.7 }}>
+              Selecione um elemento no canvas para inspecionar
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          padding: "16px",
+          borderTop: "1px solid rgba(255, 255, 255, 0.1)"
+        }}
+      >
+        <button
+          onClick={onInspectClick}
+          style={{
+            background: "#18A0FB",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 16px",
+            fontSize: "13px",
+            fontWeight: 500,
+            cursor: "pointer",
+            transition: "background 0.2s, opacity 0.2s",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            width: "100%",
+            justifyContent: "center",
+            boxSizing: "border-box",
+            height: "40px"
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          {selectedNode ? "Atualizar elemento" : "Selecionar elemento"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default DevModeTab;

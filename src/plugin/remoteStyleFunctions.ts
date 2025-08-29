@@ -289,6 +289,18 @@ export async function detectTokenLibraries() {
       strokeWidths,
       grids
     };
+
+    console.log(
+      "[detectTokenLibraries] Biblioteca detectada:",
+      tokenLibrary.name,
+      "- Fills:",
+      tokenLibrary.fills.length,
+      "- Text:",
+      tokenLibrary.text.length,
+      "- Effects:",
+      tokenLibrary.effects.length
+    );
+
     return [tokenLibrary];
   } catch (error) {
     console.error("[detectTokenLibraries] Erro ao detectar tokens:", error);

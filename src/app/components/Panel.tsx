@@ -60,7 +60,7 @@ function Panel(props) {
       activeId = filteredErrorArray[currentIndex - 1];
     }
 
-    props.onSelectedListUpdate(activeId.id);
+    props.onSelectedListUpdate([activeId.id]);
 
     parent.postMessage(
       { pluginMessage: { type: "fetch-layer-data", id: activeId.id } },
@@ -82,7 +82,7 @@ function Panel(props) {
       activeId = filteredErrorArray[lastItem];
     }
 
-    props.onSelectedListUpdate(activeId.id);
+    props.onSelectedListUpdate([activeId.id]);
 
     parent.postMessage(
       { pluginMessage: { type: "fetch-layer-data", id: activeId.id } },

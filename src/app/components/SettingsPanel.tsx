@@ -6,9 +6,7 @@ import "../styles/panel.css";
 
 function SettingsPanel(props) {
   const [loading, setLoading] = React.useState(false);
-  const [libs, setLibs] = React.useState<any[]>(
-    (props.activeComponentLibraries as any[]) || []
-  );
+  const [libs, setLibs] = React.useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [accessCode, setAccessCode] = React.useState("");
   const [error, setError] = React.useState("");
@@ -25,9 +23,10 @@ function SettingsPanel(props) {
   // Novo estado para controlar se já buscou as bibliotecas
   const [hasFetchedLibs, setHasFetchedLibs] = React.useState(false);
 
-  React.useEffect(() => {
-    setLibs(props.activeComponentLibraries || []);
-  }, [props.activeComponentLibraries]);
+  // Remover a inicialização com activeComponentLibraries - as bibliotecas devem vir do clientStorage
+  // React.useEffect(() => {
+  //   setLibs(props.activeComponentLibraries || []);
+  // }, [props.activeComponentLibraries]);
 
   // Simples verificação de código (pode ser trocado por chamada de API depois)
   function handleLogin(e) {
@@ -66,7 +65,28 @@ function SettingsPanel(props) {
     function handler(event) {
       const { pluginMessage } = event.data;
       if (pluginMessage && pluginMessage.type === "fetched-token-libraries") {
-        setAvailableLibs(pluginMessage.tokenLibraries || []);
+        const tokenLibraries = pluginMessage.tokenLibraries || [];
+        console.log(
+          "[SettingsPanel] Token libraries detectadas:",
+          tokenLibraries
+        );
+        console.log(
+          "[SettingsPanel] Número de bibliotecas detectadas:",
+          tokenLibraries.length
+        );
+        if (tokenLibraries.length > 0) {
+          console.log(
+            "[SettingsPanel] Estrutura da primeira biblioteca detectada:",
+            {
+              name: tokenLibraries[0].name,
+              fillsCount: tokenLibraries[0].fills?.length || 0,
+              textCount: tokenLibraries[0].text?.length || 0,
+              effectsCount: tokenLibraries[0].effects?.length || 0
+            }
+          );
+        }
+
+        setAvailableLibs(tokenLibraries);
         setShowLibSelection(true);
         setLoading(false);
         setHasFetchedLibs(true);
@@ -313,6 +333,23 @@ function SettingsPanel(props) {
 
   // Salva configuração no localStorage (ATENÇÃO: para persistência real em Figma, use figma.clientStorage no controller/plugin)
   function saveLibsConfig(libs) {
+    console.log("[SettingsPanel] saveLibsConfig chamado. Bibliotecas:", libs);
+    console.log(
+      "[SettingsPanel] Número de bibliotecas para salvar:",
+      libs.length
+    );
+    if (libs.length > 0) {
+      console.log(
+        "[SettingsPanel] Estrutura da primeira biblioteca para salvar:",
+        {
+          name: libs[0].name,
+          fillsCount: libs[0].fills?.length || 0,
+          textCount: libs[0].text?.length || 0,
+          effectsCount: libs[0].effects?.length || 0
+        }
+      );
+    }
+
     // Envia para o plugin salvar no clientStorage
     parent.postMessage(
       { pluginMessage: { type: "save-user-libs", libs } },
@@ -358,11 +395,36 @@ function SettingsPanel(props) {
       if (pluginMessage && pluginMessage.type === "user-libs-loaded") {
         const libsFromPlugin = pluginMessage.libs || [];
         console.log("[SettingsPanel] libsFromPlugin recebido:", libsFromPlugin);
+        console.log(
+          "[SettingsPanel] Número de bibliotecas carregadas:",
+          libsFromPlugin.length
+        );
+        if (libsFromPlugin.length > 0) {
+          console.log(
+            "[SettingsPanel] Estrutura da primeira biblioteca carregada:",
+            {
+              name: libsFromPlugin[0].name,
+              fillsCount: libsFromPlugin[0].fills?.length || 0,
+              textCount: libsFromPlugin[0].text?.length || 0,
+              effectsCount: libsFromPlugin[0].effects?.length || 0
+            }
+          );
+        }
         setLibs(libsFromPlugin);
         setShowLibSelection(false);
         setAvailableLibs([]);
         setSelectedLibs([]);
         setLoading(false);
+
+        // CRÍTICO: Comunicar as bibliotecas de volta para o App
+        if (props.onUpdateLibraries) {
+          console.log(
+            "[SettingsPanel] Atualizando bibliotecas no App:",
+            libsFromPlugin
+          );
+          props.onUpdateLibraries(libsFromPlugin);
+        }
+
         if (libsFromPlugin.length > 0) {
           setStep("saved");
           setHasFetchedLibs(true);
@@ -378,6 +440,26 @@ function SettingsPanel(props) {
 
   // Adiciona bibliotecas selecionadas e vai para revisão
   function handleAddSelectedLibs() {
+    console.log(
+      "[SettingsPanel] handleAddSelectedLibs chamado. Bibliotecas selecionadas:",
+      selectedLibs
+    );
+    console.log(
+      "[SettingsPanel] Número de bibliotecas selecionadas:",
+      selectedLibs.length
+    );
+    if (selectedLibs.length > 0) {
+      console.log(
+        "[SettingsPanel] Estrutura da primeira biblioteca selecionada:",
+        {
+          name: selectedLibs[0].name,
+          fillsCount: selectedLibs[0].fills?.length || 0,
+          textCount: selectedLibs[0].text?.length || 0,
+          effectsCount: selectedLibs[0].effects?.length || 0
+        }
+      );
+    }
+
     setStep("review");
     setLibs(selectedLibs);
     setShowLibSelection(false);
@@ -386,12 +468,36 @@ function SettingsPanel(props) {
 
   // Salva configuração no plugin e localStorage
   function handleSaveLibsConfig() {
+    console.log(
+      "[SettingsPanel] handleSaveLibsConfig chamado. Bibliotecas atuais:",
+      libs
+    );
+    console.log("[SettingsPanel] Número de bibliotecas atuais:", libs.length);
+    if (libs.length > 0) {
+      console.log("[SettingsPanel] Estrutura da primeira biblioteca atual:", {
+        name: libs[0].name,
+        fillsCount: libs[0].fills?.length || 0,
+        textCount: libs[0].text?.length || 0,
+        effectsCount: libs[0].effects?.length || 0
+      });
+    }
+
+    // CRÍTICO: Comunicar as bibliotecas para o App antes de salvar
+    if (props.onUpdateLibraries) {
+      console.log(
+        "[SettingsPanel] Atualizando bibliotecas no App antes de salvar:",
+        libs
+      );
+      props.onUpdateLibraries(libs);
+    }
+
     setLoading(true);
     saveLibsConfig(libs);
   }
 
   // Função para resetar as bibliotecas salvas no plugin
   function handleResetUserLibs() {
+    console.log("[SettingsPanel] handleResetUserLibs chamado");
     setLoading(true);
     // Limpa o clientStorage do plugin e só então volta para o início
     function handler(event) {
@@ -407,6 +513,13 @@ function SettingsPanel(props) {
         setShowLibSelection(false);
         setHasFetchedLibs(false);
         setLoading(false);
+
+        // CRÍTICO: Comunicar o reset das bibliotecas para o App
+        if (props.onUpdateLibraries) {
+          console.log("[SettingsPanel] Resetando bibliotecas no App");
+          props.onUpdateLibraries([]);
+        }
+
         window.removeEventListener("message", handler);
       }
     }
@@ -559,7 +672,7 @@ function SettingsPanel(props) {
             showLibSelection &&
             step === "select" && (
               <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
-                {/* Título com padrão do sistema (igual 'Sobre o Sherlock') */}
+                {/* Título com padrão do sistema (igual 'o infopainel') */}
                 <h3
                   style={{
                     color: "#fff",

@@ -56,8 +56,19 @@ function isColorInLibrary(color: any, library: any): boolean {
     }
 
     for (const fillStyle of library.fills) {
-      if (fillStyle.paint && fillStyle.paint.type === "SOLID") {
+      // Verificar se tem paint com cor sólida
+      if (
+        fillStyle.paint &&
+        fillStyle.paint.type === "SOLID" &&
+        fillStyle.paint.color
+      ) {
         if (colorsMatch(color, fillStyle.paint.color)) {
+          return true;
+        }
+      }
+      // Verificar se tem value (estrutura alternativa)
+      if (fillStyle.value && fillStyle.value.r !== undefined) {
+        if (colorsMatch(color, fillStyle.value)) {
           return true;
         }
       }
@@ -111,6 +122,18 @@ export function checkType(
     if (!node || !node.type) return;
 
     if (node.type === "TEXT") {
+      // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
+      if (!libraries || libraries.length === 0) {
+        errors.push({
+          type: "text-unvalidated",
+          message:
+            "Nenhuma biblioteca selecionada; textos não podem ser validados",
+          nodeId: node.id,
+          nodeName: node.name,
+          suggestions: []
+        });
+        return;
+      }
       // Verificar se o texto tem estilo definido
       if (!node.textStyleId || node.textStyleId === "") {
         errors.push({
@@ -174,6 +197,19 @@ export function newCheckFills(
 ) {
   try {
     if (!node) return;
+
+    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
+    if (!libraries || libraries.length === 0) {
+      errors.push({
+        type: "fill-unvalidated",
+        message:
+          "Nenhuma biblioteca selecionada; preenchimentos não podem ser validados",
+        nodeId: node.id,
+        nodeName: node.name,
+        suggestions: []
+      });
+      return;
+    }
 
     // Verificar se tem estilo de fill definido
     if (node.fillStyleId && node.fillStyleId !== "") {
@@ -287,6 +323,19 @@ export function newCheckEffects(
   try {
     if (!node) return;
 
+    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
+    if (!libraries || libraries.length === 0) {
+      errors.push({
+        type: "effect-unvalidated",
+        message:
+          "Nenhuma biblioteca selecionada; efeitos não podem ser validados",
+        nodeId: node.id,
+        nodeName: node.name,
+        suggestions: []
+      });
+      return;
+    }
+
     // Verificar se tem estilo de efeito definido
     if (node.effectStyleId && node.effectStyleId !== "") {
       // Verificar se o estilo está na biblioteca (se houver biblioteca)
@@ -353,6 +402,19 @@ export function newCheckStrokes(
 ) {
   try {
     if (!node) return;
+
+    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
+    if (!libraries || libraries.length === 0) {
+      errors.push({
+        type: "stroke-unvalidated",
+        message:
+          "Nenhuma biblioteca selecionada; strokes não podem ser validados",
+        nodeId: node.id,
+        nodeName: node.name,
+        suggestions: []
+      });
+      return;
+    }
 
     // Verificar se tem estilo de stroke definido
     if (node.strokeStyleId && node.strokeStyleId !== "") {

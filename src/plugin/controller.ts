@@ -29,6 +29,7 @@ interface UIMessage {
   };
   libraries?: any[];
   storageArray?: any[];
+  isInspecting?: boolean; // Adicionado para o tipo toggle-inspect-mode
 }
 
 // Declaração da constante figma
@@ -72,6 +73,7 @@ const {
   getLocalEffectStyles
 } = require("./styles");
 
+// @ts-ignore - __html__ é fornecido pelo Figma
 figma.showUI(__html__, { width: 480, height: 700 });
 figma.ui.resize(480, 700);
 
@@ -383,6 +385,48 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
 
   try {
+    // Handler para atualizar erros (usado pela página de camadas)
+    if (msg.type === "update-errors") {
+      console.log("[Controller] Processando update-errors");
+      try {
+        const nodes = figma.currentPage.selection;
+        if (nodes && nodes.length > 0) {
+          const allNodes = collectAllNodes(nodes);
+          const effectiveLibraries = Array.isArray(msg.libraries)
+            ? msg.libraries
+            : [];
+
+          const lintResults = lint(allNodes, effectiveLibraries, null);
+          const groupedErrors = groupErrorsByNode(lintResults);
+          const serializedNodes = serializeNodes(nodes);
+
+          figma.ui.postMessage({
+            type: "updated errors",
+            errors: groupedErrors,
+            message: serializedNodes,
+            success: true
+          });
+        } else {
+          figma.ui.postMessage({
+            type: "updated errors",
+            errors: [],
+            message: [],
+            success: false,
+            error: "Nenhum nó selecionado"
+          });
+        }
+      } catch (error) {
+        console.error("[Controller] Erro ao processar update-errors:", error);
+        figma.ui.postMessage({
+          type: "updated errors",
+          errors: [],
+          message: [],
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
     if (msg.type === "close") {
       console.log("[Controller] Fechando plugin");
       figma.closePlugin();
@@ -742,9 +786,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       // Salva as bibliotecas do usuário no clientStorage do Figma
       try {
         const libs = (msg as any).libs || [];
+        console.log(
+          "[Controller] Salvando",
+          libs.length,
+          "bibliotecas no clientStorage"
+        );
         figma.clientStorage.setAsync("sherlock_selected_libs", libs);
         figma.ui.postMessage({ type: "user-libs-saved", success: true });
       } catch (e) {
+        console.error("[Controller] Erro ao salvar bibliotecas:", e);
         figma.ui.postMessage({
           type: "user-libs-saved",
           success: false,
@@ -758,8 +808,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       try {
         const libs =
           (await figma.clientStorage.getAsync("sherlock_selected_libs")) || [];
+        console.log(
+          "[Controller] Carregando",
+          libs.length,
+          "bibliotecas do clientStorage"
+        );
         figma.ui.postMessage({ type: "user-libs-loaded", libs });
       } catch (e) {
+        console.error("[Controller] Erro ao carregar bibliotecas:", e);
         figma.ui.postMessage({ type: "user-libs-loaded", libs: [] });
       }
     }
@@ -784,7 +840,32 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         const startTime = Date.now();
         const maxProcessingTime = 5000; // 5 segundos máximo
 
-        const lintResults = lint(allNodes, msg.libraries || [], null);
+        // Resolve libraries (tokens) to use in audit:
+        // Priority: libraries passed from UI; fallback to saved user libs in clientStorage.
+        let effectiveLibraries = Array.isArray((msg as any).libraries)
+          ? (msg as any).libraries
+          : null;
+        if (!effectiveLibraries) {
+          try {
+            const savedLibs = await figma.clientStorage.getAsync(
+              "sherlock_selected_libs"
+            );
+            if (Array.isArray(savedLibs)) {
+              effectiveLibraries = savedLibs;
+            }
+          } catch (e) {
+            // ignore, keep null
+          }
+        }
+        if (!effectiveLibraries) effectiveLibraries = [];
+
+        console.log(
+          "[Controller] Executando auditoria com",
+          effectiveLibraries.length,
+          "bibliotecas"
+        );
+
+        const lintResults = lint(allNodes, effectiveLibraries, null);
 
         // Verificar se o processamento demorou muito
         if (Date.now() - startTime > maxProcessingTime) {
@@ -898,6 +979,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
       return;
     }
+
+    if (msg.type === "toggle-inspect-mode") {
+      console.log(
+        "[Controller] Modo de inspeção:",
+        msg.isInspecting ? "ativado" : "desativado"
+      );
+      // O listener de selectionchange já cuida de enviar os dados do nó selecionado
+      return;
+    }
   } catch (error) {
     console.error("[Controller] Erro geral:", error);
     // Sempre envia uma resposta para evitar loading infinito
@@ -929,17 +1019,163 @@ figma.on("selectionchange", () => {
         type: selectedNodes[0].type
       });
 
-      // Enviar mensagem de nó selecionado
+      // Função para extrair dados completos do nó
+      const extractNodeData = (node: any) => {
+        const nodeData: any = {
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          visible: node.visible !== false,
+          locked: node.locked === true
+        };
+
+        // Dimensões e posição
+        if (node.absoluteBoundingBox) {
+          nodeData.bounds = {
+            width: node.absoluteBoundingBox.width,
+            height: node.absoluteBoundingBox.height
+          };
+          nodeData.position = {
+            x: node.absoluteBoundingBox.x,
+            y: node.absoluteBoundingBox.y
+          };
+        }
+
+        // Layout e espaçamento
+        if (node.layoutMode) {
+          nodeData.layoutMode = node.layoutMode;
+        }
+        if (node.paddingTop !== undefined) {
+          nodeData.padding = {
+            top: node.paddingTop,
+            right: node.paddingRight || 0,
+            bottom: node.paddingBottom || 0,
+            left: node.paddingLeft || 0
+          };
+        }
+        if (node.itemSpacing !== undefined) {
+          nodeData.gap = node.itemSpacing;
+        }
+        if (node.cornerRadius !== undefined) {
+          nodeData.cornerRadius = node.cornerRadius;
+        }
+
+        // Cores e preenchimentos
+        if (node.fills && Array.isArray(node.fills)) {
+          nodeData.fills = node.fills.map((fill: any) => ({
+            type: fill.type,
+            visible: fill.visible !== false,
+            opacity: fill.opacity,
+            color: fill.type === "SOLID" ? fill.color : null,
+            gradientStops: fill.gradientStops || null
+          }));
+        }
+
+        // Bordas
+        if (node.strokes && Array.isArray(node.strokes)) {
+          nodeData.strokes = node.strokes.map((stroke: any) => ({
+            type: stroke.type,
+            visible: stroke.visible !== false,
+            color: stroke.type === "SOLID" ? stroke.color : null,
+            strokeWeight: node.strokeWeight || stroke.strokeWeight
+          }));
+        }
+
+        // Efeitos
+        if (node.effects && Array.isArray(node.effects)) {
+          nodeData.effects = node.effects.map((effect: any) => ({
+            type: effect.type,
+            visible: effect.visible !== false,
+            color: effect.color,
+            offset: effect.offset,
+            radius: effect.radius,
+            spread: effect.spread
+          }));
+        }
+
+        // Propriedades de texto
+        if (node.type === "TEXT") {
+          nodeData.fontSize = node.fontSize;
+          nodeData.fontName = node.fontName;
+          nodeData.fontWeight = node.fontWeight;
+          nodeData.textAlignHorizontal = node.textAlignHorizontal;
+          nodeData.textAlignVertical = node.textAlignVertical;
+          nodeData.letterSpacing = node.letterSpacing;
+          nodeData.lineHeight = node.lineHeight;
+          nodeData.characters = node.characters;
+
+          // Cor do texto (primeiro fill)
+          if (
+            node.fills &&
+            node.fills.length > 0 &&
+            node.fills[0].type === "SOLID"
+          ) {
+            nodeData.textColor = node.fills[0].color;
+          }
+        }
+
+        // Componentes
+        if (node.type === "INSTANCE" && node.mainComponent) {
+          nodeData.componentProperties = {
+            name: node.mainComponent.name,
+            key: node.mainComponent.key,
+            description: node.mainComponent.description
+          };
+        }
+
+        // Elementos filhos
+        if (node.children && Array.isArray(node.children)) {
+          nodeData.children = node.children.slice(0, 10).map((child: any) => ({
+            id: child.id,
+            name: child.name,
+            type: child.type
+          }));
+        }
+
+        // Ícones (verificar se é um ícone ou contém ícones)
+        if (
+          node.name &&
+          (node.name.toLowerCase().includes("icon") || node.type === "VECTOR")
+        ) {
+          nodeData.icon = {
+            name: node.name,
+            type: node.type,
+            url: node.exportAsync ? node.exportAsync({ format: "PNG" }) : null
+          };
+        }
+
+        // Tokens de estilo
+        if (node.fillStyleId) {
+          nodeData.styleTokens = {
+            fillStyle: node.fillStyleId
+          };
+        }
+        if (node.strokeStyleId) {
+          nodeData.styleTokens = {
+            ...nodeData.styleTokens,
+            strokeStyle: node.strokeStyleId
+          };
+        }
+        if (node.textStyleId) {
+          nodeData.styleTokens = {
+            ...nodeData.styleTokens,
+            textStyle: node.textStyleId
+          };
+        }
+        if (node.effectStyleId) {
+          nodeData.styleTokens = {
+            ...nodeData.styleTokens,
+            effectStyle: node.effectStyleId
+          };
+        }
+
+        return nodeData;
+      };
+
+      // Enviar mensagem de nó selecionado com dados completos
       figma.ui.postMessage({
         type: "selected-node",
-        node: {
-          id: selectedNodes[0].id,
-          name: selectedNodes[0].name,
-          type: selectedNodes[0].type,
-          // Adicionar mais propriedades conforme necessário
-          fills: selectedNodes[0].fills,
-          strokes: selectedNodes[0].strokes
-        }
+        node: extractNodeData(selectedNodes[0])
       });
     } else {
       console.log("Nenhum nó selecionado");
