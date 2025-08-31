@@ -707,81 +707,81 @@ export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
           });
         }
       }
+    }
 
-      // Verificar cornerRadius individual
-      if (
-        node.topLeftRadius !== undefined ||
-        node.topRightRadius !== undefined ||
-        node.bottomLeftRadius !== undefined ||
-        node.bottomRightRadius !== undefined
-      ) {
-        const radii = [
-          { value: node.topLeftRadius, corner: "topLeft" },
-          { value: node.topRightRadius, corner: "topRight" },
-          { value: node.bottomLeftRadius, corner: "bottomLeft" },
-          { value: node.bottomRightRadius, corner: "bottomRight" }
-        ];
+    // Verificar cornerRadius individual
+    if (
+      node.topLeftRadius !== undefined ||
+      node.topRightRadius !== undefined ||
+      node.bottomLeftRadius !== undefined ||
+      node.bottomRightRadius !== undefined
+    ) {
+      const radii = [
+        { value: node.topLeftRadius, corner: "topLeft" },
+        { value: node.topRightRadius, corner: "topRight" },
+        { value: node.bottomLeftRadius, corner: "bottomLeft" },
+        { value: node.bottomRightRadius, corner: "bottomRight" }
+      ];
 
-        for (const { value: radius, corner } of radii) {
-          if (radius !== undefined) {
-            let radiusFoundInTokens = false;
+      for (const { value: radius, corner } of radii) {
+        if (radius !== undefined) {
+          let radiusFoundInTokens = false;
 
-            // Primeiro verifica nos tokens salvos
-            if (
-              savedTokens &&
-              savedTokens.length > 0 &&
-              typeof radius === "number"
-            ) {
-              for (const tokenLib of savedTokens) {
-                if (tokenLib.tokens && tokenLib.tokens.radius) {
-                  const matchingToken = tokenLib.tokens.radius.find(
-                    (token: any) => {
-                      // Verifica se o token tem um valor que corresponde ao raio do node
-                      return (
-                        token.value === radius &&
-                        (!token.corner ||
-                          token.corner === corner ||
-                          token.corner === "all")
-                      );
-                    }
-                  );
-
-                  if (matchingToken) {
-                    radiusFoundInTokens = true;
-                    break;
+          // Primeiro verifica nos tokens salvos
+          if (
+            savedTokens &&
+            savedTokens.length > 0 &&
+            typeof radius === "number"
+          ) {
+            for (const tokenLib of savedTokens) {
+              if (tokenLib.tokens && tokenLib.tokens.radius) {
+                const matchingToken = tokenLib.tokens.radius.find(
+                  (token: any) => {
+                    // Verifica se o token tem um valor que corresponde ao raio do node
+                    return (
+                      token.value === radius &&
+                      (!token.corner ||
+                        token.corner === corner ||
+                        token.corner === "all")
+                    );
                   }
+                );
+
+                if (matchingToken) {
+                  radiusFoundInTokens = true;
+                  break;
                 }
               }
             }
+          }
 
-            // Se não encontrou nos tokens, faz as verificações padrão
-            if (!radiusFoundInTokens) {
-              if (typeof radius !== "number" || radius < 0) {
-                console.log(
-                  `[Lint] Erro: Corner radius ${corner} inválido em`,
-                  node.name
-                );
-                errors.push({
-                  type: "corner-radius-individual",
-                  message: `Corner radius ${corner} inválido`,
-                  nodeId: node.id,
-                  nodeName: node.name,
-                  suggestions: []
-                });
-                break;
-              } else if (radius > 100) {
-                console.log(
-                  `[Lint] Aviso: Corner radius ${corner} muito alto em`,
-                  node.name
-                );
-                errors.push({
-                  type: "corner-radius-individual-high",
-                  message: `Corner radius ${corner} muito alto`,
-                  nodeId: node.id,
-                  nodeName: node.name,
-                  suggestions: []
-                });
-              }
+          // Se não encontrou nos tokens, faz as verificações padrão
+          if (!radiusFoundInTokens) {
+            if (typeof radius !== "number" || radius < 0) {
+              console.log(
+                `[Lint] Erro: Corner radius ${corner} inválido em`,
+                node.name
+              );
+              errors.push({
+                type: "corner-radius-individual",
+                message: `Corner radius ${corner} inválido`,
+                nodeId: node.id,
+                nodeName: node.name,
+                suggestions: []
+              });
+              break;
+            } else if (radius > 100) {
+              console.log(
+                `[Lint] Aviso: Corner radius ${corner} muito alto em`,
+                node.name
+              );
+              errors.push({
+                type: "corner-radius-individual-high",
+                message: `Corner radius ${corner} muito alto`,
+                nodeId: node.id,
+                nodeName: node.name,
+                suggestions: []
+              });
             }
           }
         }
