@@ -4,7 +4,21 @@ import PanelHeader from "./PanelHeader";
 import AnalysisResultsCard from "./AnalysisResultsCard";
 import "../styles/panel.css";
 
-function SettingsPanel(props) {
+interface SettingsPanelProps {
+  panelVisible: boolean;
+  onHandlePanelVisible: (visible: boolean) => void;
+  borderRadiusValues: number[];
+  designTokens: any;
+  lintVectors?: boolean;
+  updateLintRules?: (rules: any) => void;
+  ignoredErrorArray?: any[];
+  libraries?: any[];
+  onUpdateLibraries?: (libraries: any[]) => void;
+  localStyles?: any;
+  activeComponentLibraries?: any[];
+}
+
+function SettingsPanel(props: SettingsPanelProps) {
   const [loading, setLoading] = React.useState(false);
   const [libs, setLibs] = React.useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -22,14 +36,124 @@ function SettingsPanel(props) {
 
   // Novo estado para controlar se já buscou as bibliotecas
   const [hasFetchedLibs, setHasFetchedLibs] = React.useState(false);
+  const [isSavingTokens, setIsSavingTokens] = React.useState(false);
+  const [isLoadingTokens, setIsLoadingTokens] = React.useState(false);
+  const [saveStatus, setSaveStatus] = React.useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const [savedTokens, setSavedTokens] = React.useState<any[]>([]);
 
   // Remover a inicialização com activeComponentLibraries - as bibliotecas devem vir do clientStorage
   // React.useEffect(() => {
   //   setLibs(props.activeComponentLibraries || []);
   // }, [props.activeComponentLibraries]);
 
+  // Função para carregar os tokens salvos
+  const handleLoadSavedTokens = async () => {
+    setIsLoadingTokens(true);
+    setSaveStatus(null);
+
+    try {
+      parent.postMessage({ pluginMessage: { type: "load-saved-tokens" } }, "*");
+    } catch (error) {
+      console.error("Erro ao carregar tokens:", error);
+      setSaveStatus({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar tokens salvos"
+      });
+      setIsLoadingTokens(false);
+    }
+  };
+
+  // Função para salvar os tokens de design
+  const handleSaveDesignTokens = async () => {
+    if (!props.designTokens) {
+      setSaveStatus({
+        success: false,
+        message: "Nenhum token de design encontrado"
+      });
+      return;
+    }
+
+    setIsSavingTokens(true);
+    setSaveStatus(null);
+
+    try {
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: "save-design-tokens",
+            tokens: props.designTokens
+          }
+        },
+        "*"
+      );
+    } catch (error) {
+      console.error("Erro ao salvar tokens:", error);
+      setSaveStatus({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Erro ao salvar tokens"
+      });
+      setIsSavingTokens(false);
+    }
+  };
+
+  // Listener para mensagens do plugin
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data.pluginMessage as {
+        type: string;
+        success: boolean;
+        message?: string;
+        tokens?: any[];
+      };
+
+      if (!message) return;
+
+      if (message.type === "saved-tokens-loaded") {
+        setIsLoadingTokens(false);
+        if (message.success) {
+          setSavedTokens(message.tokens || []);
+          setSaveStatus({
+            success: true,
+            message: `Carregados ${message.tokens?.length ||
+              0} conjuntos de tokens`
+          });
+        } else {
+          setSaveStatus({
+            success: false,
+            message: message.message || "Falha ao carregar tokens salvos"
+          });
+        }
+      } else if (message.type === "design-tokens-saved") {
+        setIsSavingTokens(false);
+        setSaveStatus({
+          success: message.success,
+          message:
+            message.message ||
+            (message.success
+              ? "Tokens salvos com sucesso"
+              : "Falha ao salvar tokens")
+        });
+        if (message.success && message.tokens) {
+          setSavedTokens(message.tokens);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
   // Simples verificação de código (pode ser trocado por chamada de API depois)
-  function handleLogin(e) {
+  function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (accessCode.trim() === "sherlock2024") {
       setIsAuthenticated(true);
@@ -467,7 +591,8 @@ function SettingsPanel(props) {
   }
 
   // Salva configuração no plugin e localStorage
-  function handleSaveLibsConfig() {
+  async function handleSaveLibsConfig() {
+    setLoading(true);
     console.log(
       "[SettingsPanel] handleSaveLibsConfig chamado. Bibliotecas atuais:",
       libs
@@ -482,17 +607,56 @@ function SettingsPanel(props) {
       });
     }
 
-    // CRÍTICO: Comunicar as bibliotecas para o App antes de salvar
-    if (props.onUpdateLibraries) {
-      console.log(
-        "[SettingsPanel] Atualizando bibliotecas no App antes de salvar:",
-        libs
-      );
-      props.onUpdateLibraries(libs);
-    }
+    try {
+      // CRÍTICO: Comunicar as bibliotecas para o App antes de salvar
+      if (props.onUpdateLibraries) {
+        console.log(
+          "[SettingsPanel] Atualizando bibliotecas no App antes de salvar:",
+          libs
+        );
+        props.onUpdateLibraries(libs);
+      }
 
-    setLoading(true);
-    saveLibsConfig(libs);
+      // Se houver tokens de design, salvá-los junto
+      if (props.designTokens) {
+        console.log("[SettingsPanel] Salvando tokens de design...");
+        await new Promise<void>(resolve => {
+          const handleSaveResponse = (event: MessageEvent) => {
+            const { pluginMessage } = event.data;
+            if (pluginMessage && pluginMessage.type === "design-tokens-saved") {
+              window.removeEventListener("message", handleSaveResponse);
+              console.log(
+                "[SettingsPanel] Tokens de design salvos com sucesso"
+              );
+              resolve();
+            }
+          };
+
+          window.addEventListener("message", handleSaveResponse);
+
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "save-design-tokens",
+                tokens: props.designTokens
+              }
+            },
+            "*"
+          );
+
+          // Timeout para garantir que não fique travado
+          setTimeout(resolve, 5000);
+        });
+      }
+
+      // Salvar as bibliotecas
+      saveLibsConfig(libs);
+    } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
+      // Tratar erro conforme necessário
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Função para resetar as bibliotecas salvas no plugin
@@ -908,12 +1072,6 @@ function SettingsPanel(props) {
                             <TokenAccordion
                               category="Stroke Widths"
                               tokens={lib.strokeWidths}
-                            />
-                          )}
-                          {lib.grids && lib.grids.length > 0 && (
-                            <TokenAccordion
-                              category="Grids"
-                              tokens={lib.grids}
                             />
                           )}
                         </div>

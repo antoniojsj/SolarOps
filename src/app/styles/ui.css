@@ -898,6 +898,110 @@ button,
 }
 
 /* DevMode Styles */
+/* Section Header */
+.section-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.section-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  color: #18a0fb;
+  flex-shrink: 0;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* Component Properties Table */
+.property-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #3a3a3a;
+}
+
+.property-row {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.1s ease;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 0 1px;
+}
+
+.property-row:last-child {
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.property-row:last-child {
+  border-bottom: none;
+}
+
+.property-row.header {
+  background-color: rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+}
+
+.property-row:hover:not(.header) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.property-cell {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.property-cell:first-child {
+  width: 40%;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.property-cell:last-child {
+  width: 60%;
+  color: #fff;
+  font-family: "SF Mono", "Roboto Mono", monospace;
+  font-size: 12px;
+}
+
+.boolean-value {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.boolean-value.true {
+  background-color: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+
+.boolean-value.false {
+  background-color: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
 .dev-mode-container {
   display: flex;
   flex-direction: column;

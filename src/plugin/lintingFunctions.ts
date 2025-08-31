@@ -110,11 +110,44 @@ function isEffectStyleInLibrary(styleId: string, library: any): boolean {
   }
 }
 
+// Função auxiliar para verificar se um efeito específico está na biblioteca
+function isEffectInLibrary(effect: any, library: any): boolean {
+  try {
+    if (!library || !library.effects || !Array.isArray(library.effects)) {
+      return false;
+    }
+
+    return library.effects.some((effectStyle: any) => {
+      if (effectStyle.effect && effectStyle.effect.type === effect.type) {
+        // Compara propriedades básicas do efeito
+        const sameColor =
+          !effect.color ||
+          (effectStyle.effect.color &&
+            colorsMatch(effect.color, effectStyle.effect.color));
+        const sameOffset =
+          !effect.offset ||
+          (effectStyle.effect.offset &&
+            effect.offset.x === effectStyle.effect.offset.x &&
+            effect.offset.y === effectStyle.effect.offset.y);
+        const sameRadius =
+          !effect.radius || effectStyle.effect.radius === effect.radius;
+
+        return sameColor && sameOffset && sameRadius;
+      }
+      return false;
+    });
+  } catch (error) {
+    console.error("[isEffectInLibrary] Erro:", error);
+    return false;
+  }
+}
+
 // Função para verificar tipos de texto
 export function checkType(
   node: any,
   errors: any[],
-  libraries: any[]
+  libraries: any[],
+  savedTokens: any[] = []
   // usedRemoteStyles?: any,
   // storageArray?: any
 ) {
@@ -146,9 +179,29 @@ export function checkType(
         return;
       }
 
-      // Verificar se o estilo está na biblioteca (se houver biblioteca)
-      if (libraries && libraries.length > 0) {
-        let styleFound = false;
+      let styleFound = false;
+
+      // Primeiro verifica nos tokens salvos
+      if (savedTokens && savedTokens.length > 0) {
+        for (const tokenLib of savedTokens) {
+          if (tokenLib.tokens && tokenLib.tokens.typography) {
+            const matchingToken = tokenLib.tokens.typography.find(
+              (token: any) => {
+                // Verifica se o token tem um ID de estilo que corresponde ao do node
+                return token.styleId === node.textStyleId;
+              }
+            );
+
+            if (matchingToken) {
+              styleFound = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // Se não encontrou nos tokens, verifica nas bibliotecas
+      if (!styleFound && libraries && libraries.length > 0) {
         for (const library of libraries) {
           if (isTextStyleInLibrary(node.textStyleId, library)) {
             styleFound = true;
@@ -159,7 +212,8 @@ export function checkType(
         if (!styleFound) {
           errors.push({
             type: "text-style-library",
-            message: "Estilo de texto não está na biblioteca",
+            message:
+              "Estilo de texto não está na biblioteca nem nos tokens salvos",
             nodeId: node.id,
             nodeName: node.name,
             suggestions: []
@@ -190,7 +244,8 @@ export function checkType(
 export function newCheckFills(
   node: any,
   errors: any[],
-  libraries: any[]
+  libraries: any[],
+  savedTokens: any[] = []
   // usedRemoteStyles?: any,
   // storageArray?: any,
   // ignoredErrorArray?: any
@@ -241,43 +296,71 @@ export function newCheckFills(
       for (const fill of node.fills) {
         if (fill.type === "SOLID" && fill.color) {
           const color = convertColor(fill.color);
+          let colorFound = false;
 
-          // Verificar se é uma cor padrão problemática
-          if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
-            errors.push({
-              type: "fill-color-default",
-              message: "Preenchimento com cor preta padrão",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-          } else if (colorsMatch(color, { r: 1, g: 1, b: 1, a: 1 })) {
-            errors.push({
-              type: "fill-color-default",
-              message: "Preenchimento com cor branca padrão",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-          } else {
-            // Verificar se a cor está na biblioteca (se houver biblioteca)
-            if (libraries && libraries.length > 0) {
-              let colorFound = false;
-              for (const library of libraries) {
-                if (isColorInLibrary(color, library)) {
+          // Primeiro verifica nos tokens salvos
+          if (savedTokens && savedTokens.length > 0) {
+            for (const tokenLib of savedTokens) {
+              if (tokenLib.tokens && tokenLib.tokens.fills) {
+                const matchingToken = tokenLib.tokens.fills.find(
+                  (token: any) => {
+                    if (
+                      token.paint &&
+                      token.paint.type === "SOLID" &&
+                      token.paint.color
+                    ) {
+                      return colorsMatch(color, token.paint.color);
+                    }
+                    return false;
+                  }
+                );
+
+                if (matchingToken) {
                   colorFound = true;
                   break;
                 }
               }
+            }
+          }
 
-              if (!colorFound) {
-                errors.push({
-                  type: "fill-color-library",
-                  message: "Cor não está na biblioteca",
-                  nodeId: node.id,
-                  nodeName: node.name,
-                  suggestions: []
-                });
+          // Se não encontrou nos tokens, verifica se é uma cor padrão problemática
+          if (!colorFound) {
+            if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
+              errors.push({
+                type: "fill-color-default",
+                message: "Preenchimento com cor preta padrão",
+                nodeId: node.id,
+                nodeName: node.name,
+                suggestions: []
+              });
+            } else if (colorsMatch(color, { r: 1, g: 1, b: 1, a: 1 })) {
+              errors.push({
+                type: "fill-color-default",
+                message: "Preenchimento com cor branca padrão",
+                nodeId: node.id,
+                nodeName: node.name,
+                suggestions: []
+              });
+            } else {
+              // Verificar se a cor está na biblioteca (se houver biblioteca)
+              if (libraries && libraries.length > 0) {
+                let libraryColorFound = false;
+                for (const library of libraries) {
+                  if (isColorInLibrary(color, library)) {
+                    libraryColorFound = true;
+                    break;
+                  }
+                }
+
+                if (!libraryColorFound) {
+                  errors.push({
+                    type: "fill-color-library",
+                    message: "Cor não está na biblioteca",
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    suggestions: []
+                  });
+                }
               }
             }
           }
@@ -316,7 +399,8 @@ function isColorStyleInLibrary(styleId: string, library: any): boolean {
 export function newCheckEffects(
   node: any,
   errors: any[],
-  libraries: any[]
+  libraries: any[],
+  savedTokens: any[] = []
   // usedRemoteStyles?: any,
   // storageArray?: any
 ) {
@@ -371,18 +455,81 @@ export function newCheckEffects(
       Array.isArray(node.effects) &&
       node.effects.length > 0
     ) {
-      // Verificar se há efeitos aplicados
       for (const effect of node.effects) {
         if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
-          // Verificar se o efeito tem valores padrão problemáticos
-          if (effect.offset && effect.offset.x === 0 && effect.offset.y === 0) {
-            errors.push({
-              type: "effect-offset",
-              message: "Efeito com offset zero",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
+          let effectFound = false;
+
+          // Primeiro verifica nos tokens salvos
+          if (savedTokens && savedTokens.length > 0) {
+            for (const tokenLib of savedTokens) {
+              if (tokenLib.tokens && tokenLib.tokens.effects) {
+                const matchingToken = tokenLib.tokens.effects.find(
+                  (token: any) => {
+                    if (token.effect && token.effect.type === effect.type) {
+                      // Compara propriedades básicas do efeito
+                      const sameColor =
+                        !effect.color ||
+                        (token.effect.color &&
+                          colorsMatch(effect.color, token.effect.color));
+                      const sameOffset =
+                        !effect.offset ||
+                        (token.effect.offset &&
+                          effect.offset.x === token.effect.offset.x &&
+                          effect.offset.y === token.effect.offset.y);
+                      const sameRadius =
+                        !effect.radius || token.effect.radius === effect.radius;
+
+                      return sameColor && sameOffset && sameRadius;
+                    }
+                    return false;
+                  }
+                );
+
+                if (matchingToken) {
+                  effectFound = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          // Se não encontrou nos tokens, verifica se tem valores problemáticos
+          if (!effectFound) {
+            // Verificar se o efeito tem offset zero
+            if (
+              effect.offset &&
+              effect.offset.x === 0 &&
+              effect.offset.y === 0
+            ) {
+              errors.push({
+                type: "effect-offset",
+                message: "Efeito com offset zero",
+                nodeId: node.id,
+                nodeName: node.name,
+                suggestions: []
+              });
+            }
+
+            // Verificar se o efeito está na biblioteca (se houver biblioteca)
+            if (libraries && libraries.length > 0) {
+              let libraryEffectFound = false;
+              for (const library of libraries) {
+                if (isEffectInLibrary(effect, library)) {
+                  libraryEffectFound = true;
+                  break;
+                }
+              }
+
+              if (!libraryEffectFound) {
+                errors.push({
+                  type: "effect-library",
+                  message: `Efeito ${effect.type.toLowerCase()} não está na biblioteca`,
+                  nodeId: node.id,
+                  nodeName: node.name,
+                  suggestions: []
+                });
+              }
+            }
           }
         }
       }
@@ -396,7 +543,8 @@ export function newCheckEffects(
 export function newCheckStrokes(
   node: any,
   errors: any[],
-  libraries: any[]
+  libraries: any[],
+  savedTokens: any[] = []
   // usedRemoteStyles?: any,
   // storageArray?: any
 ) {
@@ -503,71 +651,138 @@ export function newCheckStrokes(
 }
 
 // Função para verificar radius
-export function checkRadius(node: any, errors: any[]) {
+export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
   try {
     if (!node) return;
 
     // Verificar se o node tem cornerRadius
     if (node.cornerRadius !== undefined) {
       const radius = node.cornerRadius;
-      if (typeof radius === "number") {
-        if (radius < 0) {
+      let radiusFoundInTokens = false;
+
+      // Primeiro verifica nos tokens salvos
+      if (savedTokens && savedTokens.length > 0 && typeof radius === "number") {
+        for (const tokenLib of savedTokens) {
+          if (tokenLib.tokens && tokenLib.tokens.radius) {
+            const matchingToken = tokenLib.tokens.radius.find((token: any) => {
+              // Verifica se o token tem um valor que corresponde ao raio do node
+              return token.value === radius;
+            });
+
+            if (matchingToken) {
+              radiusFoundInTokens = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // Se não encontrou nos tokens, faz as verificações padrão
+      if (!radiusFoundInTokens) {
+        if (typeof radius === "number") {
+          if (radius < 0) {
+            errors.push({
+              type: "corner-radius-negative",
+              message: "Corner radius negativo",
+              nodeId: node.id,
+              nodeName: node.name,
+              suggestions: []
+            });
+          } else if (radius > 100) {
+            errors.push({
+              type: "corner-radius-high",
+              message: "Corner radius muito alto",
+              nodeId: node.id,
+              nodeName: node.name,
+              suggestions: []
+            });
+          }
+        } else {
           errors.push({
-            type: "corner-radius-negative",
-            message: "Corner radius negativo",
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        } else if (radius > 100) {
-          errors.push({
-            type: "corner-radius-high",
-            message: "Corner radius muito alto",
+            type: "corner-radius-invalid",
+            message: "Corner radius inválido",
             nodeId: node.id,
             nodeName: node.name,
             suggestions: []
           });
         }
-      } else {
-        errors.push({
-          type: "corner-radius-invalid",
-          message: "Corner radius inválido",
-          nodeId: node.id,
-          nodeName: node.name,
-          suggestions: []
-        });
       }
-    }
 
-    // Verificar cornerRadius individual
-    if (
-      node.topLeftRadius !== undefined ||
-      node.topRightRadius !== undefined ||
-      node.bottomLeftRadius !== undefined ||
-      node.bottomRightRadius !== undefined
-    ) {
-      const radii = [
-        node.topLeftRadius,
-        node.topRightRadius,
-        node.bottomLeftRadius,
-        node.bottomRightRadius
-      ];
+      // Verificar cornerRadius individual
+      if (
+        node.topLeftRadius !== undefined ||
+        node.topRightRadius !== undefined ||
+        node.bottomLeftRadius !== undefined ||
+        node.bottomRightRadius !== undefined
+      ) {
+        const radii = [
+          { value: node.topLeftRadius, corner: "topLeft" },
+          { value: node.topRightRadius, corner: "topRight" },
+          { value: node.bottomLeftRadius, corner: "bottomLeft" },
+          { value: node.bottomRightRadius, corner: "bottomRight" }
+        ];
 
-      for (const radius of radii) {
-        if (radius !== undefined) {
-          if (typeof radius !== "number" || radius < 0) {
-            console.log(
-              "[Lint] Erro: Corner radius individual inválido em",
-              node.name
-            );
-            errors.push({
-              type: "corner-radius-individual",
-              message: "Corner radius individual inválido",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-            break;
+        for (const { value: radius, corner } of radii) {
+          if (radius !== undefined) {
+            let radiusFoundInTokens = false;
+
+            // Primeiro verifica nos tokens salvos
+            if (
+              savedTokens &&
+              savedTokens.length > 0 &&
+              typeof radius === "number"
+            ) {
+              for (const tokenLib of savedTokens) {
+                if (tokenLib.tokens && tokenLib.tokens.radius) {
+                  const matchingToken = tokenLib.tokens.radius.find(
+                    (token: any) => {
+                      // Verifica se o token tem um valor que corresponde ao raio do node
+                      return (
+                        token.value === radius &&
+                        (!token.corner ||
+                          token.corner === corner ||
+                          token.corner === "all")
+                      );
+                    }
+                  );
+
+                  if (matchingToken) {
+                    radiusFoundInTokens = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // Se não encontrou nos tokens, faz as verificações padrão
+            if (!radiusFoundInTokens) {
+              if (typeof radius !== "number" || radius < 0) {
+                console.log(
+                  `[Lint] Erro: Corner radius ${corner} inválido em`,
+                  node.name
+                );
+                errors.push({
+                  type: "corner-radius-individual",
+                  message: `Corner radius ${corner} inválido`,
+                  nodeId: node.id,
+                  nodeName: node.name,
+                  suggestions: []
+                });
+                break;
+              } else if (radius > 100) {
+                console.log(
+                  `[Lint] Aviso: Corner radius ${corner} muito alto em`,
+                  node.name
+                );
+                errors.push({
+                  type: "corner-radius-individual-high",
+                  message: `Corner radius ${corner} muito alto`,
+                  nodeId: node.id,
+                  nodeName: node.name,
+                  suggestions: []
+                });
+              }
+            }
           }
         }
       }

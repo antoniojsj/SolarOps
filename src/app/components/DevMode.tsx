@@ -44,7 +44,7 @@ function DevMode() {
   const renderColorSwatch = (color: any) => {
     if (!color) return null;
 
-    let colorValue = null;
+    let colorValue: string | null = null;
 
     if (typeof color === "string") {
       colorValue = color;
@@ -124,6 +124,15 @@ function DevMode() {
     }
   };
 
+  // Formata o nome da propriedade para exibição
+  const formatPropertyName = (name: string) => {
+    // Converte de camelCase para texto com espaços
+    return name
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
+  };
+
   // Function to format the element information for display
   const renderElementInfo = () => {
     if (!selectedElement) return null;
@@ -143,6 +152,18 @@ function DevMode() {
             <span className="property-name">ID:</span>
             <span className="property-value">
               {selectedElement.id || "N/A"}
+            </span>
+          </div>
+          <div className="property">
+            <span className="property-name">Visível:</span>
+            <span className="property-value">
+              {selectedElement.visible !== false ? "Sim" : "Não"}
+            </span>
+          </div>
+          <div className="property">
+            <span className="property-name">Bloqueado:</span>
+            <span className="property-value">
+              {selectedElement.locked === true ? "Sim" : "Não"}
             </span>
           </div>
           {selectedElement.bounds && (
@@ -345,13 +366,91 @@ function DevMode() {
           selectedElement.children ||
           selectedElement.icon) && (
           <div className="info-section">
-            <h3>Componentes & Ícones</h3>
+            <div className="section-header">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="section-icon"
+              >
+                <rect
+                  x="2"
+                  y="2"
+                  width="12"
+                  height="12"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path d="M6 6H10V10H6V6Z" fill="currentColor" />
+                <path d="M4 4H6V6H4V4Z" fill="currentColor" />
+                <path d="M10 4H12V6H10V4Z" fill="currentColor" />
+                <path d="M4 10H6V12H4V10Z" fill="currentColor" />
+                <path d="M10 10H12V12H10V10Z" fill="currentColor" />
+              </svg>
+              <h3>Propriedades do Componente</h3>
+            </div>
             {selectedElement.componentProperties && (
-              <div className="property">
-                <span className="property-name">Componente:</span>
-                <span className="property-value">
-                  {selectedElement.componentProperties.name}
-                </span>
+              <div className="property-table">
+                <div className="property-row header">
+                  <div className="property-cell">Propriedade</div>
+                  <div className="property-cell">Valor</div>
+                </div>
+                {Object.entries(selectedElement.componentProperties)
+                  // Filtra propriedades que não devem ser exibidas
+                  .filter(
+                    ([key]) =>
+                      !["name", "key", "description", "id", "parent"].includes(
+                        key
+                      )
+                  )
+                  // Remove valores vazios, nulos ou indefinidos
+                  .filter(
+                    ([_, value]) =>
+                      value !== null && value !== undefined && value !== ""
+                  )
+                  // Ordena as propriedades alfabeticamente
+                  .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+                  // Mapeia para os elementos JSX
+                  .map(([key, value]) => {
+                    // Formata o valor para exibição
+                    let displayValue = value;
+                    if (typeof value === "boolean") {
+                      displayValue = (
+                        <span
+                          className={`boolean-value ${
+                            value ? "true" : "false"
+                          }`}
+                        >
+                          {value ? "true" : "false"}
+                        </span>
+                      );
+                    } else if (value === "true" || value === "false") {
+                      const boolValue = value === "true";
+                      displayValue = (
+                        <span
+                          className={`boolean-value ${
+                            boolValue ? "true" : "false"
+                          }`}
+                        >
+                          {String(boolValue)}
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <div key={key} className="property-row">
+                        <div className="property-cell property-name">
+                          {formatPropertyName(key)}
+                        </div>
+                        <div className="property-cell property-value">
+                          {displayValue}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
             {selectedElement.icon && (

@@ -10,13 +10,32 @@ import {
   checkRadius
 } from "./lintingFunctions";
 
+import {
+  detectTokenLibraries,
+  fetchActiveComponentLibraries,
+  fetchRemoteStyles
+} from "./remoteStyleFunctions";
+
+// Interface para arquivos de tokens salvos
+interface SavedTokenFile {
+  filename: string;
+  timestamp: string;
+  name: string;
+  tokens?: any;
+}
+
 // Interface para mensagens da UI
 interface UIMessage {
   type: string;
+  data?: any;
+  [key: string]: any;
   id?: string;
   field?: string;
   nodes?: string[];
   styleId?: string;
+  tokens?: any; // Adicionado para mensagens de tokens
+  success?: boolean;
+  message?: string;
   title?: string;
   styleType?: string;
   error?: {
@@ -60,13 +79,6 @@ declare const figma: {
   on: (event: string, callback: () => void) => void;
 };
 
-// Importações de estilos
-import {
-  fetchRemoteStyles,
-  fetchActiveComponentLibraries,
-  detectTokenLibraries
-} from "./remoteStyleFunctions";
-
 const {
   getLocalPaintStyles,
   getLocalTextStyles,
@@ -81,7 +93,8 @@ figma.ui.resize(480, 700);
 function lint(
   nodes: readonly any[],
   libraries: any[],
-  parentFrameId: string | null = null
+  parentFrameId: string | null = null,
+  savedTokens: any[] = []
 ): any[] {
   let errors: any[] = [];
 
@@ -104,11 +117,12 @@ function lint(
         currentFrameId = node.id;
       }
 
-      // Chama a função de lint para o node, passando o parentFrameId
+      // Chama a função de lint para o node, passando o parentFrameId e tokens salvos
       const nodeErrors = determineTypeWithFrame(
         node,
         libraries,
-        currentFrameId
+        currentFrameId,
+        savedTokens
       );
 
       if (nodeErrors && Array.isArray(nodeErrors)) {
@@ -121,7 +135,9 @@ function lint(
         Array.isArray(node.children) &&
         node.children.length > 0
       ) {
-        errors = errors.concat(lint(node.children, libraries, currentFrameId));
+        errors = errors.concat(
+          lint(node.children, libraries, currentFrameId, savedTokens)
+        );
       }
     }
   } catch (error) {
@@ -136,7 +152,8 @@ function lint(
 function determineTypeWithFrame(
   node: any,
   libraries: any[],
-  parentFrameId: string | null
+  parentFrameId: string | null,
+  savedTokens: any[] = []
 ): any[] {
   try {
     let errors: any[] = [];
@@ -149,23 +166,23 @@ function determineTypeWithFrame(
       case "STAR":
       case "BOOLEAN_OPERATION":
       case "SQUARE":
-        errors = lintShapeRules(node, libraries);
+        errors = lintShapeRules(node, libraries, savedTokens);
         break;
       case "FRAME":
-        errors = lintFrameRules(node, libraries);
+        errors = lintFrameRules(node, libraries, savedTokens);
         break;
       case "INSTANCE":
       case "RECTANGLE":
-        errors = lintRectangleRules(node, libraries);
+        errors = lintRectangleRules(node, libraries, savedTokens);
         break;
       case "COMPONENT":
-        errors = lintComponentRules(node, libraries);
+        errors = lintComponentRules(node, libraries, savedTokens);
         break;
       case "TEXT":
-        errors = lintTextRules(node, libraries);
+        errors = lintTextRules(node, libraries, savedTokens);
         break;
       case "LINE":
-        errors = lintLineRules(node, libraries);
+        errors = lintLineRules(node, libraries, savedTokens);
         break;
       default:
         return [];
@@ -182,72 +199,96 @@ function determineTypeWithFrame(
 }
 
 // Funções de linting para diferentes tipos de componentes
-function lintComponentRules(node: any, libraries: any[]): any[] {
+function lintComponentRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries);
-    newCheckEffects(node, errors, libraries);
-    newCheckStrokes(node, errors, libraries);
+    newCheckFills(node, errors, libraries, savedTokens);
+    newCheckEffects(node, errors, libraries, savedTokens);
+    newCheckStrokes(node, errors, libraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em component rules:", error);
   }
   return errors;
 }
 
-function lintLineRules(node: any, libraries: any[]): any[] {
+function lintLineRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    newCheckStrokes(node, errors, libraries);
+    newCheckStrokes(node, errors, libraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em line rules:", error);
   }
   return errors;
 }
 
-function lintFrameRules(node: any, libraries: any[]): any[] {
+function lintFrameRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries);
-    newCheckEffects(node, errors, libraries);
-    newCheckStrokes(node, errors, libraries);
+    newCheckFills(node, errors, libraries, savedTokens);
+    newCheckEffects(node, errors, libraries, savedTokens);
+    newCheckStrokes(node, errors, libraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em frame rules:", error);
   }
   return errors;
 }
 
-function lintTextRules(node: any, libraries: any[]): any[] {
+function lintTextRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    checkType(node, errors, libraries);
-    newCheckFills(node, errors, libraries);
-    newCheckEffects(node, errors, libraries);
-    newCheckStrokes(node, errors, libraries);
+    checkType(node, errors, libraries, savedTokens);
+    newCheckFills(node, errors, libraries, savedTokens);
+    newCheckEffects(node, errors, libraries, savedTokens);
+    newCheckStrokes(node, errors, libraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em text rules:", error);
   }
   return errors;
 }
 
-function lintRectangleRules(node: any, libraries: any[]): any[] {
+function lintRectangleRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries);
-    newCheckEffects(node, errors, libraries);
-    newCheckStrokes(node, errors, libraries);
-    checkRadius(node, errors);
+    newCheckFills(node, errors, libraries, savedTokens);
+    newCheckEffects(node, errors, libraries, savedTokens);
+    newCheckStrokes(node, errors, libraries, savedTokens);
+    checkRadius(node, errors, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em rectangle rules:", error);
   }
   return errors;
 }
 
-function lintShapeRules(node: any, libraries: any[]): any[] {
+function lintShapeRules(
+  node: any,
+  libraries: any[],
+  savedTokens: any[] = []
+): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries);
-    newCheckEffects(node, errors, libraries);
-    newCheckStrokes(node, errors, libraries);
+    newCheckFills(node, errors, libraries, savedTokens);
+    newCheckEffects(node, errors, libraries, savedTokens);
+    newCheckStrokes(node, errors, libraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em shape rules:", error);
   }
@@ -385,6 +426,29 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
 
   try {
+    // Carregar tokens salvos
+    if (msg.type === "load-saved-tokens") {
+      const result = await loadSavedTokens();
+      figma.ui.postMessage({
+        type: "saved-tokens-loaded",
+        success: result.success,
+        tokens: result.success ? result.tokens : [],
+        message: result.success ? undefined : result.message
+      });
+      return;
+    }
+
+    // Salvar tokens de design
+    if (msg.type === "save-design-tokens" && msg.tokens) {
+      const result = await saveDesignTokens(msg.tokens);
+      figma.ui.postMessage({
+        type: "design-tokens-saved",
+        success: result.success,
+        message: result.message,
+        tokens: result.tokens || []
+      });
+      return;
+    }
     // Handler para atualizar erros (usado pela página de camadas)
     if (msg.type === "update-errors") {
       console.log("[Controller] Processando update-errors");
@@ -396,7 +460,12 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             ? msg.libraries
             : [];
 
-          const lintResults = lint(allNodes, effectiveLibraries, null);
+          const lintResults = lint(
+            allNodes,
+            effectiveLibraries,
+            null,
+            msg.savedTokens || []
+          );
           const groupedErrors = groupErrorsByNode(lintResults);
           const serializedNodes = serializeNodes(nodes);
 
@@ -865,7 +934,12 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           "bibliotecas"
         );
 
-        const lintResults = lint(allNodes, effectiveLibraries, null);
+        const lintResults = lint(
+          allNodes,
+          effectiveLibraries,
+          null,
+          msg.savedTokens || []
+        );
 
         // Verificar se o processamento demorou muito
         if (Date.now() - startTime > maxProcessingTime) {
@@ -988,6 +1062,27 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       // O listener de selectionchange já cuida de enviar os dados do nó selecionado
       return;
     }
+
+    if (msg.type === "save-design-tokens") {
+      console.log("[Controller] Salvando tokens de design");
+      try {
+        if (!msg.tokens) {
+          throw new Error("No tokens provided to save");
+        }
+        await saveDesignTokens(msg.tokens);
+        figma.ui.postMessage({
+          type: "design-tokens-saved",
+          success: true
+        });
+      } catch (error) {
+        console.error("[Controller] Erro ao salvar tokens de design:", error);
+        figma.ui.postMessage({
+          type: "design-tokens-saved",
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
   } catch (error) {
     console.error("[Controller] Erro geral:", error);
     // Sempre envia uma resposta para evitar loading infinito
@@ -1000,6 +1095,99 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     });
   }
 };
+
+// Função para carregar os tokens salvos
+async function loadSavedTokens() {
+  try {
+    const savedFiles =
+      (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
+    const tokensList: SavedTokenFile[] = [];
+
+    // Carregar todos os tokens salvos, ordenados do mais recente para o mais antigo
+    // Removido o slice(0, 10) para carregar todos os tokens salvos
+    for (const file of (savedFiles as SavedTokenFile[]).sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )) {
+      try {
+        const tokens = await figma.clientStorage.getAsync(file.filename);
+        if (tokens) {
+          tokensList.push({
+            ...file,
+            tokens: JSON.parse(tokens)
+          });
+        }
+      } catch (error) {
+        console.error(`Erro ao carregar tokens de ${file.filename}:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      tokens: tokensList
+    };
+  } catch (error) {
+    console.error("Erro ao carregar tokens salvos:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Falha ao carregar os tokens salvos"
+    };
+  }
+}
+
+// Função para salvar os tokens de design
+async function saveDesignTokens(tokens: any) {
+  try {
+    // Criar um nome de arquivo único com timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `design-tokens-${timestamp}.json`;
+
+    // Salvar no clientStorage do Figma
+    await figma.clientStorage.setAsync(
+      filename,
+      JSON.stringify(tokens, null, 2)
+    );
+
+    // Obter a lista de arquivos salvos
+    const savedFiles =
+      (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
+
+    // Adicionar o novo arquivo à lista (limitar a 10 arquivos)
+    savedFiles.unshift({
+      filename,
+      timestamp: new Date().toISOString(),
+      name: `Tokens ${new Date().toLocaleString()}`
+    });
+
+    // Salvar a lista completa de arquivos
+    await figma.clientStorage.setAsync("savedTokenFiles", savedFiles);
+
+    console.log(`Design tokens salvos como: ${filename}`);
+
+    // Retornar a lista atualizada de tokens
+    const loadedTokens = await loadSavedTokens();
+
+    return {
+      success: true,
+      message: "Design tokens salvos com sucesso",
+      filename,
+      timestamp: new Date().toISOString(),
+      tokens: loadedTokens.success ? loadedTokens.tokens : []
+    };
+  } catch (error) {
+    console.error("Erro ao salvar design tokens:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Falha ao salvar os tokens de design"
+    };
+  }
+}
 
 // Listener para mudanças de seleção no Figma
 figma.on("selectionchange", () => {
@@ -1115,12 +1303,57 @@ figma.on("selectionchange", () => {
         }
 
         // Componentes
-        if (node.type === "INSTANCE" && node.mainComponent) {
+        if (node.type === "INSTANCE") {
           nodeData.componentProperties = {
-            name: node.mainComponent.name,
-            key: node.mainComponent.key,
-            description: node.mainComponent.description
+            name: node.mainComponent?.name || "Sem nome",
+            key: node.mainComponent?.key,
+            description: node.mainComponent?.description || ""
           };
+
+          // Adiciona todas as propriedades do componente
+          if (node.componentProperties) {
+            const uniqueProps = new Map();
+
+            // Processa as propriedades
+            for (const [key, prop] of Object.entries(
+              node.componentProperties
+            ) as [string, any][]) {
+              if (
+                !prop ||
+                prop.value === undefined ||
+                prop.value === null ||
+                prop.value === ""
+              ) {
+                continue;
+              }
+
+              // Limpa o nome da propriedade removendo sufixos de ID
+              const cleanKey = key.replace(/#[^:]+:\d+$/, "").trim();
+
+              // Processa o valor da propriedade
+              let value;
+              if (typeof prop.value === "boolean") {
+                value = prop.value;
+              } else if (typeof prop.value === "string") {
+                value = prop.value.trim();
+              } else if (typeof prop.value === "object") {
+                value = JSON.stringify(prop.value);
+              } else {
+                value = String(prop.value).trim();
+              }
+
+              // Adiciona ao mapa (isso automaticamente remove duplicatas)
+              uniqueProps.set(cleanKey, value);
+            }
+
+            // Cria o objeto final de propriedades
+            nodeData.componentProperties = {
+              name: node.mainComponent?.name || "Sem nome",
+              key: node.mainComponent?.key,
+              description: node.mainComponent?.description || "",
+              ...Object.fromEntries(uniqueProps)
+            };
+          }
         }
 
         // Elementos filhos

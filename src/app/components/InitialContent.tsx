@@ -564,7 +564,7 @@ function InitialContent(props) {
           />
         </div>
       )}
-      {activeTab === "auditoria" && !selectedNode && (
+      {activeTab === "auditoria" && (
         <footer
           className="initial-content-footer"
           style={{
@@ -584,15 +584,16 @@ function InitialContent(props) {
             <button
               className="button button--primary"
               onClick={props.onHandleRunApp}
+              disabled={!selectedNode}
               style={{
-                background: "#18A0FB",
+                background: selectedNode ? "#18A0FB" : "#4A4A4A",
                 color: "#fff",
                 border: "none",
                 borderRadius: "4px",
                 padding: "12px 16px",
                 fontSize: "14px",
                 fontWeight: 500,
-                cursor: "pointer",
+                cursor: selectedNode ? "pointer" : "not-allowed",
                 opacity: 1,
                 transition: "background 0.2s, opacity 0.2s",
                 display: "flex",

@@ -44,6 +44,7 @@ const App = ({}) => {
   const [nodeArray, setNodeArray] = useState<NodeItem[]>([]);
   const [selectedListItems, setSelectedListItem] = React.useState<string[]>([]);
   const [activeNodeIds, setActiveNodeIds] = React.useState<string[]>([]);
+  const [designTokens, setDesignTokens] = React.useState<any>(null);
   const [borderRadiusValues, setBorderRadiusValues] = useState([
     0,
     2,
@@ -564,6 +565,7 @@ const App = ({}) => {
           panelVisible={true}
           onHandlePanelVisible={() => setActivePage("layers")}
           borderRadiusValues={borderRadiusValues}
+          designTokens={designTokens}
           lintVectors={lintVectors}
           updateLintRules={updateLintRules}
           ignoredErrorArray={ignoredErrorArray}
