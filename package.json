@@ -12,6 +12,8 @@
 		"classnames": "^2.2.6",
 		"framer-motion": "^6.3.0",
 		"react": "^17.0.2",
+		"react-color": "^2.19.3",
+		"react-colorful": "^5.6.1",
 		"react-dom": "^17.0.2",
 		"react-hint": "^3.2.1",
 		"react-tooltip": "^5.11.1"
@@ -20,6 +22,7 @@
 		"@figma/plugin-typings": "^1.114.0",
 		"@svgr/webpack": "5.5.0",
 		"@types/react": "^16.8.24",
+		"@types/react-color": "^3.0.13",
 		"@types/react-dom": "^16.8.5",
 		"copy-webpack-plugin": "6.4.1",
 		"css-loader": "^3.1.0",

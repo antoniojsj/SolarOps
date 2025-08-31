@@ -47,48 +47,20 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        overflow: "hidden",
-        backgroundColor: "#1E1E1E",
-        borderRadius: "6px"
+        overflow: "hidden"
       }}
     >
-      <div
-        style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
-          backgroundColor: "#252526",
-          position: "sticky",
-          top: 0,
-          zIndex: 1
-        }}
-      >
+      <div style={{ padding: "24px 16px 16px 16px" }}>
         <h3
           style={{
             margin: 0,
             color: "#fff",
-            fontSize: "14px",
-            fontWeight: 500,
-            lineHeight: "24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
+            fontSize: "16px",
+            fontWeight: 400,
+            lineHeight: "24px"
           }}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          Inspetor de Elementos
+          Inspecionar elementos
         </h3>
       </div>
 
@@ -97,8 +69,8 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "16px",
-          backgroundColor: "#1E1E1E"
+          padding: "0 16px 16px 16px",
+          backgroundColor: "transparent"
         }}
       >
         {selectedNode ? (
@@ -279,7 +251,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
             {selectedNode.componentProperties && (
               <div
                 style={{
-                  background: "#1E1E1E",
+                  background: "#252526",
                   borderRadius: "6px",
                   border: "1px solid #333",
                   overflow: "hidden",
@@ -291,7 +263,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
                   style={{
                     padding: "8px 12px",
                     borderBottom: "1px solid #333",
-                    backgroundColor: "#252526",
+                    backgroundColor: "#2D2D2D",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center"
@@ -460,7 +432,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
             {/* Other Properties Section */}
             <div
               style={{
-                background: "#1E1E1E",
+                background: "#252526",
                 borderRadius: "6px",
                 border: "1px solid #333",
                 overflow: "hidden",
@@ -471,7 +443,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
                 style={{
                   padding: "8px 12px",
                   borderBottom: "1px solid #333",
-                  backgroundColor: "#252526",
+                  backgroundColor: "#2D2D2D",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center"
@@ -623,71 +595,36 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
             }}
           >
             <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              viewBox="0 0 14 16"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              <path
+                d="M1 14L7.14645 7.85355C7.34171 7.65829 7.34171 7.34171 7.14645 7.14645L1 1M5.5 14.5H12.5"
+                stroke="#F5F5F5"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
             </svg>
-            <p style={{ margin: "16px 0 0 0", fontSize: "14px" }}>
+            <p
+              style={{ margin: "16px 0 0 0", fontSize: "14px", color: "#fff" }}
+            >
               Nenhum elemento selecionado
             </p>
-            <p style={{ margin: "8px 0 0 0", fontSize: "12px", opacity: 0.7 }}>
+            <p
+              style={{
+                margin: "8px 0 0 0",
+                fontSize: "12px",
+                color: "#fff",
+                opacity: 0.7
+              }}
+            >
               Selecione um elemento no canvas para inspecionar
             </p>
           </div>
         )}
-      </div>
-
-      <div
-        style={{
-          padding: "16px",
-          borderTop: "1px solid rgba(255, 255, 255, 0.1)"
-        }}
-      >
-        <button
-          onClick={onInspectClick}
-          style={{
-            background: "#18A0FB",
-            color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            padding: "10px 16px",
-            fontSize: "13px",
-            fontWeight: 500,
-            cursor: "pointer",
-            transition: "background 0.2s, opacity 0.2s",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            width: "100%",
-            justifyContent: "center",
-            boxSizing: "border-box",
-            height: "40px"
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          {selectedNode ? "Atualizar elemento" : "Selecionar elemento"}
-        </button>
       </div>
     </div>
   );

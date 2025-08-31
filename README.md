@@ -1,6 +1,10 @@
 # Sherlock - Plugin para Figma
 
-O Sherlock é um poderoso plugin para o Figma projetado para aprimorar o fluxo de trabalho de design com recursos avançados e utilitários. Construído com tecnologias web modernas, o Sherlock oferece uma experiência fluida para designers e desenvolvedores, com foco especial em acessibilidade e conformidade com WCAG.
+O SolarOps é uma iniciativa do Studio de Design da Compass UOL, que oferece aos clientes parceiros diversas ações para aprimorar seus processos e potencializar os ganhos operacionais em design.
+
+Este plugin tem o objetivo de facilitar o trabalho de qualidade nos projetos de design, permitindo realizar uma auditoria de conformidade visual ao comparar o uso dos tokens e componentes do design system da companhia com o projeto analisado.
+
+Além da auditoria de conformidade, o plugin possibilita identificar falhas e corrigi-las rapidamente ainda na fase de projeto. Ele disponibiliza uma ferramenta de análise de contraste para verificar a aplicação de acessibilidade por meio da checagem de contrastes. Também oferece consulta simplificada às documentações de acessibilidade da WCAG, facilitando sua aplicabilidade nos projetos. Além disso, conta com um recurso de inspeção de elementos, que auxilia os desenvolvedores ao fornecer as propriedades necessárias para implementação.
 
 ## ✨ Funcionalidades
 

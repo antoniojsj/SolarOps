@@ -741,7 +741,9 @@ const App = ({}) => {
         "bulk",
         "initial",
         "layers",
-        "camadas"
+        "camadas",
+        "devmode",
+        "page"
       ].includes(activePage) && (
         <div style={{ color: "red", textAlign: "center", marginTop: 32 }}>
           Erro: página não encontrada ou fluxo inválido. (activePage:{" "}

@@ -88,15 +88,16 @@ function InitialContent(props) {
 
   // Iniciar checagem de contraste somente quando a aba de acessibilidade estiver ativa
   React.useEffect(() => {
-    if (activeTab === "acessibilidade" && selectedNode) {
+    if (activeTab === "acessibilidade") {
       // garantir sub-aba contrast ativa
-      setAccessibilityTab("contrast");
-      setIsCheckingContrast(true);
+      if (accessibilityTab === "contrast") {
+        setIsCheckingContrast(true);
+      }
     } else if (activeTab !== "acessibilidade") {
       // ao sair da aba de acessibilidade, interromper checagem
       setIsCheckingContrast(false);
     }
-  }, [activeTab, selectedNode]);
+  }, [activeTab, accessibilityTab]);
 
   return (
     <div
@@ -518,7 +519,7 @@ function InitialContent(props) {
             >
               {accessibilityTab === "contrast" && (
                 <ContrastChecker
-                  isVisible={isCheckingContrast}
+                  isVisible={true}
                   selectedNode={selectedNode}
                   onBack={() => setIsCheckingContrast(false)}
                 />
@@ -538,7 +539,7 @@ function InitialContent(props) {
           </div>
         )}
       </div>
-      {activeTab === "devmode" ? (
+      {activeTab === "devmode" && (
         <div
           style={{
             display: "flex",
@@ -547,243 +548,65 @@ function InitialContent(props) {
             overflow: "hidden"
           }}
         >
-          {selectedNode ? (
-            <DevModeTab
-              selectedNode={selectedNode}
-              onInspectClick={() => {
-                console.log("Iniciando modo de inspeção...");
-                parent.postMessage(
-                  {
-                    pluginMessage: {
-                      type: "start-inspection"
-                    }
-                  },
-                  "*"
-                );
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "40px 20px",
-                textAlign: "center",
-                flex: 1
-              }}
-            >
-              <div
-                style={{
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "50%",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: "16px"
-                }}
-              >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M12 3C12.5523 3 13 3.44772 13 4V5C13 5.55228 12.5523 6 12 6C11.4477 6 11 5.55228 11 5V4C11 3.44772 11.4477 3 12 3Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M12 18C12.5523 18 13 18.4477 13 19V20C13 20.5523 12.5523 21 12 21C11.4477 21 11 20.5523 11 20V19C11 18.4477 11.4477 18 12 18Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M4.92893 4.92894C5.31946 4.53841 5.95262 4.53841 6.34315 4.92894L6.70711 5.29289C7.09763 5.68342 7.09763 6.31658 6.70711 6.70711C6.31658 7.09763 5.68342 7.09763 5.29289 6.70711L4.92893 6.34315C4.53841 5.95262 4.53841 5.31946 4.92893 4.92894Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M17.6569 17.6569C18.0474 17.2663 18.6805 17.2663 19.0711 17.6569L19.435 18.0208C19.8256 18.4114 19.8256 19.0445 19.435 19.4351C19.0445 19.8256 18.4113 19.8256 18.0208 19.4351L17.6569 19.0711C17.2663 18.6806 17.2663 18.0474 17.6569 17.6569Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M3 12C3 11.4477 3.44772 11 4 11H5C5.55229 11 6 11.4477 6 12C6 12.5523 5.55229 13 5 13H4C3.44772 13 3 12.5523 3 12Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M18 12C18 11.4477 18.4477 11 19 11H20C20.5523 11 21 11.4477 21 12C21 12.5523 20.5523 13 20 13H19C18.4477 13 18 12.5523 18 12Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M6.70711 17.6569C6.31658 17.2663 5.68342 17.2663 5.29289 17.6569L4.92893 18.0208C4.53841 18.4114 4.53841 19.0445 4.92893 19.4351C5.31946 19.8256 5.95262 19.8256 6.34315 19.4351L6.70711 19.0711C7.09763 18.6806 7.09763 18.0474 6.70711 17.6569Z"
-                    fill="#fff"
-                  />
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M19.0711 4.92894C19.4616 5.31946 19.4616 5.95262 19.0711 6.34315L18.7071 6.70711C18.3166 7.09763 17.6834 7.09763 17.2929 6.70711C16.9024 6.31658 16.9024 5.68342 17.2929 5.29289L17.6569 4.92894C18.0474 4.53841 18.6805 4.53841 19.0711 4.92894Z"
-                    fill="#fff"
-                  />
-                </svg>
-              </div>
-              <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                  maxWidth: "240px",
-                  color: "#ffffff"
-                }}
-              >
-                Selecione um elemento na tela para inspecionar suas propriedades
-                e estilos
-              </p>
-            </div>
-          )}
+          <DevModeTab
+            selectedNode={selectedNode}
+            onInspectClick={() => {
+              console.log("Iniciando modo de inspeção...");
+              parent.postMessage(
+                {
+                  pluginMessage: {
+                    type: "start-inspection"
+                  }
+                },
+                "*"
+              );
+            }}
+          />
         </div>
-      ) : null}
-      {(activeTab === "auditoria" ||
-        activeTab === "devmode" ||
-        (activeTab === "acessibilidade" &&
-          (accessibilityTab === "contrast" ||
-            accessibilityTab === "docs"))) && (
+      )}
+      {activeTab === "auditoria" && !selectedNode && (
         <footer
           className="initial-content-footer"
           style={{
             padding: "0px",
-            height: accessibilityTab === "docs" ? "4px" : "auto",
             background: "#2A2A2A",
             borderTop: "1px solid rgba(255, 255, 255, 0.1)",
             display: "block"
           }}
         >
-          {accessibilityTab !== "docs" && (
-            <div
+          <div
+            style={{
+              padding: "16px",
+              display: "flex",
+              justifyContent: "center"
+            }}
+          >
+            <button
+              className="button button--primary"
+              onClick={props.onHandleRunApp}
               style={{
-                padding: "16px",
+                background: "#18A0FB",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                padding: "12px 16px",
+                fontSize: "14px",
+                fontWeight: 500,
+                cursor: "pointer",
+                opacity: 1,
+                transition: "background 0.2s, opacity 0.2s",
                 display: "flex",
-                justifyContent: "center"
+                alignItems: "center",
+                gap: "8px",
+                width: "100%",
+                maxWidth: "100%",
+                justifyContent: "center",
+                boxSizing: "border-box"
               }}
             >
-              {activeTab === "devmode" ? (
-                <button
-                  className="button button--primary"
-                  onClick={() => {
-                    console.log("Iniciando modo de inspeção...");
-                    parent.postMessage(
-                      {
-                        pluginMessage: {
-                          type: "start-inspection"
-                        }
-                      },
-                      "*"
-                    );
-                  }}
-                  style={{
-                    background: "#18A0FB",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "10px 16px",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "background 0.2s, opacity 0.2s",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    width: "100%",
-                    maxWidth: "100%",
-                    justifyContent: "center",
-                    boxSizing: "border-box",
-                    height: "40px"
-                  }}
-                >
-                  {selectedNode ? "Atualizar elemento" : "Selecionar elemento"}
-                </button>
-              ) : (
-                <button
-                  className="button button--primary"
-                  onClick={
-                    activeTab === "auditoria"
-                      ? props.onHandleRunApp
-                      : () => {
-                          // Obter o nó selecionado do Figma
-                          parent.postMessage(
-                            {
-                              pluginMessage: {
-                                type: "get-selected-node"
-                              }
-                            },
-                            "*"
-                          );
-
-                          // Solicitar o nó selecionado ao Figma
-                          console.log("Solicitando nó selecionado ao Figma...");
-                          parent.postMessage(
-                            {
-                              pluginMessage: {
-                                type: "get-selected-node"
-                              }
-                            },
-                            "*"
-                          );
-
-                          // Exibir imediatamente a aba de contraste enquanto aguardamos a resposta
-                          setActiveTab("acessibilidade");
-                          setAccessibilityTab("contrast");
-                          setIsCheckingContrast(true);
-                        }
-                  }
-                  disabled={!props.isFrameSelected}
-                  style={{
-                    background: props.isFrameSelected ? "#18A0FB" : "#656565",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "4px",
-                    padding: "12px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    cursor: props.isFrameSelected ? "pointer" : "not-allowed",
-                    opacity: props.isFrameSelected ? 1 : 0.7,
-                    transition: "background 0.2s, opacity 0.2s",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    width: "100%",
-                    maxWidth: "100%",
-                    justifyContent: "center",
-                    boxSizing: "border-box"
-                  }}
-                >
-                  {activeTab === "auditoria"
-                    ? "Iniciar auditoria"
-                    : "Verificar contraste"}
-                </button>
-              )}
-            </div>
-          )}
+              Iniciar auditoria
+            </button>
+          </div>
         </footer>
       )}
     </div>

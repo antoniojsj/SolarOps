@@ -46,6 +46,17 @@ function InfoPanel({ isVisible, onClose }) {
           </p>
         </div>
         <div className="logo-container">
+          <div>
+            <p
+              style={{
+                textAlign: "center",
+                fontSize: "10px",
+                color: "#FFFFFF"
+              }}
+            >
+              © COMPASS UOL TECNOLOGIA LTDA — 1996 – 2025 — All rights reserved
+            </p>
+          </div>
           <svg
             viewBox="0 0 380 56"
             fill="none"
@@ -144,11 +155,6 @@ function InfoPanel({ isVisible, onClose }) {
               fill="white"
             />
           </svg>
-        </div>
-        <div>
-          <p style={{ textAlign: "center", fontSize: "10px" }}>
-            © COMPASS UOL TECNOLOGIA LTDA — 1996 – 2025 — All rights reserved
-          </p>
         </div>
       </motion.div>
     </React.Fragment>

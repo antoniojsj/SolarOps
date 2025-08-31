@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { ChromePicker, ColorResult } from "react-color";
+import { SketchPicker } from "react-color";
 
 // Função para misturar cores considerando transparência
 const blendColors = (
@@ -146,6 +148,17 @@ interface ContrastCheckerProps {
   isVisible: boolean;
   selectedNode: any;
   onBack: () => void;
+}
+
+interface ManualCheckState {
+  foregroundColor: string;
+  backgroundColor: string;
+  fontSize: number;
+  isBold: boolean;
+  contrastRatio: number;
+  aa: boolean;
+  aaa: boolean;
+  aaLarge: boolean;
 }
 
 // Função para converter cor do formato Figma (0-1) para hexadecimal
@@ -354,12 +367,87 @@ const getNodeBackground = (node: FigmaNode) => {
 
 const ContrastChecker: React.FC<ContrastCheckerProps> = ({
   isVisible,
-  selectedNode,
-  onBack
+  selectedNode
 }) => {
-  const [results, setResults] = useState<ContrastResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [results, setResults] = useState<ContrastResult[]>([]);
+  const [manualCheck, setManualCheck] = useState<ManualCheckState>({
+    foregroundColor: "#000000",
+    backgroundColor: "#FFFFFF",
+    fontSize: 16,
+    isBold: false,
+    contrastRatio: 21,
+    aa: true,
+    aaa: true,
+    aaLarge: true
+  });
+  // Removemos a análise automática, então não precisamos mais de activeTab
+  const activeTab = "manual";
+
+  // Função para converter hex para RGB
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? {
+          r: parseInt(result[1], 16) / 255,
+          g: parseInt(result[2], 16) / 255,
+          b: parseInt(result[3], 16) / 255,
+          a: 1
+        }
+      : { r: 0, g: 0, b: 0, a: 1 };
+  };
+
+  // Função para atualizar a checagem manual
+  const updateManualCheck = (updates: Partial<ManualCheckState>) => {
+    const newState = { ...manualCheck, ...updates };
+
+    // Recalcular contraste se as cores foram atualizadas
+    if (
+      updates.foregroundColor ||
+      updates.backgroundColor ||
+      updates.fontSize ||
+      updates.isBold !== undefined
+    ) {
+      const fgColor = hexToRgb(newState.foregroundColor);
+      const bgColor = hexToRgb(newState.backgroundColor);
+
+      const ratio = getContrastRatio(
+        { r: fgColor.r, g: fgColor.g, b: fgColor.b },
+        { r: bgColor.r, g: bgColor.g, b: bgColor.b }
+      );
+
+      const isLarge = isLargeText(
+        newState.fontSize,
+        newState.isBold ? 700 : 400
+      );
+      const ratioRounded = parseFloat(ratio.toFixed(2));
+
+      // Atualiza o estado com o novo contraste
+      newState.contrastRatio = ratioRounded;
+
+      // Verifica os níveis de conformidade
+      // Nível A: Mínimo para qualquer texto
+      const levelA = ratioRounded >= 3;
+
+      // Nível AA:
+      // - 4.5:1 para texto normal
+      // - 3:1 para texto grande
+      const levelAA = isLarge ? ratioRounded >= 3 : ratioRounded >= 4.5;
+
+      // Nível AAA:
+      // - 7:1 para texto normal
+      // - 4.5:1 para texto grande
+      const levelAAA = isLarge ? ratioRounded >= 4.5 : ratioRounded >= 7;
+
+      // Atualiza os estados
+      newState.aa = levelAA;
+      newState.aaa = levelAAA;
+      newState.aaLarge = isLarge;
+    }
+
+    setManualCheck(newState);
+  };
 
   useEffect(() => {
     if (!isVisible || !selectedNode) return;
@@ -702,6 +790,813 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
   const errorResults = results.filter(r => r.hasIssues).length;
   const passingResults = totalResults - errorResults;
 
+  // Estilo comum para os botões de tab
+  const tabButtonStyle = (isActive: boolean) => ({
+    padding: "8px 16px",
+    backgroundColor: isActive
+      ? "var(--figma-color-bg-brand)"
+      : "var(--figma-color-bg-secondary)",
+    color: isActive ? "white" : "var(--figma-color-text)",
+    border: "none",
+    borderRadius: "4px 4px 0 0",
+    cursor: "pointer",
+    fontWeight: isActive ? "bold" : "normal",
+    marginRight: "4px"
+  });
+
+  // Estilo para os círculos de cor
+  const colorCircleStyle = (color: string) => ({
+    width: "24px",
+    height: "24px",
+    backgroundColor: color,
+    border: "1px solid var(--figma-color-border)",
+    borderRadius: "50%",
+    display: "inline-block",
+    marginRight: "8px"
+  });
+
+  // Estilo para os indicadores de status
+  const statusIndicatorStyle = (isPass: boolean) => ({
+    display: "inline-block",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    backgroundColor: isPass
+      ? "rgba(76, 175, 80, 0.2)"
+      : "rgba(244, 67, 54, 0.2)",
+    color: isPass ? "#2E7D32" : "#C62828",
+    fontWeight: "bold",
+    fontSize: "12px"
+  });
+
+  // Renderiza a tabela de referência WCAG
+  const renderWcagReferenceTable = () => (
+    <div
+      style={{
+        marginTop: "24px",
+        marginBottom: "24px",
+        border: "1px solid var(--figma-color-border)",
+        borderRadius: "8px",
+        maxHeight: "300px",
+        overflowY: "auto"
+      }}
+    >
+      <h3
+        style={{
+          margin: "0 0px 12px",
+          color: "white",
+          fontSize: "14px",
+          fontWeight: 400,
+          position: "sticky",
+          top: 0,
+          backgroundColor: "var(--figma-color-bg)",
+          zIndex: 1
+        }}
+      >
+        Referência de Conformidade WCAG 2.2
+      </h3>
+
+      <div>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "12px",
+            marginTop: "8px"
+          }}
+        >
+          <thead>
+            <tr style={{ borderBottom: "1px solid #999" }}>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                Tipo de Conteúdo
+              </th>
+              <th
+                style={{
+                  textAlign: "center",
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                AA
+              </th>
+              <th
+                style={{
+                  textAlign: "center",
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                AAA
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderBottom: "1px solid #999" }}>
+              <td
+                style={{
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                Texto Normal (abaixo de 18pt)
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                4.5:1
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                7:1
+              </td>
+            </tr>
+            <tr style={{ borderBottom: "1px solid #999" }}>
+              <td
+                style={{
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                Texto Grande (acima de 18pt ou 14pt bold)
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                3:1
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                4.5:1
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  padding: "6px",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                Elementos Gráficos e Componentes de Interface
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                3:1
+              </td>
+              <td
+                style={{
+                  padding: "6px",
+                  textAlign: "center",
+                  color: "white",
+                  border: "1px solid #999",
+                  fontSize: "12px"
+                }}
+              >
+                Não definido
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // Função para determinar o nível de conformidade alcançado
+  const getComplianceLevel = (
+    isLargeText: boolean,
+    isGraphicElement = false
+  ) => {
+    const ratio = manualCheck.contrastRatio;
+
+    // Critérios para texto normal
+    if (!isLargeText && !isGraphicElement) {
+      if (ratio >= 7) return { level: "AAA", isPassing: true };
+      if (ratio >= 4.5) return { level: "AA", isPassing: true };
+      return { level: "AA", isPassing: false }; // Falha no AA
+    }
+
+    // Critérios para texto grande
+    if (isLargeText) {
+      if (ratio >= 4.5) return { level: "AAA", isPassing: true };
+      if (ratio >= 3) return { level: "AA", isPassing: true };
+      return { level: "AA", isPassing: false }; // Falha no AA
+    }
+
+    // Critérios para elementos gráficos
+    if (isGraphicElement) {
+      if (ratio >= 3) return { level: "AA", isPassing: true };
+      return { level: "AA", isPassing: false }; // Falha no AA
+    }
+
+    return { level: "", isPassing: false };
+  };
+
+  // Renderiza os níveis de conformidade WCAG
+  const renderComplianceLevels = () => {
+    const normalTextLevel = getComplianceLevel(false);
+    const largeTextLevel = getComplianceLevel(true);
+    const uiLevel = getComplianceLevel(false, true); // true indica que é elemento gráfico
+
+    const items = [
+      {
+        title: "Texto normal",
+        level: normalTextLevel.level,
+        required:
+          normalTextLevel.level === "AAA"
+            ? "7:1+"
+            : normalTextLevel.level === "AA"
+            ? "4.5:1+"
+            : "3:1+",
+        isPassing: normalTextLevel.isPassing
+      },
+      {
+        title: "Texto grande",
+        level: largeTextLevel.level,
+        required:
+          largeTextLevel.level === "AAA"
+            ? "4.5:1+"
+            : largeTextLevel.level === "AA"
+            ? "3:1+"
+            : "3:1+",
+        isPassing: largeTextLevel.isPassing
+      },
+      {
+        title: "Elementos gráficos",
+        level: uiLevel.level,
+        required: "3:1+",
+        isPassing: uiLevel.isPassing
+      }
+    ];
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginTop: "16px",
+          gap: "12px"
+        }}
+      >
+        {items.map((item, index) => (
+          <div
+            key={index}
+            style={{
+              flex: 1,
+              padding: "8px 8px",
+              backgroundColor: item.isPassing
+                ? "rgba(76, 175, 80, 0.1)"
+                : "rgba(244, 67, 54, 0.1)",
+              borderRadius: "8px",
+              border: `1px solid ${item.isPassing ? "#4CAF50" : "#F44336"}`,
+              textAlign: "center",
+              minHeight: "100px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between"
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "white",
+                fontWeight: "500",
+                lineHeight: "1.1",
+                marginBottom: "4px"
+              }}
+            >
+              {item.title}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: "6px",
+                margin: "8px 0",
+                flexWrap: "wrap"
+              }}
+            >
+              {["AA", "AAA"].map(level => {
+                // Para texto grande, mostramos o A como ativo quando o contraste for >= 3
+                const isLargeTextItem = item.title === "Texto grande";
+                const isActiveForLargeText =
+                  isLargeTextItem &&
+                  level === "A" &&
+                  manualCheck.contrastRatio >= 3;
+
+                const isCurrentLevel = item.level === level;
+                const isHigherLevel = level === "AA" && item.level === "AAA";
+
+                const showLevel = isCurrentLevel || isHigherLevel;
+                const isActive = isCurrentLevel || isHigherLevel;
+
+                // Verifica se o nível atual está falhando
+                const isAFailure = !item.isPassing && item.level === level;
+
+                const bgColor = isActive
+                  ? isAFailure
+                    ? "#F44336"
+                    : "#4CAF50"
+                  : "rgba(255, 255, 255, 0.1)";
+
+                return (
+                  <div
+                    key={level}
+                    style={{
+                      minWidth: "32px",
+                      padding: "4px 8px",
+                      borderRadius: "12px",
+                      backgroundColor: isActive
+                        ? bgColor
+                        : "rgba(255, 255, 255, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "white",
+                      fontWeight: "bold",
+                      fontSize: "11px",
+                      opacity: showLevel ? 1 : 0.4,
+                      height: "24px",
+                      boxSizing: "border-box"
+                    }}
+                  >
+                    {level}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: "1.1",
+                marginTop: "4px"
+              }}
+            >
+              Mínimo: {item.required}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Renderiza a interface de verificação manual
+  const renderManualCheck = () => {
+    const getContrastClass = () => {
+      if (manualCheck.contrastRatio < 3) return "very-poor";
+      if (manualCheck.contrastRatio < 4.5) return "poor";
+      if (manualCheck.contrastRatio < 7) return "good";
+      return "very-good";
+    };
+
+    // Função de texto de contraste removida
+
+    // Função removida pois não é mais necessária com a substituição das estrelas por AAA
+
+    const bgColor =
+      manualCheck.contrastRatio >= 4.5
+        ? "#E8F5E9"
+        : manualCheck.contrastRatio >= 3
+        ? "#FFF9C4"
+        : "#FFEBEE";
+
+    return (
+      <div style={{ marginTop: "16px" }}>
+        <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ flex: 1 }}>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "8px",
+                fontWeight: "regular",
+                color: "white",
+                fontSize: "12px"
+              }}
+            >
+              Primeiro plano
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                value={manualCheck.foregroundColor}
+                onChange={e =>
+                  updateManualCheck({ foregroundColor: e.target.value })
+                }
+                style={{
+                  padding: "8px 36px 8px 12px",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "4px",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  backgroundColor: "rgba(0, 0, 0, 0.2)",
+                  color: "white",
+                  height: "36px"
+                }}
+              />
+              <div
+                title="Escolher cor"
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px",
+                  height: "20px",
+                  backgroundColor: manualCheck.foregroundColor,
+                  border: "1px solid rgba(255, 255, 255, 0.3)",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  overflow: "hidden"
+                }}
+              >
+                <input
+                  type="color"
+                  value={manualCheck.foregroundColor}
+                  onChange={e =>
+                    updateManualCheck({ foregroundColor: e.target.value })
+                  }
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0,
+                    cursor: "pointer",
+                    borderRadius: "16px"
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "8px",
+                fontWeight: "regular",
+                color: "white",
+                fontSize: "12px"
+              }}
+            >
+              Fundo
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                value={manualCheck.backgroundColor}
+                onChange={e =>
+                  updateManualCheck({ backgroundColor: e.target.value })
+                }
+                style={{
+                  padding: "8px 36px 8px 12px",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "4px",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  backgroundColor: "rgba(0, 0, 0, 0.2)",
+                  color: "white",
+                  height: "36px"
+                }}
+              />
+              <div
+                title="Escolher cor"
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: "20px",
+                  height: "20px",
+                  backgroundColor: manualCheck.backgroundColor,
+                  border: "1px solid rgba(255, 255, 255, 0.3)",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  overflow: "hidden"
+                }}
+              >
+                <input
+                  type="color"
+                  value={manualCheck.backgroundColor}
+                  onChange={e =>
+                    updateManualCheck({ backgroundColor: e.target.value })
+                  }
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0,
+                    cursor: "pointer",
+                    borderRadius: "16px"
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: bgColor,
+            borderRadius: "8px",
+            padding: "20px 12px",
+            marginBottom: "20px",
+            marginTop: "20px",
+            textAlign: "center",
+            height: "120px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <div
+            style={{
+              fontSize: "48px",
+              fontWeight: "bold",
+              color: manualCheck.foregroundColor,
+              lineHeight: 1,
+              textShadow: "0 1px 2px rgba(0,0,0,0.1)"
+            }}
+          >
+            {manualCheck.contrastRatio.toFixed(2)}
+          </div>
+        </div>
+        {/* Exibe os níveis de conformidade */}
+        {renderComplianceLevels()}
+      </div>
+    );
+  };
+
+  // Renderiza os resultados da análise automática
+  const renderAutoResults = () => {
+    if (isLoading) {
+      return (
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <div style={{ marginBottom: "16px" }}>Analisando contraste...</div>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "4px solid rgba(0,0,0,0.1)",
+              borderTopColor: "var(--figma-color-bg-brand)",
+              borderRadius: "50%",
+              margin: "0 auto",
+              animation: "spin 1s linear infinite"
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (error) {
+      return <div style={{ color: "#F44336", padding: "20px" }}>{error}</div>;
+    }
+
+    if (results.length === 0) {
+      return (
+        <div style={{ padding: "20px", textAlign: "center" }}>
+          Nenhum elemento para análise de contraste.
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ overflowY: "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "16px",
+            backgroundColor: "var(--figma-color-bg-secondary)",
+            padding: "16px",
+            borderRadius: "4px"
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "14px", marginBottom: "4px" }}>Total</div>
+            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+              {totalResults}
+            </div>
+          </div>
+          <div>
+            <div
+              style={{
+                fontSize: "14px",
+                marginBottom: "4px",
+                color: "#4CAF50"
+              }}
+            >
+              Aprovados
+            </div>
+            <div
+              style={{ fontSize: "24px", fontWeight: "bold", color: "#4CAF50" }}
+            >
+              {passingResults}
+            </div>
+          </div>
+          <div>
+            <div
+              style={{
+                fontSize: "14px",
+                marginBottom: "4px",
+                color: "#F44336"
+              }}
+            >
+              Erros
+            </div>
+            <div
+              style={{ fontSize: "24px", fontWeight: "bold", color: "#F44336" }}
+            >
+              {errorResults}
+            </div>
+          </div>
+        </div>
+
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            marginBottom: "16px"
+          }}
+        >
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--figma-color-border)" }}>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "8px",
+                  fontWeight: "bold"
+                }}
+              >
+                Elemento
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "8px",
+                  fontWeight: "bold"
+                }}
+              >
+                Texto
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "8px",
+                  fontWeight: "bold"
+                }}
+              >
+                Cores
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "8px",
+                  fontWeight: "bold"
+                }}
+              >
+                Contraste
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "8px",
+                  fontWeight: "bold"
+                }}
+              >
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map(result => (
+              <tr
+                key={result.id}
+                style={{
+                  borderBottom: "1px solid var(--figma-color-border-secondary)",
+                  backgroundColor: result.hasIssues
+                    ? "rgba(244, 67, 54, 0.1)"
+                    : "rgba(76, 175, 80, 0.05)"
+                }}
+              >
+                <td style={{ padding: "12px 8px" }}>
+                  <strong>{result.nodeName}</strong>
+                </td>
+                <td style={{ padding: "12px 8px" }}>
+                  {result.text ? `"${result.text}"` : "-"}
+                </td>
+                <td style={{ padding: "12px 8px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px"
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                    >
+                      <div style={colorCircleStyle(result.textColor)} />
+                      <span>{result.textColor}</span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                    >
+                      <div style={colorCircleStyle(result.bgColor)} />
+                      <span>{result.bgColor}</span>
+                    </div>
+                  </div>
+                </td>
+                <td style={{ padding: "12px 8px", fontWeight: "bold" }}>
+                  {formatContrast(result.contrastRatio)}
+                </td>
+                <td style={{ padding: "12px 8px" }}>
+                  <div style={statusIndicatorStyle(!result.hasIssues)}>
+                    {getContrastStatusText(result)}
+                  </div>
+                  {result.hasIssues && (
+                    <div
+                      style={{
+                        color: "#F44336",
+                        marginTop: "4px",
+                        fontSize: "12px"
+                      }}
+                    >
+                      {result.issues.map((issue, index) => (
+                        <div key={index}>{issue}</div>
+                      ))}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div
       style={{
@@ -711,32 +1606,45 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
         height: "100%",
         boxSizing: "border-box",
         overflow: "hidden",
-        color: "#FFFFFF",
-        backgroundColor: "var(--figma-color-bg)",
-        padding: "0 16px 16px 16px"
+        color: "var(--figma-color-text)",
+        backgroundColor: "var(--figma-color-bg)"
       }}
     >
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          margin: "24px 0 24px 0"
+          flex: 1,
+          overflowY: "auto",
+          padding: "0 8px 16px 0",
+          marginRight: "-8px"
         }}
       >
-        <button
-          onClick={onBack}
+        <h2
           style={{
-            background: "none",
-            border: "none",
-            color: "#18A0FB",
-            display: "flex",
-            alignItems: "center"
+            marginTop: 0,
+            marginBottom: "16px",
+            color: "white",
+            fontWeight: "normal"
           }}
         >
-          {/* ... resto do seu componente React ... */}
-        </button>
+          Análise de Contraste
+        </h2>
+        {renderManualCheck()}
+        {renderWcagReferenceTable()}
       </div>
+
+      <footer
+        style={{
+          padding: "0px",
+          height: "8px",
+          background: "#2A2A2A",
+          borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+          display: "block",
+          width: "100%",
+          position: "absolute",
+          bottom: 0,
+          left: 0
+        }}
+      />
     </div>
   );
 };
