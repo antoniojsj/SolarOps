@@ -1,0 +1,21 @@
+diff a/src/plugin/utils/fileUtils.ts b/src/plugin/utils/fileUtils.ts	(rejected hunks)
+@@ -5 +5 @@ import { mkdir } from "fs/promises";
+-const DATA_DIR = 'data_json';
++const DATA_DIR = "data_json";
+@@ -7 +7,4 @@ const DATA_DIR = 'data_json';
+-export async function saveTokensToFile(tokens: any, filename: string = 'design-tokens.json'): Promise<void> {
++export async function saveTokensToFile(
++  tokens: any,
++  filename: string = "design-tokens.json"
++): Promise<void> {
+@@ -11 +14 @@ export async function saveTokensToFile(tokens: any, filename: string = 'design-t
+-    
++
+@@ -14,2 +17,2 @@ export async function saveTokensToFile(tokens: any, filename: string = 'design-t
+-    
+-    await writeFile(filePath, content, 'utf-8');
++
++    await writeFile(filePath, content, "utf-8");
+@@ -18 +21 @@ export async function saveTokensToFile(tokens: any, filename: string = 'design-t
+-    console.error('Error saving tokens to file:', error);
++    console.error("Error saving tokens to file:", error);

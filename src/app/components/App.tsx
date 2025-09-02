@@ -18,30 +18,114 @@ import "../styles/empty-state.css";
 import "react-tooltip/dist/react-tooltip.css";
 
 // Definição de tipos para melhorar a tipagem
+
 interface ErrorItem {
-  node?: { id: string };
-  value?: string;
+  id: string;
   type?: string;
+  message?: string;
+  node?: {
+    id: string;
+    name?: string;
+    type?: string;
+    [key: string]: any;
+  };
+  errors?: Array<{
+    type: string;
+    value?: string;
+    message: string;
+    [key: string]: any;
+  }>;
+  property?: string;
+  value?: any;
+  expected?: any;
   [key: string]: any;
 }
+
+interface FillStyle {
+  type: string;
+  color?: {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  };
+  opacity?: number;
+  visible?: boolean;
+  [key: string]: any;
+}
+
+type EffectStyle = {
+  type: string;
+  color?: {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  };
+  offset?: { x: number; y: number };
+  radius?: number;
+  spread?: number;
+  visible?: boolean;
+  [key: string]: any;
+};
 
 interface NodeItem {
   id: string;
   name?: string;
-  fills?: any[];
-  text?: any;
-  effects?: any[];
+  type?: string;
+  fills?: FillStyle[];
+  text?: {
+    characters?: string;
+    style?: {
+      fontFamily?: string;
+      fontWeight?: number | string;
+      fontSize?: number;
+      lineHeight?: {
+        value: number;
+        unit: "PIXELS" | "PERCENT" | "AUTO";
+      };
+      letterSpacing?: {
+        value: number;
+        unit: "PIXELS" | "PERCENT";
+      };
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+  effects?: EffectStyle[];
+  children?: NodeItem[];
   [key: string]: any;
 }
 
 const App = ({}) => {
-  const [errorArray, setErrorArray] = useState<any[]>([]);
+  // Interface ErrorItem movida para o escopo global para ser reutilizada
+
+  interface NodeError {
+    id: string;
+    errors: Array<{
+      type: string;
+      value?: string;
+      message: string;
+      [key: string]: any;
+    }>;
+    [key: string]: any;
+  }
+
+  const [errorArray, setErrorArray] = useState<NodeError[]>([]);
   const [activePage, setActivePage] = useState("page");
   const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
   const [activeError, setActiveError] = React.useState<any>({});
   const [selectedNode, setSelectedNode] = React.useState<any>({});
   const [isVisible, setIsVisible] = React.useState(false);
-  const [nodeArray, setNodeArray] = useState<NodeItem[]>([]);
+  // Tipagem para o estado do nodeArray
+  interface NodeArrayItem {
+    id: string;
+    name: string;
+    type: string;
+    children?: NodeArrayItem[];
+  }
+
+  const [nodeArray, setNodeArray] = useState<NodeArrayItem[] | null>(null);
   const [selectedListItems, setSelectedListItem] = React.useState<string[]>([]);
   const [activeNodeIds, setActiveNodeIds] = React.useState<string[]>([]);
   const [designTokens, setDesignTokens] = React.useState<any>(null);
@@ -57,16 +141,39 @@ const App = ({}) => {
   const [lintVectors, setLintVectors] = useState(false);
   const [initialLoad, setInitialLoad] = React.useState(false);
   const [emptyState, setEmptyState] = React.useState(false);
-  const [libraries, setLibraries] = useState([]);
   const [localStyles, setLocalStyles] = useState({});
   const [stylesInUse, setStylesInUse] = useState({});
-  const librariesRef = React.useRef([]);
+  // Tipos para as bibliotecas de componentes
+  interface ComponentLibrary {
+    id: string;
+    name: string;
+    tokens?: any;
+    fillsCount?: number;
+    textCount?: number;
+    effectsCount?: number;
+  }
+
+  const librariesRef = React.useRef<ComponentLibrary[]>([]);
+  const [
+    activeComponentLibraries,
+    setActiveComponentLibraries
+  ] = React.useState<ComponentLibrary[]>([]);
+  const activeComponentLibrariesRef = React.useRef<ComponentLibrary[]>([]);
   const activePageRef = React.useRef(activePage);
   const [auditStarted, setAuditStarted] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [infoPanelVisible, setInfoPanelVisible] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [activeComponentLibraries, setActiveComponentLibraries] = useState([]);
+  // Definição do tipo para o resultado da análise
+  interface AnalysisResult {
+    nodeArray: NodeItem[];
+    errors: ErrorItem[];
+    date: Date;
+    projectName: string;
+  }
+
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
+    null
+  );
 
   window.addEventListener("keydown", function(e) {
     if (e.key === "Escape") {
@@ -75,12 +182,12 @@ const App = ({}) => {
     }
   });
 
-  const updateSelectedList = id => {
-    setSelectedListItem([id]);
-    setActiveNodeIds([id]);
+  const updateSelectedList = (ids: string[]) => {
+    setSelectedListItem(ids);
+    setActiveNodeIds(ids);
   };
 
-  const updateNavigation = page => {
+  const updateNavigation = (page: string) => {
     console.log(
       "[UI] Navegando para página:",
       page,
@@ -100,25 +207,50 @@ const App = ({}) => {
     );
   };
 
-  const handleUpdateLibraries = updatedLibraries => {
-    console.log(
-      "[App] handleUpdateLibraries chamado. Bibliotecas:",
-      updatedLibraries
+  const handleUpdateLibraries = (updatedLibraries: ComponentLibrary[]) => {
+    console.log("[App] Atualizando bibliotecas:", updatedLibraries);
+
+    // Atualiza o estado das bibliotecas ativas
+    setActiveComponentLibraries(updatedLibraries);
+
+    // Atualiza as referências
+    activeComponentLibrariesRef.current = updatedLibraries;
+    librariesRef.current = updatedLibraries;
+
+    // Envia as atualizações para o plugin
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "update-active-libraries",
+          libraries: updatedLibraries
+        }
+      },
+      "*"
     );
-    setLibraries(updatedLibraries);
+    console.log(
+      "[App] Bibliotecas atualizadas. Total:",
+      updatedLibraries.length
+    );
   };
 
-  const updateActiveError = error => {
+  const updateActiveError = (error: any) => {
     setActiveError(error);
   };
 
-  const ignoreAll = errors => {
+  const updateNodeArray = (nodeArray: NodeArrayItem[]) => {
+    setNodeArray(nodeArray);
+  };
+
+  const ignoreAll = (errors: ErrorItem[]) => {
     setIgnoreErrorArray(ignoredErrorArray => [...ignoredErrorArray, ...errors]);
   };
 
-  const updateIgnoredErrors = error => {
-    if (ignoredErrorArray.some(e => e.node.id === error.node.id)) {
-      if (ignoredErrorArray.some(e => e.value === error.value)) {
+  const updateIgnoredErrors = (error: ErrorItem) => {
+    if (
+      error.node &&
+      ignoredErrorArray.some(e => e.node?.id === error.node?.id)
+    ) {
+      if (error.value && ignoredErrorArray.some(e => e.value === error.value)) {
         return;
       } else {
         setIgnoreErrorArray([error].concat(ignoredErrorArray));
@@ -128,15 +260,14 @@ const App = ({}) => {
     }
   };
 
-  const updateBorderRadius = value => {
-    let borderArray = [...borderRadiusValues, value];
-    setBorderRadiusValues([...borderRadiusValues, value]);
+  const updateBorderRadius = (value: number[]) => {
+    setBorderRadiusValues(value);
 
     parent.postMessage(
       {
         pluginMessage: {
           type: "update-border-radius",
-          radiusValues: borderArray
+          radiusValues: value
         }
       },
       "*"
@@ -153,28 +284,55 @@ const App = ({}) => {
     );
   };
 
-  const updateErrorArray = errors => {
+  const updateErrorArray = (errors: any[]) => {
     console.log("[App] updateErrorArray chamado com:", errors);
     console.log("[App] errors é array?", Array.isArray(errors));
     console.log("[App] errors length:", errors ? errors.length : "undefined");
     if (errors && errors.length > 0) {
       console.log("[App] Primeiro erro:", errors[0]);
+
+      // Converter os erros para o formato NodeError esperado
+      const nodeErrors = errors.map(error => ({
+        id: error.id || error.node?.id || "",
+        errors: [
+          {
+            type: error.type || "unknown",
+            value: error.value,
+            message: error.message || "Erro desconhecido",
+            ...error
+          }
+        ],
+        ...error
+      }));
+
+      setErrorArray(nodeErrors);
+    } else {
+      setErrorArray([]);
     }
-    setErrorArray(Array.isArray(errors) ? errors : []);
   };
 
-  const updateVisible = val => {
+  const updateVisible = (val: boolean) => {
     setIsVisible(val);
   };
 
-  const updateLintRules = boolean => {
-    setLintVectors(boolean);
+  const updateLintRules = (enabled: boolean) => {
+    setLintVectors(enabled);
 
     parent.postMessage(
       {
         pluginMessage: {
           type: "update-lint-rules-from-settings",
-          boolean: boolean
+          lintVectors: enabled
+        }
+      },
+      "*"
+    );
+
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "update-errors",
+          libraries: librariesRef.current
         }
       },
       "*"
@@ -206,14 +364,20 @@ const App = ({}) => {
   }, [ignoredErrorArray]);
 
   const onRunApp = React.useCallback(() => {
-    console.log("[App] onRunApp chamado. Bibliotecas:", libraries);
-    console.log("[App] Número de bibliotecas:", libraries.length);
-    if (libraries.length > 0) {
-      console.log("[App] Estrutura da primeira biblioteca:", {
-        name: libraries[0].name,
-        fillsCount: libraries[0].fills?.length || 0,
-        textCount: libraries[0].text?.length || 0,
-        effectsCount: libraries[0].effects?.length || 0
+    console.log(
+      "[App] onRunApp chamado. Bibliotecas ativas:",
+      activeComponentLibraries
+    );
+    console.log(
+      "[App] Número de bibliotecas ativas:",
+      activeComponentLibraries.length
+    );
+    if (activeComponentLibraries.length > 0) {
+      console.log("[App] Estrutura da primeira biblioteca ativa:", {
+        name: activeComponentLibraries[0].name,
+        fillsCount: activeComponentLibraries[0].fillsCount || 0,
+        textCount: activeComponentLibraries[0].textCount || 0,
+        effectsCount: activeComponentLibraries[0].effectsCount || 0
       });
     }
 
@@ -223,33 +387,39 @@ const App = ({}) => {
           type: "run-app",
           lintVectors: lintVectors,
           selection: "user",
-          // Envia as bibliotecas/tokens selecionados para a auditoria
-          libraries: libraries
+          // Envia as bibliotecas ativas para a auditoria
+          libraries: activeComponentLibraries
         }
       },
       "*"
     );
-  }, [libraries, lintVectors]);
+  }, [activeComponentLibraries, lintVectors]);
 
   const onScanEntirePage = React.useCallback(() => {
+    console.log(
+      "[App] onScanEntirePage chamado. Bibliotecas ativas:",
+      activeComponentLibraries
+    );
     parent.postMessage(
       {
         pluginMessage: {
           type: "run-app",
           lintVectors: lintVectors,
           selection: "page",
-          libraries: libraries
+          // Usando bibliotecas ativas para a auditoria
+          libraries: activeComponentLibraries
         }
       },
       "*"
     );
-  }, [libraries, lintVectors]);
+  }, [activeComponentLibraries, lintVectors]);
 
-  // We need to always be able to access this set of arrays
-  // in order to provide it to the linting array for magic fixes.
+  // Atualiza as referências quando o estado muda
   React.useEffect(() => {
-    librariesRef.current = libraries;
-  }, [libraries]);
+    activeComponentLibrariesRef.current = activeComponentLibraries;
+    // Mantém librariesRef em sincronia para compatibilidade
+    librariesRef.current = activeComponentLibraries;
+  }, [activeComponentLibraries]);
 
   React.useEffect(() => {
     activePageRef.current = activePage;
@@ -335,12 +505,39 @@ const App = ({}) => {
               message.length,
               "nodes"
             );
-            setNodeArray(message);
+
+            // Garante que a mensagem está no formato correto antes de atualizar o estado
+            const formattedNodes = message
+              .map(node => {
+                if (!node || typeof node !== "object" || !node.id) {
+                  console.warn("[UI] Nó inválido encontrado:", node);
+                  return null;
+                }
+                return {
+                  id: node.id,
+                  name: node.name || "Sem nome",
+                  type: node.type || "unknown",
+                  // Garantir que as propriedades de estilo existam
+                  fills: Array.isArray(node.fills) ? node.fills : [],
+                  strokes: Array.isArray(node.strokes) ? node.strokes : [],
+                  effects: Array.isArray(node.effects) ? node.effects : [],
+                  cornerRadius: node.cornerRadius,
+                  gap: node.gap,
+                  // Preservar filhos se existirem
+                  ...(node.children && {
+                    children: node.children.filter(Boolean)
+                  })
+                };
+              })
+              .filter(Boolean); // Remove nós inválidos
+
+            console.log("[UI] Nós formatados:", formattedNodes);
+            setNodeArray(formattedNodes);
 
             // Selecionar o primeiro node por padrão
-            if (message.length > 0) {
-              setSelectedListItem([message[0].id]);
-              setActiveNodeIds([message[0].id]);
+            if (formattedNodes.length > 0) {
+              setSelectedListItem([formattedNodes[0].id]);
+              setActiveNodeIds([formattedNodes[0].id]);
             }
           }
 
@@ -377,7 +574,21 @@ const App = ({}) => {
             "[App] Bibliotecas de componentes detectadas recebidas:",
             detectedComponentLibs
           );
-          setActiveComponentLibraries(detectedComponentLibs);
+
+          // Formatar as bibliotecas para o formato esperado
+          const formattedLibraries = detectedComponentLibs.map(lib => ({
+            ...lib,
+            // Garantir que todas as propriedades necessárias existam
+            fills: Array.isArray(lib.fills) ? lib.fills : [],
+            text: Array.isArray(lib.text) ? lib.text : [],
+            strokes: Array.isArray(lib.strokes) ? lib.strokes : [],
+            effects: Array.isArray(lib.effects) ? lib.effects : [],
+            radius: Array.isArray(lib.radius) ? lib.radius : [],
+            gaps: Array.isArray(lib.gaps) ? lib.gaps : []
+          }));
+
+          console.log("[App] Bibliotecas formatadas:", formattedLibraries);
+          setActiveComponentLibraries(formattedLibraries);
         }
       } else if (type === "fetched storage") {
         let clientStorage = JSON.parse(storage);
@@ -480,13 +691,24 @@ const App = ({}) => {
         }
       } else if (type === "library-imported") {
         console.log("[App] library-imported recebido. Bibliotecas:", message);
-        setLibraries(message);
+        setActiveComponentLibraries(message);
       } else if (type === "library-imported-from-storage") {
         console.log(
           "[App] library-imported-from-storage recebido. Bibliotecas:",
           message
         );
-        setLibraries(message);
+        setActiveComponentLibraries(message);
+      } else if (type === "user-libs-loaded") {
+        console.log(
+          "[App] user-libs-loaded recebido. Bibliotecas carregadas:",
+          message.libs
+        );
+        if (message.libs && message.libs.length > 0) {
+          console.log(
+            "[App] Definindo bibliotecas ativas a partir do armazenamento"
+          );
+          setActiveComponentLibraries(message.libs);
+        }
       } else if (type === "local-styles-imported") {
         console.log("[LOG] local-styles-imported", {
           t: performance.now() - t0
@@ -520,6 +742,20 @@ const App = ({}) => {
     }
   }, [initialLoad, auditStarted]);
 
+  // Carrega as bibliotecas salvas quando o componente for montado
+  React.useEffect(() => {
+    console.log("[App] Solicitando bibliotecas salvas...");
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "get-user-libs"
+        }
+      },
+      "*"
+    );
+  }, []);
+
+  // Debug: monitora alterações em activeComponentLibraries
   React.useEffect(() => {
     console.log(
       "[DEBUG] activeComponentLibraries atualizado:",
@@ -553,7 +789,7 @@ const App = ({}) => {
             setAuditStarted(false);
             setActivePage("initial");
           }}
-          libraries={libraries}
+          libraries={activeComponentLibraries}
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
         />
@@ -569,7 +805,7 @@ const App = ({}) => {
           lintVectors={lintVectors}
           updateLintRules={updateLintRules}
           ignoredErrorArray={ignoredErrorArray}
-          libraries={libraries}
+          libraries={activeComponentLibraries}
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
           activeComponentLibraries={activeComponentLibraries}
@@ -577,7 +813,7 @@ const App = ({}) => {
       )}
       {activePage === "library" && (
         <LibraryPage
-          libraries={libraries}
+          libraries={activeComponentLibraries}
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
           activeComponentLibraries={activeComponentLibraries}
@@ -686,7 +922,7 @@ const App = ({}) => {
         </div>
       ) : auditStarted && activePage === "bulk" ? (
         <BulkErrorList
-          libraries={libraries}
+          libraries={activeComponentLibraries}
           errorArray={Array.isArray(errorArray) ? errorArray : []}
           ignoredErrorArray={ignoredErrorArray}
           onIgnoredUpdate={updateIgnoredErrors}
@@ -705,7 +941,7 @@ const App = ({}) => {
           isFrameSelected={activeNodeIds.length > 0}
           onHandleRunApp={handleRunAudit}
           onShowInfoPanel={() => setInfoPanelVisible(true)}
-          libraries={libraries}
+          libraries={activeComponentLibraries}
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
         />

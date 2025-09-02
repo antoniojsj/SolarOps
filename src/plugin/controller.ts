@@ -889,6 +889,24 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
     }
 
+    // Atualiza as bibliotecas ativas
+    if (msg.type === "update-active-libraries") {
+      console.log(
+        "[Controller] Atualizando bibliotecas ativas:",
+        msg.libraries
+      );
+      try {
+        await figma.clientStorage.setAsync(
+          "sherlock_selected_libs",
+          msg.libraries
+        );
+        console.log("[Controller] Bibliotecas ativas salvas com sucesso");
+      } catch (error) {
+        console.error("[Controller] Erro ao salvar bibliotecas ativas:", error);
+      }
+      return;
+    }
+
     // Initialize the app
     if (msg.type === "run-app") {
       if (
@@ -911,27 +929,66 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
         // Resolve libraries (tokens) to use in audit:
         // Priority: libraries passed from UI; fallback to saved user libs in clientStorage.
+        console.log(
+          "[Controller] Iniciando resolução das bibliotecas para auditoria"
+        );
+        console.log(
+          "[Controller] Bibliotecas recebidas da UI:",
+          (msg as any).libraries
+        );
+
         let effectiveLibraries = Array.isArray((msg as any).libraries)
           ? (msg as any).libraries
           : null;
-        if (!effectiveLibraries) {
+
+        console.log(
+          "[Controller] Bibliotecas após verificação inicial:",
+          effectiveLibraries
+        );
+
+        if (!effectiveLibraries || effectiveLibraries.length === 0) {
+          console.log(
+            "[Controller] Nenhuma biblioteca fornecida pela UI, verificando clientStorage..."
+          );
           try {
             const savedLibs = await figma.clientStorage.getAsync(
               "sherlock_selected_libs"
             );
-            if (Array.isArray(savedLibs)) {
+            console.log(
+              "[Controller] Bibliotecas salvas no clientStorage:",
+              savedLibs
+            );
+
+            if (Array.isArray(savedLibs) && savedLibs.length > 0) {
               effectiveLibraries = savedLibs;
+              console.log("[Controller] Usando bibliotecas do clientStorage");
+            } else {
+              console.log(
+                "[Controller] Nenhuma biblioteca encontrada no clientStorage"
+              );
             }
           } catch (e) {
-            // ignore, keep null
+            console.error("[Controller] Erro ao acessar clientStorage:", e);
+            effectiveLibraries = [];
           }
         }
-        if (!effectiveLibraries) effectiveLibraries = [];
+
+        if (!effectiveLibraries || effectiveLibraries.length === 0) {
+          console.warn(
+            "[Controller] Nenhuma biblioteca disponível para auditoria"
+          );
+          effectiveLibraries = [];
+        }
 
         console.log(
           "[Controller] Executando auditoria com",
           effectiveLibraries.length,
-          "bibliotecas"
+          "bibliotecas:",
+          effectiveLibraries.map((lib: any) => ({
+            name: lib?.name,
+            id: lib?.id,
+            tokens: lib?.tokens ? Object.keys(lib.tokens) : []
+          }))
         );
 
         const lintResults = lint(

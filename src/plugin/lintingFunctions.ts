@@ -48,15 +48,65 @@ function colorsMatch(
   }
 }
 
-// Função para verificar se uma cor está na biblioteca
-function isColorInLibrary(color: any, library: any): boolean {
+// Função para verificar se uma cor corresponde a um token salvo
+function isColorInTokens(color: any, tokens: any[]): boolean {
+  if (!tokens || !Array.isArray(tokens)) return false;
+
+  try {
+    const targetColor = convertColor(color);
+
+    return tokens.some(token => {
+      if (!token.value) return false;
+
+      // Handle different token value formats
+      let tokenColor;
+      if (typeof token.value === "string") {
+        // Handle hex colors
+        if (token.value.startsWith("#")) {
+          const hex = token.value.replace("#", "");
+          const r = parseInt(hex.substring(0, 2), 16) / 255;
+          const g = parseInt(hex.substring(2, 4), 16) / 255;
+          const b = parseInt(hex.substring(4, 6), 16) / 255;
+          const a =
+            hex.length > 6 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
+          tokenColor = { r, g, b, a };
+        }
+      } else if (token.value.r !== undefined) {
+        // Handle RGB/RGBA objects
+        tokenColor = {
+          r: token.value.r / 255,
+          g: token.value.g / 255,
+          b: token.value.b / 255,
+          a: token.value.a !== undefined ? token.value.a : 1
+        };
+      }
+
+      return tokenColor ? colorsMatch(targetColor, tokenColor) : false;
+    });
+  } catch (error) {
+    console.error("[isColorInTokens] Erro:", error);
+    return false;
+  }
+}
+
+// Função para verificar se uma cor está na biblioteca ou nos tokens salvos
+function isColorInLibrary(
+  color: any,
+  library: any,
+  savedTokens: any[] = []
+): boolean {
+  // Primeiro verifica nos tokens salvos
+  if (isColorInTokens(color, savedTokens)) {
+    return true;
+  }
+
+  // Depois verifica na biblioteca
   try {
     if (!library || !library.fills || !Array.isArray(library.fills)) {
       return false;
     }
 
     for (const fillStyle of library.fills) {
-      // Verificar se tem paint com cor sólida
       if (
         fillStyle.paint &&
         fillStyle.paint.type === "SOLID" &&
@@ -66,7 +116,6 @@ function isColorInLibrary(color: any, library: any): boolean {
           return true;
         }
       }
-      // Verificar se tem value (estrutura alternativa)
       if (fillStyle.value && fillStyle.value.r !== undefined) {
         if (colorsMatch(color, fillStyle.value)) {
           return true;
@@ -80,8 +129,93 @@ function isColorInLibrary(color: any, library: any): boolean {
   }
 }
 
-// Função para verificar se um estilo de texto está na biblioteca
-function isTextStyleInLibrary(styleId: string, library: any): boolean {
+// Função para verificar se um estilo de texto corresponde a um token salvo
+function isTextStyleInTokens(node: any, tokens: any[]): boolean {
+  if (!tokens || !Array.isArray(tokens)) return false;
+
+  try {
+    const nodeFontName = node.fontName;
+    const nodeFontSize = node.fontSize;
+    const nodeLineHeight = node.lineHeight;
+    const nodeLetterSpacing = node.letterSpacing;
+
+    return tokens.some(token => {
+      if (!token.value) return false;
+
+      // Verifica correspondência de fonte
+      if (token.value.fontFamily && nodeFontName) {
+        const tokenFontFamily = token.value.fontFamily.toLowerCase();
+        const nodeFontFamily = (typeof nodeFontName === "string"
+          ? nodeFontName
+          : nodeFontName.family
+        ).toLowerCase();
+        if (tokenFontFamily !== nodeFontFamily) return false;
+      }
+
+      // Verifica tamanho da fonte
+      if (token.value.fontSize && nodeFontSize) {
+        if (
+          Math.abs(Number(token.value.fontSize) - Number(nodeFontSize)) > 0.1
+        ) {
+          return false;
+        }
+      }
+
+      // Verifica altura da linha
+      if (token.value.lineHeight && nodeLineHeight) {
+        const tokenLineHeight = token.value.lineHeight;
+        if (
+          tokenLineHeight.unit === "PIXELS" &&
+          nodeLineHeight.unit === "PIXELS"
+        ) {
+          if (
+            Math.abs(
+              Number(tokenLineHeight.value) - Number(nodeLineHeight.value)
+            ) > 0.1
+          ) {
+            return false;
+          }
+        }
+        // Adicionar outras unidades conforme necessário
+      }
+
+      // Verifica espaçamento entre letras
+      if (token.value.letterSpacing && nodeLetterSpacing) {
+        const tokenLetterSpacing = token.value.letterSpacing;
+        if (
+          tokenLetterSpacing.unit === "PIXELS" &&
+          nodeLetterSpacing.unit === "PIXELS"
+        ) {
+          if (
+            Math.abs(
+              Number(tokenLetterSpacing.value) - Number(nodeLetterSpacing.value)
+            ) > 0.1
+          ) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  } catch (error) {
+    console.error("[isTextStyleInTokens] Erro:", error);
+    return false;
+  }
+}
+
+// Função para verificar se um estilo de texto está na biblioteca ou nos tokens salvos
+function isTextStyleInLibrary(
+  styleId: string,
+  library: any,
+  savedTokens: any[] = []
+): boolean {
+  // Primeiro verifica nos tokens salvos
+  if (isTextStyleInTokens(styleId, savedTokens)) {
+    return true;
+  }
+
+  // Depois verifica na biblioteca
   try {
     if (!library || !library.text || !Array.isArray(library.text)) {
       return false;
@@ -148,27 +282,17 @@ export function checkType(
   errors: any[],
   libraries: any[],
   savedTokens: any[] = []
-  // usedRemoteStyles?: any,
-  // storageArray?: any
 ) {
   try {
-    if (!node || !node.type) return;
+    if (!node) return;
 
-    if (node.type === "TEXT") {
-      // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
-      if (!libraries || libraries.length === 0) {
-        errors.push({
-          type: "text-unvalidated",
-          message:
-            "Nenhuma biblioteca selecionada; textos não podem ser validados",
-          nodeId: node.id,
-          nodeName: node.name,
-          suggestions: []
-        });
-        return;
-      }
+    // Verifica se o nó tem um estilo de texto
+    if (node.textStyleId && typeof node.textStyleId === "string") {
+      let isStyleValid = false;
+      let tokenLib = null;
+
       // Verificar se o texto tem estilo definido
-      if (!node.textStyleId || node.textStyleId === "") {
+      if (node.textStyleId === "") {
         errors.push({
           type: "text-style",
           message: "Texto sem estilo definido",
@@ -179,37 +303,21 @@ export function checkType(
         return;
       }
 
-      let styleFound = false;
-
       // Primeiro verifica nos tokens salvos
-      if (savedTokens && savedTokens.length > 0) {
-        for (const tokenLib of savedTokens) {
-          if (tokenLib.tokens && tokenLib.tokens.typography) {
-            const matchingToken = tokenLib.tokens.typography.find(
-              (token: any) => {
-                // Verifica se o token tem um ID de estilo que corresponde ao do node
-                return token.styleId === node.textStyleId;
-              }
-            );
-
-            if (matchingToken) {
-              styleFound = true;
-              break;
-            }
-          }
-        }
+      if (
+        savedTokens &&
+        savedTokens.length > 0 &&
+        isTextStyleInTokens(node, savedTokens)
+      ) {
+        isStyleValid = true;
       }
-
       // Se não encontrou nos tokens, verifica nas bibliotecas
-      if (!styleFound && libraries && libraries.length > 0) {
-        for (const library of libraries) {
-          if (isTextStyleInLibrary(node.textStyleId, library)) {
-            styleFound = true;
-            break;
-          }
-        }
+      else if (libraries && libraries.length > 0) {
+        isStyleValid = libraries.some(library =>
+          isTextStyleInLibrary(node.textStyleId, library, savedTokens)
+        );
 
-        if (!styleFound) {
+        if (!isStyleValid) {
           errors.push({
             type: "text-style-library",
             message:
@@ -299,28 +407,18 @@ export function newCheckFills(
           let colorFound = false;
 
           // Primeiro verifica nos tokens salvos
-          if (savedTokens && savedTokens.length > 0) {
-            for (const tokenLib of savedTokens) {
-              if (tokenLib.tokens && tokenLib.tokens.fills) {
-                const matchingToken = tokenLib.tokens.fills.find(
-                  (token: any) => {
-                    if (
-                      token.paint &&
-                      token.paint.type === "SOLID" &&
-                      token.paint.color
-                    ) {
-                      return colorsMatch(color, token.paint.color);
-                    }
-                    return false;
-                  }
-                );
-
-                if (matchingToken) {
-                  colorFound = true;
-                  break;
-                }
-              }
-            }
+          if (
+            savedTokens &&
+            savedTokens.length > 0 &&
+            isColorInTokens(color, savedTokens)
+          ) {
+            colorFound = true;
+          }
+          // Se não encontrou nos tokens, verifica nas bibliotecas
+          else if (libraries && libraries.length > 0) {
+            colorFound = libraries.some(library =>
+              isColorInLibrary(color, library, savedTokens)
+            );
           }
 
           // Se não encontrou nos tokens, verifica se é uma cor padrão problemática
@@ -555,8 +653,7 @@ export function newCheckStrokes(
     if (!libraries || libraries.length === 0) {
       errors.push({
         type: "stroke-unvalidated",
-        message:
-          "Nenhuma biblioteca selecionada; strokes não podem ser validados",
+        message: "Nenhuma biblioteca selecionada para validação de strokes",
         nodeId: node.id,
         nodeName: node.name,
         suggestions: []
@@ -564,81 +661,62 @@ export function newCheckStrokes(
       return;
     }
 
-    // Verificar se tem estilo de stroke definido
-    if (node.strokeStyleId && node.strokeStyleId !== "") {
-      // Verificar se o estilo está na biblioteca (se houver biblioteca)
-      if (libraries && libraries.length > 0) {
-        let styleFound = false;
-        for (const library of libraries) {
-          if (isColorStyleInLibrary(node.strokeStyleId, library)) {
-            styleFound = true;
-            break;
-          }
-        }
-
-        if (!styleFound) {
-          console.log(
-            "[Lint] Erro: Estilo de stroke não encontrado na biblioteca em",
-            node.name
-          );
-          errors.push({
-            type: "stroke-style-library",
-            message: "Estilo de stroke não está na biblioteca",
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        }
-      }
-      return;
-    }
-
-    // Verificar strokes diretos
-    if (
-      node.strokes &&
-      Array.isArray(node.strokes) &&
-      node.strokes.length > 0
-    ) {
+    // Verificar se o node tem strokes
+    if (node.strokes && node.strokes.length > 0) {
+      // Verificar cada stroke
       for (const stroke of node.strokes) {
-        if (stroke.type === "SOLID" && stroke.color) {
-          const color = convertColor(stroke.color);
+        if (stroke.visible !== false) {
+          // Se o stroke estiver visível
+          // Verificar se o stroke tem uma cor
+          if (stroke.color) {
+            if (stroke.type === "SOLID") {
+              const color = convertColor(stroke.color);
 
-          // Verificar se é uma cor padrão problemática
-          if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
-            console.log(
-              "[Lint] Erro: Stroke com cor preta padrão em",
-              node.name
-            );
-            errors.push({
-              type: "stroke-color-default",
-              message: "Stroke com cor preta padrão",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-          } else {
-            // Verificar se a cor está na biblioteca (se houver biblioteca)
-            if (libraries && libraries.length > 0) {
-              let colorFound = false;
-              for (const library of libraries) {
-                if (isColorInLibrary(color, library)) {
-                  colorFound = true;
-                  break;
-                }
-              }
-
-              if (!colorFound) {
+              // Primeiro verifica se é uma cor padrão problemática
+              if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
                 console.log(
-                  "[Lint] Erro: Cor de stroke não encontrada na biblioteca em",
+                  "[Lint] Erro: Stroke com cor preta padrão em",
                   node.name
                 );
                 errors.push({
-                  type: "stroke-color-library",
-                  message: "Cor do stroke não está na biblioteca",
+                  type: "stroke-color-default",
+                  message: "Stroke com cor preta padrão",
                   nodeId: node.id,
                   nodeName: node.name,
                   suggestions: []
                 });
+              } else {
+                // Verificar se a cor está nos tokens salvos ou na biblioteca
+                let colorFound = false;
+
+                // Primeiro verifica nos tokens salvos
+                if (
+                  savedTokens &&
+                  savedTokens.length > 0 &&
+                  isColorInTokens(color, savedTokens)
+                ) {
+                  colorFound = true;
+                }
+                // Se não encontrou nos tokens, verifica nas bibliotecas
+                else if (libraries && libraries.length > 0) {
+                  colorFound = libraries.some(library =>
+                    isColorInLibrary(color, library, savedTokens)
+                  );
+                }
+
+                if (!colorFound) {
+                  console.log(
+                    "[Lint] Erro: Cor de stroke não encontrada na biblioteca em",
+                    node.name
+                  );
+                  errors.push({
+                    type: "stroke-color-library",
+                    message: "Cor do stroke não está na biblioteca",
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    suggestions: []
+                  });
+                }
               }
             }
           }

@@ -2,26 +2,67 @@ import React, { useEffect, useState, useRef } from "react";
 import { ChromePicker, ColorResult } from "react-color";
 import { SketchPicker } from "react-color";
 
+// Função para normalizar valores de cor para um formato consistente (0-255)
+const normalizeColorValue = (
+  color: { r: number; g: number; b: number; a?: number } | null
+): number | null => {
+  if (!color) return null;
+
+  // Verifica se a cor já está no formato 0-255
+  const is255 = color.r > 1 || color.g > 1 || color.b > 1;
+
+  // Converte para 0-255 se estiver em 0-1
+  const r = is255 ? Math.round(color.r) : Math.round(color.r * 255);
+  const g = is255 ? Math.round(color.g) : Math.round(color.g * 255);
+  const b = is255 ? Math.round(color.b) : Math.round(color.b * 255);
+
+  // Retorna um número único que representa a cor (formato RRGGBB)
+  return r * 1000000 + g * 1000 + b;
+};
+
 // Função para misturar cores considerando transparência
 const blendColors = (
   bg: { r: number; g: number; b: number; a: number },
   fg: { r: number; g: number; b: number; a: number },
   alpha: number
 ) => {
-  const finalAlpha = fg.a * alpha;
-  const newAlpha = bg.a + finalAlpha * (1 - bg.a);
+  // Normaliza as cores de entrada para garantir consistência
+  const normalizedBg = {
+    r: bg.r > 1 ? bg.r / 255 : bg.r,
+    g: bg.g > 1 ? bg.g / 255 : bg.g,
+    b: bg.b > 1 ? bg.b / 255 : bg.b,
+    a: bg.a
+  };
+
+  const normalizedFg = {
+    r: fg.r > 1 ? fg.r / 255 : fg.r,
+    g: fg.g > 1 ? fg.g / 255 : fg.g,
+    b: fg.b > 1 ? fg.b / 255 : fg.b,
+    a: fg.a
+  };
+
+  const finalAlpha = normalizedFg.a * alpha;
+  const newAlpha = normalizedBg.a + finalAlpha * (1 - normalizedBg.a);
 
   if (newAlpha <= 0) {
     return { r: 0, g: 0, b: 0, a: 0 };
   }
 
+  // Aplica a mistura de cores
   const r =
-    ((1 - finalAlpha) * bg.r * bg.a + finalAlpha * fg.r * fg.a) / newAlpha;
+    ((1 - finalAlpha) * normalizedBg.r * normalizedBg.a +
+      finalAlpha * normalizedFg.r * normalizedFg.a) /
+    newAlpha;
   const g =
-    ((1 - finalAlpha) * bg.g * bg.a + finalAlpha * fg.g * fg.a) / newAlpha;
+    ((1 - finalAlpha) * normalizedBg.g * normalizedBg.a +
+      finalAlpha * normalizedFg.g * normalizedFg.a) /
+    newAlpha;
   const b =
-    ((1 - finalAlpha) * bg.b * bg.a + finalAlpha * fg.b * fg.a) / newAlpha;
+    ((1 - finalAlpha) * normalizedBg.b * normalizedBg.a +
+      finalAlpha * normalizedFg.b * normalizedFg.a) /
+    newAlpha;
 
+  // Garante que os valores estejam dentro do intervalo correto
   return {
     r: Math.max(0, Math.min(1, r)),
     g: Math.max(0, Math.min(1, g)),
@@ -48,19 +89,38 @@ const getAverageColor = (
 
     const weight = item.weight > 0 ? item.weight : 1;
     const alpha = item.color.a !== undefined ? item.color.a : 1;
-    const r = item.color.r !== undefined ? item.color.r : 0;
-    const g = item.color.g !== undefined ? item.color.g : 0;
-    const b = item.color.b !== undefined ? item.color.b : 0;
 
-    totalR += r * weight * alpha;
-    totalG += g * weight * alpha;
-    totalB += b * weight * alpha;
-    totalA += weight * alpha;
-    totalWeight += weight;
+    // Normaliza a cor usando a função auxiliar
+    const normalizedColor = normalizeColorValue(item.color);
+
+    if (normalizedColor !== null) {
+      const r = Math.floor(normalizedColor / 1000000);
+      const g = Math.floor((normalizedColor % 1000000) / 1000);
+      const b = normalizedColor % 1000;
+
+      // Converte para 0-1 para manter consistência com o formato de saída
+      totalR += (r / 255) * weight * alpha;
+      totalG += (g / 255) * weight * alpha;
+      totalB += (b / 255) * weight * alpha;
+      totalA += weight * alpha;
+      totalWeight += weight;
+    } else {
+      // Fallback para o comportamento original se a normalização falhar
+      const r = item.color.r !== undefined ? item.color.r : 0;
+      const g = item.color.g !== undefined ? item.color.g : 0;
+      const b = item.color.b !== undefined ? item.color.b : 0;
+
+      totalR += r * weight * alpha;
+      totalG += g * weight * alpha;
+      totalB += b * weight * alpha;
+      totalA += weight * alpha;
+      totalWeight += weight;
+    }
   }
 
   if (totalWeight <= 0) return { r: 0, g: 0, b: 0, a: 0 };
 
+  // Garante que os valores estejam no intervalo correto (0-1)
   return {
     r: Math.max(0, Math.min(1, totalR / totalWeight)),
     g: Math.max(0, Math.min(1, totalG / totalWeight)),
@@ -168,16 +228,33 @@ const toHex = (color: {
   b: number;
   a?: number;
 }): string => {
-  const r = Math.round(color.r * 255);
-  const g = Math.round(color.g * 255);
-  const b = Math.round(color.b * 255);
+  // Normaliza a cor para garantir consistência
+  const normalizedColor = normalizeColorValue(color);
+
+  let r, g, b;
+
+  if (normalizedColor !== null) {
+    // Extrai os componentes de cor do valor normalizado
+    r = Math.floor(normalizedColor / 1000000);
+    g = Math.floor((normalizedColor % 1000000) / 1000);
+    b = normalizedColor % 1000;
+  } else {
+    // Fallback para o comportamento original se a normalização falhar
+    r = Math.round(color.r <= 1 ? color.r * 255 : color.r);
+    g = Math.round(color.g <= 1 ? color.g * 255 : color.g);
+    b = Math.round(color.b <= 1 ? color.b * 255 : color.b);
+  }
+
+  // Processa o canal alfa (se fornecido)
   const a = color.a !== undefined ? Math.round(color.a * 255) : 255;
 
+  // Função auxiliar para converter um valor numérico em um valor hexadecimal de 2 dígitos
   const toHexValue = (c: number) => {
-    const hex = c.toString(16);
+    const hex = Math.max(0, Math.min(255, c)).toString(16);
     return hex.length === 1 ? "0" + hex : hex;
   };
 
+  // Retorna a string de cor no formato #RRGGBB ou #RRGGBBAA
   return `#${toHexValue(r)}${toHexValue(g)}${toHexValue(b)}${
     a < 255 ? toHexValue(a) : ""
   }`.toUpperCase();
@@ -188,24 +265,37 @@ const getContrastRatio = (
   color1: { r: number; g: number; b: number },
   color2: { r: number; g: number; b: number }
 ): number => {
+  // Normaliza as cores de entrada
+  const normalizeColor = (color: { r: number; g: number; b: number }) => {
+    const normalized = normalizeColorValue(color);
+    if (normalized !== null) {
+      return {
+        r: Math.floor(normalized / 1000000) / 255,
+        g: Math.floor((normalized % 1000000) / 1000) / 255,
+        b: (normalized % 1000) / 255
+      };
+    }
+    // Fallback para o comportamento original se a normalização falhar
+    return {
+      r: color.r <= 1 ? color.r : color.r / 255,
+      g: color.g <= 1 ? color.g : color.g / 255,
+      b: color.b <= 1 ? color.b : color.b / 255
+    };
+  };
+
+  const normColor1 = normalizeColor(color1);
+  const normColor2 = normalizeColor(color2);
+
   const getLuminance = (r: number, g: number, b: number): number => {
     const a = [r, g, b].map(v => {
-      v /= 255;
       return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
     });
     return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
   };
 
-  const luminance1 = getLuminance(
-    color1.r * 255,
-    color1.g * 255,
-    color1.b * 255
-  );
-  const luminance2 = getLuminance(
-    color2.r * 255,
-    color2.g * 255,
-    color2.b * 255
-  );
+  const luminance1 = getLuminance(normColor1.r, normColor1.g, normColor1.b);
+
+  const luminance2 = getLuminance(normColor2.r, normColor2.g, normColor2.b);
 
   const lighter = Math.max(luminance1, luminance2);
   const darker = Math.min(luminance1, luminance2);
@@ -244,6 +334,18 @@ const findBackgroundColor = (
   // 1. Verificar preenchimentos do próprio nó (sólidos, gradientes)
   const nodeBg = getNodeBackground(node);
   if (nodeBg && nodeBg.opacity > 0.05) {
+    // Normalizar a cor de fundo encontrada
+    const normalizedColor = normalizeColorValue(nodeBg.color);
+    if (normalizedColor !== null) {
+      return {
+        color: {
+          r: Math.floor(normalizedColor / 1000000) / 255,
+          g: Math.floor((normalizedColor % 1000000) / 1000) / 255,
+          b: (normalizedColor % 1000) / 255
+        },
+        opacity: nodeBg.opacity
+      };
+    }
     return nodeBg;
   }
 
@@ -255,33 +357,59 @@ const findBackgroundColor = (
       false,
       new Set(visitedNodes)
     );
+
     if (parentBg) {
+      // Normalizar a cor do pai
+      const normalizedParentColor = normalizeColorValue(parentBg.color);
+      let parentColor = { ...parentBg.color };
+
+      if (normalizedParentColor !== null) {
+        parentColor = {
+          r: Math.floor(normalizedParentColor / 1000000) / 255,
+          g: Math.floor((normalizedParentColor % 1000000) / 1000) / 255,
+          b: (normalizedParentColor % 1000) / 255
+        };
+      }
+
       // Se o nó atual tiver opacidade, misturar com a cor do pai
       if (node.opacity !== undefined && node.opacity < 1) {
         const blended = blendColors(
-          { ...parentBg.color, a: parentBg.opacity },
+          { ...parentColor, a: parentBg.opacity },
           { r: 1, g: 1, b: 1, a: 1 }, // Cor branca é usada como base
           node.opacity
         );
         return { color: blended, opacity: blended.a };
       }
-      return parentBg;
+      return { color: parentColor, opacity: parentBg.opacity };
     }
   }
 
   // 3. Se for o nó raiz, verificar configurações de fundo da página/documento
-  if (isRoot) {
-    if (node.backgroundColor) {
+  if (isRoot && node.backgroundColor) {
+    // Normalizar a cor de fundo do nó raiz
+    const normalizedBgColor = normalizeColorValue(node.backgroundColor);
+
+    if (normalizedBgColor !== null) {
       return {
         color: {
-          r: node.backgroundColor.r,
-          g: node.backgroundColor.g,
-          b: node.backgroundColor.b
+          r: Math.floor(normalizedBgColor / 1000000) / 255,
+          g: Math.floor((normalizedBgColor % 1000000) / 1000) / 255,
+          b: (normalizedBgColor % 1000) / 255
         },
         opacity:
           node.backgroundColor.a !== undefined ? node.backgroundColor.a : 1
       };
     }
+
+    // Fallback para o comportamento original se a normalização falhar
+    return {
+      color: {
+        r: node.backgroundColor.r,
+        g: node.backgroundColor.g,
+        b: node.backgroundColor.b
+      },
+      opacity: node.backgroundColor.a !== undefined ? node.backgroundColor.a : 1
+    };
   }
 
   // Se não encontrar nenhum fundo, retornar null
@@ -292,8 +420,39 @@ const findBackgroundColor = (
 const getNodeBackground = (node: FigmaNode) => {
   if (!node) return null;
 
+  // Função para normalizar uma cor e retornar no formato { r, g, b, a? }
+  const normalizeAndExtractColor = (
+    color: { r: number; g: number; b: number; a?: number } | null
+  ) => {
+    if (!color) return null;
+
+    const normalized = normalizeColorValue(color);
+    if (normalized !== null) {
+      return {
+        r: Math.floor(normalized / 1000000) / 255,
+        g: Math.floor((normalized % 1000000) / 1000) / 255,
+        b: (normalized % 1000) / 255,
+        a: color.a
+      };
+    }
+    return color;
+  };
+
   // Prioriza o `backgroundColor`
   if (node.backgroundColor) {
+    const normalizedBgColor = normalizeAndExtractColor(node.backgroundColor);
+    if (normalizedBgColor) {
+      return {
+        color: {
+          r: normalizedBgColor.r,
+          g: normalizedBgColor.g,
+          b: normalizedBgColor.b
+        },
+        opacity: normalizedBgColor.a !== undefined ? normalizedBgColor.a : 1
+      };
+    }
+
+    // Fallback para o comportamento original se a normalização falhar
     return {
       color: {
         r: node.backgroundColor.r,
@@ -318,6 +477,7 @@ const getNodeBackground = (node: FigmaNode) => {
   if (visibleFills.length === 0) return null;
 
   let combinedColor = { r: 0, g: 0, b: 0, a: 0 };
+
   for (let i = visibleFills.length - 1; i >= 0; i--) {
     const fill = visibleFills[i];
     const fillOpacity = fill.opacity !== undefined ? fill.opacity : 1;
@@ -325,22 +485,57 @@ const getNodeBackground = (node: FigmaNode) => {
     const totalOpacity = fillOpacity * nodeOpacity;
 
     if (fill.type === "SOLID" && fill.color) {
+      const normalizedColor =
+        normalizeAndExtractColor(fill.color) || fill.color;
       combinedColor = blendColors(
         combinedColor,
-        { ...fill.color, a: 1 },
-        totalOpacity * (fill.color.a !== undefined ? fill.color.a : 1)
+        {
+          r: normalizedColor.r,
+          g: normalizedColor.g,
+          b: normalizedColor.b,
+          a: 1
+        },
+        totalOpacity * (normalizedColor.a !== undefined ? normalizedColor.a : 1)
       );
     } else if (fill.type.includes("GRADIENT") && fill.gradientStops) {
-      const gradientColors = fill.gradientStops.map(s => ({
-        color: s.color,
-        weight: s.position || 0.5
-      }));
-      const avgColor = getAverageColor(gradientColors);
-      combinedColor = blendColors(
-        combinedColor,
-        { ...avgColor, a: 1 },
-        totalOpacity * (avgColor.a || 1)
-      );
+      // Normaliza as cores das paradas do gradiente
+      const normalizedStops = fill.gradientStops
+        .map(stop => {
+          if (!stop.color) return null;
+          const normalizedStopColor =
+            normalizeAndExtractColor(stop.color) || stop.color;
+          return {
+            color: {
+              r: normalizedStopColor.r,
+              g: normalizedStopColor.g,
+              b: normalizedStopColor.b,
+              a: normalizedStopColor.a !== undefined ? normalizedStopColor.a : 1
+            },
+            weight: stop.position || 0.5
+          };
+        })
+        .filter(
+          (
+            stop
+          ): stop is {
+            color: { r: number; g: number; b: number; a: number };
+            weight: number;
+          } => stop !== null
+        );
+
+      if (normalizedStops.length > 0) {
+        const avgColor = getAverageColor(normalizedStops);
+        combinedColor = blendColors(
+          combinedColor,
+          {
+            r: avgColor.r,
+            g: avgColor.g,
+            b: avgColor.b,
+            a: 1
+          },
+          totalOpacity * (avgColor.a || 1)
+        );
+      }
     } else if (fill.type === "IMAGE") {
       // Para imagens, assume um fundo cinza médio com baixa opacidade
       combinedColor = blendColors(
@@ -355,13 +550,17 @@ const getNodeBackground = (node: FigmaNode) => {
 
   if (combinedColor.a <= 0.05) return null;
 
+  // Normaliza a cor combinada final
+  const normalizedFinalColor =
+    normalizeAndExtractColor(combinedColor) || combinedColor;
+
   return {
     color: {
-      r: combinedColor.r,
-      g: combinedColor.g,
-      b: combinedColor.b
+      r: normalizedFinalColor.r,
+      g: normalizedFinalColor.g,
+      b: normalizedFinalColor.b
     },
-    opacity: combinedColor.a
+    opacity: combinedColor.a // Mantém a opacidade original para preservar o blend
   };
 };
 
@@ -466,12 +665,14 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
           if (!Array.isArray(fills) || fills.length === 0) {
             return null;
           }
+
           const fill = fills.find(
             f =>
               f.visible &&
               (f.color || f.gradientStops) &&
               (f.opacity === undefined || f.opacity > 0)
           );
+
           if (!fill) return null;
 
           if (fill.gradientStops && fill.gradientStops.length > 0) {
@@ -486,22 +687,42 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
               );
               return luminanceA - luminanceB;
             });
+
             const darkestColor = sortedStops[0].color;
-            return {
-              r: darkestColor.r,
-              g: darkestColor.g,
-              b: darkestColor.b,
-              a: fill.opacity !== undefined ? fill.opacity : darkestColor.a || 1
-            };
+            const normalizedColor = normalizeColorValue(darkestColor);
+
+            if (normalizedColor !== null) {
+              const r = Math.floor(normalizedColor / 1000000);
+              const g = Math.floor((normalizedColor % 1000000) / 1000);
+              const b = normalizedColor % 1000;
+
+              return {
+                r: r / 255, // Converte de volta para 0-1 para manter consistência
+                g: g / 255,
+                b: b / 255,
+                a:
+                  fill.opacity !== undefined
+                    ? fill.opacity
+                    : darkestColor.a || 1
+              };
+            }
           }
 
           if (fill.color) {
-            return {
-              r: fill.color.r,
-              g: fill.color.g,
-              b: fill.color.b,
-              a: fill.opacity !== undefined ? fill.opacity : fill.color.a || 1
-            };
+            const normalizedColor = normalizeColorValue(fill.color);
+
+            if (normalizedColor !== null) {
+              const r = Math.floor(normalizedColor / 1000000);
+              const g = Math.floor((normalizedColor % 1000000) / 1000);
+              const b = normalizedColor % 1000;
+
+              return {
+                r: r / 255, // Converte de volta para 0-1 para manter consistência
+                g: g / 255,
+                b: b / 255,
+                a: fill.opacity !== undefined ? fill.opacity : fill.color.a || 1
+              };
+            }
           }
 
           return null;
@@ -514,6 +735,23 @@ const ContrastChecker: React.FC<ContrastCheckerProps> = ({
           a?: number;
         }) => {
           if (!color) return { r: 0, g: 0, b: 0, a: 1 };
+
+          const normalizedColor = normalizeColorValue(color);
+
+          if (normalizedColor !== null) {
+            const r = Math.floor(normalizedColor / 1000000);
+            const g = Math.floor((normalizedColor % 1000000) / 1000);
+            const b = normalizedColor % 1000;
+
+            return {
+              r: r,
+              g: g,
+              b: b,
+              a: color.a !== undefined ? color.a : 1
+            };
+          }
+
+          // Fallback em caso de erro na normalização
           return {
             r: Math.round(color.r * 255),
             g: Math.round(color.g * 255),

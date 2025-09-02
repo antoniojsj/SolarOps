@@ -1,0 +1,276 @@
+diff a/src/plugin/lintingFunctions.ts b/src/plugin/lintingFunctions.ts	(rejected hunks)
+@@ -119 +119 @@ function isEffectInLibrary(effect: any, library: any): boolean {
+-    
++
+@@ -123,10 +123,12 @@ function isEffectInLibrary(effect: any, library: any): boolean {
+-        const sameColor = !effect.color || 
+-          (effectStyle.effect.color && 
+-           colorsMatch(effect.color, effectStyle.effect.color));
+-        const sameOffset = !effect.offset || 
+-          (effectStyle.effect.offset && 
+-           effect.offset.x === effectStyle.effect.offset.x && 
+-           effect.offset.y === effectStyle.effect.offset.y);
+-        const sameRadius = !effect.radius || 
+-          (effectStyle.effect.radius === effect.radius);
+-        
++        const sameColor =
++          !effect.color ||
++          (effectStyle.effect.color &&
++            colorsMatch(effect.color, effectStyle.effect.color));
++        const sameOffset =
++          !effect.offset ||
++          (effectStyle.effect.offset &&
++            effect.offset.x === effectStyle.effect.offset.x &&
++            effect.offset.y === effectStyle.effect.offset.y);
++        const sameRadius =
++          !effect.radius || effectStyle.effect.radius === effect.radius;
++
+@@ -181 +183 @@ export function checkType(
+-      
++
+@@ -186,5 +188,7 @@ export function checkType(
+-            const matchingToken = tokenLib.tokens.typography.find((token: any) => {
+-              // Verifica se o token tem um ID de estilo que corresponde ao do node
+-              return token.styleId === node.textStyleId;
+-            });
+-            
++            const matchingToken = tokenLib.tokens.typography.find(
++              (token: any) => {
++                // Verifica se o token tem um ID de estilo que corresponde ao do node
++                return token.styleId === node.textStyleId;
++              }
++            );
++
+@@ -198 +202 @@ export function checkType(
+-      
++
+@@ -211 +215,2 @@ export function checkType(
+-            message: "Estilo de texto não está na biblioteca nem nos tokens salvos",
++            message:
++              "Estilo de texto não está na biblioteca nem nos tokens salvos",
+@@ -300,3 +305,10 @@ export function newCheckFills(
+-                const matchingToken = tokenLib.tokens.fills.find((token: any) => {
+-                  if (token.paint && token.paint.type === "SOLID" && token.paint.color) {
+-                    return colorsMatch(color, token.paint.color);
++                const matchingToken = tokenLib.tokens.fills.find(
++                  (token: any) => {
++                    if (
++                      token.paint &&
++                      token.paint.type === "SOLID" &&
++                      token.paint.color
++                    ) {
++                      return colorsMatch(color, token.paint.color);
++                    }
++                    return false;
+@@ -304,3 +316,2 @@ export function newCheckFills(
+-                  return false;
+-                });
+-                
++                );
++
+@@ -403 +414,2 @@ export function newCheckEffects(
+-        message: "Nenhuma biblioteca selecionada; efeitos não podem ser validados",
++        message:
++          "Nenhuma biblioteca selecionada; efeitos não podem ser validados",
+@@ -441 +453,5 @@ export function newCheckEffects(
+-    if (node.effects && Array.isArray(node.effects) && node.effects.length > 0) {
++    if (
++      node.effects &&
++      Array.isArray(node.effects) &&
++      node.effects.length > 0
++    ) {
+@@ -445 +461 @@ export function newCheckEffects(
+-          
++
+@@ -450,14 +466,19 @@ export function newCheckEffects(
+-                const matchingToken = tokenLib.tokens.effects.find((token: any) => {
+-                  if (token.effect && token.effect.type === effect.type) {
+-                    // Compara propriedades básicas do efeito
+-                    const sameColor = !effect.color || 
+-                      (token.effect.color && 
+-                       colorsMatch(effect.color, token.effect.color));
+-                    const sameOffset = !effect.offset || 
+-                      (token.effect.offset && 
+-                       effect.offset.x === token.effect.offset.x && 
+-                       effect.offset.y === token.effect.offset.y);
+-                    const sameRadius = !effect.radius || 
+-                      (token.effect.radius === effect.radius);
+-                    
+-                    return sameColor && sameOffset && sameRadius;
++                const matchingToken = tokenLib.tokens.effects.find(
++                  (token: any) => {
++                    if (token.effect && token.effect.type === effect.type) {
++                      // Compara propriedades básicas do efeito
++                      const sameColor =
++                        !effect.color ||
++                        (token.effect.color &&
++                          colorsMatch(effect.color, token.effect.color));
++                      const sameOffset =
++                        !effect.offset ||
++                        (token.effect.offset &&
++                          effect.offset.x === token.effect.offset.x &&
++                          effect.offset.y === token.effect.offset.y);
++                      const sameRadius =
++                        !effect.radius || token.effect.radius === effect.radius;
++
++                      return sameColor && sameOffset && sameRadius;
++                    }
++                    return false;
+@@ -465,3 +486,2 @@ export function newCheckEffects(
+-                  return false;
+-                });
+-                
++                );
++
+@@ -475 +495 @@ export function newCheckEffects(
+-          
++
+@@ -479 +499,5 @@ export function newCheckEffects(
+-            if (effect.offset && effect.offset.x === 0 && effect.offset.y === 0) {
++            if (
++              effect.offset &&
++              effect.offset.x === 0 &&
++              effect.offset.y === 0
++            ) {
+@@ -488 +512 @@ export function newCheckEffects(
+-            
++
+@@ -498 +522 @@ export function newCheckEffects(
+-              
++
+@@ -647 +671 @@ export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
+-            
++
+@@ -687,31 +711,42 @@ export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
+-    // Verificar cornerRadius individual
+-    if (
+-      node.topLeftRadius !== undefined ||
+-      node.topRightRadius !== undefined ||
+-      node.bottomLeftRadius !== undefined ||
+-      node.bottomRightRadius !== undefined
+-    ) {
+-      const radii = [
+-        { value: node.topLeftRadius, corner: 'topLeft' },
+-        { value: node.topRightRadius, corner: 'topRight' },
+-        { value: node.bottomLeftRadius, corner: 'bottomLeft' },
+-        { value: node.bottomRightRadius, corner: 'bottomRight' }
+-      ];
+-
+-      for (const { value: radius, corner } of radii) {
+-        if (radius !== undefined) {
+-          let radiusFoundInTokens = false;
+-          
+-          // Primeiro verifica nos tokens salvos
+-          if (savedTokens && savedTokens.length > 0 && typeof radius === "number") {
+-            for (const tokenLib of savedTokens) {
+-              if (tokenLib.tokens && tokenLib.tokens.radius) {
+-                const matchingToken = tokenLib.tokens.radius.find((token: any) => {
+-                  // Verifica se o token tem um valor que corresponde ao raio do node
+-                  return token.value === radius && 
+-                         (!token.corner || token.corner === corner || token.corner === 'all');
+-                });
+-                
+-                if (matchingToken) {
+-                  radiusFoundInTokens = true;
+-                  break;
++      // Verificar cornerRadius individual
++      if (
++        node.topLeftRadius !== undefined ||
++        node.topRightRadius !== undefined ||
++        node.bottomLeftRadius !== undefined ||
++        node.bottomRightRadius !== undefined
++      ) {
++        const radii = [
++          { value: node.topLeftRadius, corner: "topLeft" },
++          { value: node.topRightRadius, corner: "topRight" },
++          { value: node.bottomLeftRadius, corner: "bottomLeft" },
++          { value: node.bottomRightRadius, corner: "bottomRight" }
++        ];
++
++        for (const { value: radius, corner } of radii) {
++          if (radius !== undefined) {
++            let radiusFoundInTokens = false;
++
++            // Primeiro verifica nos tokens salvos
++            if (
++              savedTokens &&
++              savedTokens.length > 0 &&
++              typeof radius === "number"
++            ) {
++              for (const tokenLib of savedTokens) {
++                if (tokenLib.tokens && tokenLib.tokens.radius) {
++                  const matchingToken = tokenLib.tokens.radius.find(
++                    (token: any) => {
++                      // Verifica se o token tem um valor que corresponde ao raio do node
++                      return (
++                        token.value === radius &&
++                        (!token.corner ||
++                          token.corner === corner ||
++                          token.corner === "all")
++                      );
++                    }
++                  );
++
++                  if (matchingToken) {
++                    radiusFoundInTokens = true;
++                    break;
++                  }
+@@ -721,29 +756,29 @@ export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
+-          }
+-          
+-          // Se não encontrou nos tokens, faz as verificações padrão
+-          if (!radiusFoundInTokens) {
+-            if (typeof radius !== "number" || radius < 0) {
+-              console.log(
+-                `[Lint] Erro: Corner radius ${corner} inválido em`,
+-                node.name
+-              );
+-              errors.push({
+-                type: "corner-radius-individual",
+-                message: `Corner radius ${corner} inválido`,
+-                nodeId: node.id,
+-                nodeName: node.name,
+-                suggestions: []
+-              });
+-              break;
+-            } else if (radius > 100) {
+-              console.log(
+-                `[Lint] Aviso: Corner radius ${corner} muito alto em`,
+-                node.name
+-              );
+-              errors.push({
+-                type: "corner-radius-individual-high",
+-                message: `Corner radius ${corner} muito alto`,
+-                nodeId: node.id,
+-                nodeName: node.name,
+-                suggestions: []
+-              });
++
++            // Se não encontrou nos tokens, faz as verificações padrão
++            if (!radiusFoundInTokens) {
++              if (typeof radius !== "number" || radius < 0) {
++                console.log(
++                  `[Lint] Erro: Corner radius ${corner} inválido em`,
++                  node.name
++                );
++                errors.push({
++                  type: "corner-radius-individual",
++                  message: `Corner radius ${corner} inválido`,
++                  nodeId: node.id,
++                  nodeName: node.name,
++                  suggestions: []
++                });
++                break;
++              } else if (radius > 100) {
++                console.log(
++                  `[Lint] Aviso: Corner radius ${corner} muito alto em`,
++                  node.name
++                );
++                errors.push({
++                  type: "corner-radius-individual-high",
++                  message: `Corner radius ${corner} muito alto`,
++                  nodeId: node.id,
++                  nodeName: node.name,
++                  suggestions: []
++                });
++              }

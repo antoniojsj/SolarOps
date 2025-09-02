@@ -7,41 +7,70 @@ import Preloader from "./Preloader";
 
 import "../styles/panel.css";
 
-function Panel(props) {
+// Interface compartilhada entre componentes
+interface ErrorItem {
+  id: string;
+  type?: string;
+  message?: string;
+  node?: {
+    id: string;
+    name?: string;
+    type?: string;
+    [key: string]: any;
+  };
+  errors?: Array<{
+    type: string;
+    value?: string;
+    message: string;
+    [key: string]: any;
+  }>;
+  property?: string;
+  value?: any;
+  expected?: any;
+  [key: string]: any;
+}
+
+interface PanelProps {
+  visibility: boolean;
+  node: any;
+  errorArray: ErrorItem[];
+  ignoredErrors: ErrorItem[];
+  onIgnoredUpdate: (error: ErrorItem) => void;
+  onIgnoreAll: (errors: ErrorItem[]) => void;
+  onSelectedListUpdate?: (ids: string[]) => void;
+  [key: string]: any;
+}
+
+const Panel: React.FC<PanelProps> = props => {
   const isVisible = props.visibility;
   const node = props.node;
 
-  // Reduce the size of our array of errors by removing
-  // nodes with no errors on them.
-  let filteredErrorArray = props.errorArray.filter(
-    item => item.errors.length >= 1
+  // Filtra os itens que têm erros
+  const filteredErrorArray = props.errorArray.filter(
+    item => item.errors && item.errors.length >= 1
   );
 
+  // Remove erros que estão na lista de ignorados
   filteredErrorArray.forEach(item => {
-    // Check each layer/node to see if an error that matches it's layer id
-    if (props.ignoredErrors.some(x => x.node.id === item.id)) {
-      // When we know a matching error exists loop over all the ignored
-      // errors until we find it.
-      props.ignoredErrors.forEach(ignoredError => {
-        if (ignoredError.node.id === item.id) {
-          // Loop over every error this layer/node until we find the
-          // error that should be ignored, then remove it.
-          for (let i = 0; i < item.errors.length; i++) {
-            if (item.errors[i].value === ignoredError.value) {
-              item.errors.splice(i, 1);
-              i--;
-            }
-          }
+    // Verifica se há erros ignorados para este item
+    const matchingIgnoredErrors = props.ignoredErrors.filter(
+      ignoredError => ignoredError.node?.id === item.id
+    );
+
+    if (matchingIgnoredErrors.length > 0 && item.errors) {
+      // Para cada erro ignorado, remove-o da lista de erros do item
+      matchingIgnoredErrors.forEach(ignoredError => {
+        if (ignoredError.value && item.errors) {
+          item.errors = item.errors.filter(
+            error => error.value !== ignoredError.value
+          );
         }
       });
     }
   });
 
-  let activeId = props.errorArray.find(e => e.id === node.id);
-  let errors = [];
-  if (activeId !== undefined) {
-    errors = activeId.errors;
-  }
+  const activeId = props.errorArray.find(e => e.id === node.id);
+  const errors = activeId?.errors || [];
 
   const variants = {
     open: { opacity: 1, x: 0 },
@@ -49,45 +78,60 @@ function Panel(props) {
   };
 
   function handlePrevNavigation() {
-    let currentIndex = filteredErrorArray.findIndex(
-      item => item.id === activeId.id
+    if (!activeId || !props.onSelectedListUpdate) return;
+
+    const currentIndex = filteredErrorArray.findIndex(
+      item => item.id === activeId?.id
     );
+
+    let nextActiveId: ErrorItem | undefined;
+
+    if (currentIndex === -1) return;
+
     if (filteredErrorArray[currentIndex + 1] !== undefined) {
-      activeId = filteredErrorArray[currentIndex + 1];
+      nextActiveId = filteredErrorArray[currentIndex + 1];
     } else if (currentIndex !== 0) {
-      activeId = filteredErrorArray[0];
-    } else {
-      activeId = filteredErrorArray[currentIndex - 1];
+      nextActiveId = filteredErrorArray[0];
+    } else if (currentIndex > 0) {
+      nextActiveId = filteredErrorArray[currentIndex - 1];
     }
 
-    props.onSelectedListUpdate([activeId.id]);
-
-    parent.postMessage(
-      { pluginMessage: { type: "fetch-layer-data", id: activeId.id } },
-      "*"
-    );
+    if (nextActiveId) {
+      props.onSelectedListUpdate([nextActiveId.id]);
+      parent.postMessage(
+        { pluginMessage: { type: "fetch-layer-data", id: nextActiveId.id } },
+        "*"
+      );
+    }
   }
 
   function handleNextNavigation() {
-    let currentIndex = filteredErrorArray.findIndex(
-      item => item.id === activeId.id
-    );
-    let lastItem = currentIndex + filteredErrorArray.length - 1;
+    if (!activeId || !props.onSelectedListUpdate) return;
 
-    if (filteredErrorArray[currentIndex - 1] !== undefined) {
-      activeId = filteredErrorArray[currentIndex - 1];
-    } else if (filteredErrorArray.length === 1) {
-      activeId = filteredErrorArray[0];
+    const currentIndex = filteredErrorArray.findIndex(
+      item => item.id === activeId?.id
+    );
+
+    if (currentIndex === -1) return;
+
+    const lastIndex = filteredErrorArray.length - 1;
+    let nextActiveId: ErrorItem | undefined;
+
+    if (currentIndex > 0) {
+      nextActiveId = filteredErrorArray[currentIndex - 1];
+    } else if (currentIndex < lastIndex) {
+      nextActiveId = filteredErrorArray[lastIndex];
     } else {
-      activeId = filteredErrorArray[lastItem];
+      nextActiveId = filteredErrorArray[0];
     }
 
-    props.onSelectedListUpdate([activeId.id]);
-
-    parent.postMessage(
-      { pluginMessage: { type: "fetch-layer-data", id: activeId.id } },
-      "*"
-    );
+    if (nextActiveId) {
+      props.onSelectedListUpdate([nextActiveId.id]);
+      parent.postMessage(
+        { pluginMessage: { type: "fetch-layer-data", id: nextActiveId.id } },
+        "*"
+      );
+    }
   }
 
   // Open and closes the panel.
@@ -96,24 +140,58 @@ function Panel(props) {
   }
 
   // Passes the ignored error back to it's parent.
-  function handleIgnoreChange(error) {
-    props.onIgnoredUpdate(error);
+  function handleIgnoreChange(error: ErrorItem) {
+    if (props.onIgnoredUpdate) {
+      props.onIgnoredUpdate(error);
+    }
   }
 
-  function handleSelectAll(error) {
-    let nodesToBeSelected = [];
+  // Handles ignoring all errors of the same type
+  function handleIgnoreAll(error: ErrorItem) {
+    const errorsToBeIgnored: ErrorItem[] = [];
 
     filteredErrorArray.forEach(node => {
+      if (!node.errors) return;
+
       node.errors.forEach(item => {
-        if (item.value === error.value) {
-          if (item.type === error.type) {
-            nodesToBeSelected.push(item.node.id);
-          }
+        if (item.value === error.value && item.type === error.type) {
+          errorsToBeIgnored.push({
+            ...error,
+            node: {
+              id: node.id,
+              name: node.node?.name,
+              type: node.node?.type
+            },
+            value: item.value
+          });
         }
       });
     });
 
-    if (nodesToBeSelected.length) {
+    if (errorsToBeIgnored.length > 0 && props.onIgnoreAll) {
+      props.onIgnoreAll(errorsToBeIgnored);
+    }
+  }
+
+  // Selects all nodes with the same error
+  function handleSelectAll(error: ErrorItem) {
+    const nodesToBeSelected: string[] = [];
+
+    filteredErrorArray.forEach(node => {
+      if (!node.errors) return;
+
+      node.errors.forEach(item => {
+        if (
+          item.value === error.value &&
+          item.type === error.type &&
+          item.node?.id
+        ) {
+          nodesToBeSelected.push(item.node.id);
+        }
+      });
+    });
+
+    if (nodesToBeSelected.length > 0) {
       parent.postMessage(
         {
           pluginMessage: {
@@ -126,41 +204,23 @@ function Panel(props) {
     }
   }
 
-  function handleIgnoreAll(error) {
-    let errorsToBeIgnored = [];
-
-    filteredErrorArray.forEach(node => {
-      node.errors.forEach(item => {
-        if (item.value === error.value) {
-          if (item.type === error.type) {
-            errorsToBeIgnored.push(item);
-          }
-        }
-      });
-    });
-
-    if (errorsToBeIgnored.length) {
-      props.onIgnoreAll(errorsToBeIgnored);
-    }
-  }
-
-  // We need an conditional statement for rendering in case the user deletes the selected layer.
+  // We need a conditional statement for rendering in case the user deletes the selected layer.
   return (
     <React.Fragment>
       {activeId !== undefined ? (
         <motion.div
-          className={`panel panel--fullwidth`}
+          className="panel panel--fullwidth"
           animate={isVisible ? "open" : "closed"}
           transition={{ duration: 0.3, type: "tween" }}
           variants={variants}
         >
           <PanelHeader
-            title={node.name}
+            title={node?.name || "Unnamed Node"}
             handleHide={handleChange}
-          ></PanelHeader>
+          />
 
           <div className="panel-body">
-            {errors.length ? (
+            {errors && errors.length > 0 ? (
               <React.Fragment>
                 <div className="error-label">Errors — {errors.length}</div>
                 <ErrorList
@@ -169,10 +229,10 @@ function Panel(props) {
                   onSelectAll={handleSelectAll}
                   errors={errors}
                   allErrors={filteredErrorArray}
-                  onOpenPanel={error => {
+                  onOpenPanel={(error: ErrorItem) => {
                     if (props.onOpenPanel) props.onOpenPanel(error);
                   }}
-                  onFixError={error => {
+                  onFixError={(error: ErrorItem) => {
                     parent.postMessage(
                       {
                         pluginMessage: {
@@ -241,6 +301,6 @@ function Panel(props) {
       ) : null}
     </React.Fragment>
   );
-}
+};
 
 export default React.memo(Panel);

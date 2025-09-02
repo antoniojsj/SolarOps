@@ -3,7 +3,35 @@ import { motion } from "framer-motion/dist/framer-motion";
 
 import ListItem from "./ListItem";
 
-function NodeList(props) {
+interface NodeError {
+  id: string;
+  errors: Array<{
+    type: string;
+    value?: string;
+    message: string;
+    [key: string]: any;
+  }>;
+  [key: string]: any;
+}
+
+interface IgnoredError {
+  node?: {
+    id: string;
+  };
+  value?: string;
+  [key: string]: any;
+}
+
+interface NodeListProps {
+  errorArray: NodeError[];
+  ignoredErrorArray: IgnoredError[];
+  activeNodeIds: string[];
+  selectedListItems: string[];
+  onOpenPanel: (node: { id: string; [key: string]: any }) => void;
+  [key: string]: any;
+}
+
+const NodeList: React.FC<NodeListProps> = props => {
   // Reduce the size of our array of errors by removing
   // nodes with no errors on them.
   let filteredErrorArray = props.errorArray.filter(
@@ -266,6 +294,6 @@ function NodeList(props) {
       </React.Fragment>
     );
   }
-}
+};
 
 export default React.memo(NodeList);

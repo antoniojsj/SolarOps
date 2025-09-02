@@ -8,6 +8,7 @@ import Modal from "./Modal";
 import StylesPanel from "./StylesPanel";
 import AnalysisResultsCard from "./AnalysisResultsCard";
 import ConformityScoreBar from "./ConformityScoreBar";
+import ConformityItemChart from "./ConformityItemChart";
 import Preloader from "./Preloader";
 import "../styles/ui.css";
 
@@ -501,6 +502,16 @@ function BulkErrorList(props) {
 
   // Cálculo dinâmico dos cards principais: já computado acima
 
+  // Debug: verificar dados recebidos
+  console.log("[BulkErrorList] Props recebidas:", {
+    libraries: props.libraries,
+    errorArray: props.errorArray,
+    ignoredErrorArray: props.ignoredErrorArray,
+    nodeArray: props.nodeArray,
+    allScannedNodeIds: Array.from(allScannedNodeIds || []),
+    nodesWithErrors: Array.from(nodesWithErrors || [])
+  });
+
   // Tipos para os cards de conformidade por item
   const itemTypes = [
     {
@@ -520,208 +531,206 @@ function BulkErrorList(props) {
     { key: "effects", label: "Efeitos", icon: require("../assets/effects.svg") }
   ];
 
-  // Função para calcular conformidade por tipo
-  function errorTypeMatchesCategory(errorType: string, category: string) {
-    if (!errorType || !category) return false;
-    switch (category) {
+  // Função para verificar se um nó é aplicável a um determinado tipo
+  function isNodeApplicable(node: any, typeKey: string): boolean {
+    if (!node) {
+      console.log(`[isNodeApplicable] Nó inválido para tipo ${typeKey}`);
+      return false;
+    }
+
+    switch (typeKey) {
       case "fill":
-        return errorType.startsWith("fill-");
+        return !!(
+          node.fillStyleId ||
+          (Array.isArray(node.fills) && node.fills.length > 0) ||
+          node.backgrounds ||
+          node.backgroundColor
+        );
+
       case "text":
-        return errorType.startsWith("text-");
+        return (
+          node.type === "TEXT" ||
+          !!node.textStyleId ||
+          (node.characters && node.characters.length > 0)
+        );
+
       case "stroke":
-        return errorType.startsWith("stroke-");
+        return !!(
+          node.strokeStyleId ||
+          (Array.isArray(node.strokes) && node.strokes.length > 0)
+        );
+
       case "effects":
-        return errorType.startsWith("effect-");
-      case "radius":
-        return errorType.startsWith("corner-radius");
-      case "component":
-        return errorType === "detach" || errorType.startsWith("component-");
+        return !!(
+          node.effectStyleId ||
+          (Array.isArray(node.effects) && node.effects.length > 0)
+        );
+
       case "gap":
-        return errorType.startsWith("gap-");
+        return ["FRAME", "GROUP", "INSTANCE", "COMPONENT"].includes(node.type);
+
+      case "radius":
+        return (
+          node.cornerRadius !== undefined ||
+          node.topLeftRadius !== undefined ||
+          node.topRightRadius !== undefined ||
+          node.bottomLeftRadius !== undefined ||
+          node.bottomRightRadius !== undefined
+        );
+
+      case "component":
+        return node.type === "COMPONENT" || node.type === "INSTANCE";
+
       default:
+        console.warn(`[isNodeApplicable] Tipo não suportado: ${typeKey}`);
         return false;
     }
   }
 
-  function getConformityByType(typeKey) {
-    // Constrói sets de tokens por categoria
-    const styleIdSet = new Set<string>();
-    const valueSet = new Set<number>();
+  /**
+   * Calculates conformity statistics for a specific token type
+   * @param typeKey The type of token to check (e.g., 'fill', 'text', 'stroke')
+   * @returns Object containing conform/non-conform counts and percentage
+   */
+  function getConformityByType(
+    typeKey: string
+  ): { conform: number; nonConform: number; percent: number } {
+    let conformCount = 0;
+    let nonConformCount = 0;
+    let totalProcessed = 0;
 
-    if (props.libraries && Array.isArray(props.libraries)) {
-      props.libraries.forEach(lib => {
+    try {
+      // Validate input
+      if (!props.nodeArray || !Array.isArray(props.nodeArray)) {
+        console.warn(
+          `[getConformityByType] nodeArray inválido para tipo ${typeKey}`
+        );
+        return { conform: 0, nonConform: 0, percent: 0 };
+      }
+
+      console.log(
+        `[getConformityByType] Iniciando análise de conformidade para ${props.nodeArray.length} nós do tipo ${typeKey}`
+      );
+
+      // Process each node
+      props.nodeArray.forEach((node: any) => {
+        if (!node) return;
+
+        // Skip nodes not applicable to this token type
+        if (!isNodeApplicable(node, typeKey)) {
+          console.log(
+            `[getConformityByType] Nó ${node.id} não é aplicável ao tipo ${typeKey}`
+          );
+          return;
+        }
+
+        totalProcessed++;
+
+        // Check if node is conformant based on token type
+        let isConform = false;
+        const styleTokens = node.styleTokens || {};
+
         switch (typeKey) {
           case "fill":
-            (lib.fills || []).forEach(
-              (t: any) => t?.id && styleIdSet.add(t.id)
+            isConform = !!(
+              styleTokens.fillStyleId ||
+              node.fillStyleId ||
+              (Array.isArray(node.fills) &&
+                node.fills.some(
+                  (fill: any) => fill.styleId || fill.fillStyleId
+                ))
             );
             break;
+
           case "text":
-            (lib.text || []).forEach((t: any) => t?.id && styleIdSet.add(t.id));
+            isConform = !!(styleTokens.textStyleId || node.textStyleId);
             break;
+
           case "stroke":
-            (lib.strokes || []).forEach(
-              (t: any) => t?.id && styleIdSet.add(t.id)
+            isConform = !!(
+              styleTokens.strokeStyleId ||
+              node.strokeStyleId ||
+              (Array.isArray(node.strokes) &&
+                node.strokes.some(
+                  (stroke: any) => stroke.styleId || stroke.strokeStyleId
+                ))
             );
             break;
+
           case "effects":
-            (lib.effects || []).forEach(
-              (t: any) => t?.id && styleIdSet.add(t.id)
+            isConform = !!(styleTokens.effectStyleId || node.effectStyleId);
+            break;
+
+          case "gap":
+            // For gap, we consider it conformant if it has itemSpacing or gap properties
+            isConform =
+              node.itemSpacing !== undefined || node.gap !== undefined;
+            break;
+
+          case "radius":
+            // For radius, we consider it conformant if it has any radius properties
+            isConform = !!(
+              node.cornerRadius !== undefined ||
+              node.topLeftRadius !== undefined ||
+              node.topRightRadius !== undefined ||
+              node.bottomLeftRadius !== undefined ||
+              node.bottomRightRadius !== undefined
             );
             break;
-          case "gap":
-            (lib.gaps || []).forEach((t: any) => {
-              if (t?.value !== undefined) valueSet.add(t.value);
-            });
+
+          case "component":
+            // For components, we consider it conformant if it's a component or instance
+            isConform = node.type === "COMPONENT" || node.type === "INSTANCE";
             break;
-          case "radius":
-            (lib.radius || []).forEach((t: any) => {
-              if (t?.value !== undefined) valueSet.add(t.value);
-            });
-            break;
+
+          default:
+            console.warn(
+              `[getConformityByType] Tipo não suportado: ${typeKey}`
+            );
+            return { conform: 0, nonConform: 0, percent: 0 };
+        }
+
+        // Update counters
+        if (isConform) {
+          conformCount++;
+          console.log(
+            `[getConformityByType] Nó ${node.id} (${node.name ||
+              "sem nome"}) CONFORME para ${typeKey}`
+          );
+        } else {
+          nonConformCount++;
+          console.log(
+            `[getConformityByType] Nó ${node.id} (${node.name ||
+              "sem nome"}) NÃO CONFORME para ${typeKey}`
+          );
         }
       });
-    }
 
-    // Se não há tokens salvos para a categoria, retorna 0%
-    const hasAnyToken = styleIdSet.size > 0 || valueSet.size > 0;
-    if (!hasAnyToken) {
+      // Calculate conformity percentage
+      const total = conformCount + nonConformCount;
+      const percent =
+        total > 0 ? Math.round((conformCount / total) * 100) : 100;
+
+      console.log(`[getConformityByType] Resumo para ${typeKey}:`, {
+        totalNodes: props.nodeArray.length,
+        totalProcessed,
+        conform: conformCount,
+        nonConform: nonConformCount,
+        percent
+      });
+
+      return {
+        conform: conformCount,
+        nonConform: nonConformCount,
+        percent
+      };
+    } catch (error) {
+      console.error(
+        `[getConformityByType] Erro ao processar tipo ${typeKey}:`,
+        error
+      );
       return { conform: 0, nonConform: 0, percent: 0 };
     }
-
-    // Função auxiliar: determina se o nó é aplicável à categoria
-    const isApplicable = (node: any): boolean => {
-      if (!node) return false;
-      switch (typeKey) {
-        case "fill":
-          return !!(node.fillStyleId || (node.fills && node.fills.length));
-        case "text":
-          return !!(node.textStyleId || node.type === "TEXT");
-        case "stroke":
-          return !!(
-            node.strokeStyleId ||
-            (node.strokes && node.strokes.length)
-          );
-        case "effects":
-          return !!(
-            node.effectStyleId ||
-            (node.effects && node.effects.length)
-          );
-        case "gap":
-          return node.gap !== undefined && node.gap !== null;
-        case "radius":
-          return node.cornerRadius !== undefined && node.cornerRadius !== null;
-        default:
-          return false;
-      }
-    };
-
-    let conform = 0;
-    let nonConform = 0;
-
-    allScannedNodeIds.forEach(nid => {
-      const node = nodeById[nid];
-      if (!isApplicable(node)) return;
-
-      let usesToken = false;
-      const styleTokens = node.styleTokens || {};
-
-      // Primeiro verifica styleId direto
-      switch (typeKey) {
-        case "fill": {
-          if (Array.isArray(node.fills)) {
-            usesToken = node.fills.some(
-              fill =>
-                typeof fill.fillStyleId === "string" &&
-                styleIdSet.has(fill.fillStyleId)
-            );
-          } else {
-            usesToken =
-              typeof node.fillStyleId === "string" &&
-              styleIdSet.has(node.fillStyleId);
-          }
-          break;
-        }
-        case "text": {
-          usesToken =
-            typeof node.textStyleId === "string" &&
-            styleIdSet.has(node.textStyleId);
-          break;
-        }
-        case "stroke": {
-          if (Array.isArray(node.strokes)) {
-            usesToken = node.strokes.some(
-              stroke =>
-                typeof stroke.strokeStyleId === "string" &&
-                styleIdSet.has(stroke.strokeStyleId)
-            );
-          } else {
-            usesToken =
-              typeof node.strokeStyleId === "string" &&
-              styleIdSet.has(node.strokeStyleId);
-          }
-          break;
-        }
-        case "effects": {
-          if (Array.isArray(node.effects)) {
-            usesToken = node.effects.some(
-              effect =>
-                typeof effect.effectStyleId === "string" &&
-                styleIdSet.has(effect.effectStyleId)
-            );
-          } else {
-            usesToken =
-              typeof node.effectStyleId === "string" &&
-              styleIdSet.has(node.effectStyleId);
-          }
-          break;
-        }
-        case "gap": {
-          usesToken = typeof node.gap === "number" && valueSet.has(node.gap);
-          break;
-        }
-        case "radius": {
-          usesToken =
-            typeof node.cornerRadius === "number" &&
-            valueSet.has(node.cornerRadius);
-          break;
-        }
-      }
-
-      // Se não usa token direto, verifica styleTokens
-      if (!usesToken && styleTokens) {
-        switch (typeKey) {
-          case "fill":
-            usesToken =
-              styleTokens.fillStyle && styleIdSet.has(styleTokens.fillStyle);
-            break;
-          case "text":
-            usesToken =
-              styleTokens.textStyle && styleIdSet.has(styleTokens.textStyle);
-            break;
-          case "stroke":
-            usesToken =
-              styleTokens.strokeStyle &&
-              styleIdSet.has(styleTokens.strokeStyle);
-            break;
-          case "effects":
-            usesToken =
-              styleTokens.effectStyle &&
-              styleIdSet.has(styleTokens.effectStyle);
-            break;
-        }
-      }
-
-      if (usesToken) {
-        conform++;
-      } else {
-        nonConform++;
-      }
-    });
-
-    const total = conform + nonConform;
-    const percent = total > 0 ? Math.round((conform / total) * 100) : 0;
-    return { conform, nonConform, percent };
   }
 
   // Listener para receber o JSON exportado e baixar
@@ -1098,6 +1107,7 @@ function BulkErrorList(props) {
                   style={{
                     display: "flex",
                     flexDirection: "column",
+                    gap: "12px",
                     margin: 0,
                     padding: 0
                   }}
@@ -1109,85 +1119,13 @@ function BulkErrorList(props) {
                       percent
                     } = getConformityByType(type.key);
                     return (
-                      <div
+                      <ConformityItemChart
                         key={type.key}
-                        className="system-card"
-                        style={{
-                          marginBottom: 16,
-                          paddingBottom: 20,
-                          border: "1px solid rgba(255, 255, 255, 0.1)"
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center"
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontWeight: 700,
-                              fontSize: 12,
-                              color: "#fff",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 4
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: "flex",
-                                alignItems: "center"
-                              }}
-                            >
-                              <img
-                                src={type.icon}
-                                alt={type.label}
-                                width={20}
-                                height={20}
-                                style={{ marginRight: 4 }}
-                              />
-                            </span>
-                            {type.label}
-                          </div>
-                          <div
-                            style={{
-                              fontWeight: 600,
-                              fontSize: 12,
-                              color: "#b3b3b3"
-                            }}
-                          >
-                            {conform} conforme, {nonConform} não conforme
-                          </div>
-                          <span
-                            className="conformity-score-badge"
-                            style={{
-                              background:
-                                percent >= 70
-                                  ? "rgba(39, 174, 96, 0.18)"
-                                  : "rgba(254, 98, 98, 0.18)",
-                              color: percent >= 70 ? "#27ae60" : "#fe6262",
-                              fontSize: 12
-                            }}
-                          >
-                            {percent}%
-                          </span>
-                        </div>
-                        <div
-                          className="conformity-score-progress-bg"
-                          style={{ margin: "16px 0 0 0" }}
-                        >
-                          <div
-                            className="conformity-score-progress-fill"
-                            style={{
-                              width: `${percent}%`,
-                              background: percent >= 70 ? "#27ae60" : "#fe6262"
-                            }}
-                          ></div>
-                        </div>
-                        {/* Principais problemas: pode ser mantido fixo ou melhorado depois */}
-                      </div>
+                        type={type}
+                        conform={conform}
+                        nonConform={nonConform}
+                        percent={percent}
+                      />
                     );
                   })}
                 </div>

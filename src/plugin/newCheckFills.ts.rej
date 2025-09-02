@@ -1,0 +1,21 @@
+diff a/src/plugin/newCheckFills.ts b/src/plugin/newCheckFills.ts	(rejected hunks)
+@@ -60,3 +60,10 @@ export function newCheckFills(
+-                const matchingToken = tokenLib.tokens.fills.find((token: any) => {
+-                  if (token.paint && token.paint.type === "SOLID" && token.paint.color) {
+-                    return colorsMatch(color, token.paint.color);
++                const matchingToken = tokenLib.tokens.fills.find(
++                  (token: any) => {
++                    if (
++                      token.paint &&
++                      token.paint.type === "SOLID" &&
++                      token.paint.color
++                    ) {
++                      return colorsMatch(color, token.paint.color);
++                    }
++                    return false;
+@@ -64,3 +71,2 @@ export function newCheckFills(
+-                  return false;
+-                });
+-                
++                );
++

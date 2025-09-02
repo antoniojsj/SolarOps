@@ -1,0 +1,14 @@
+{
+  "name": "Prisma Design System Analyzer",
+  "id": "1520157561724138383",
+  "api": "1.0.0",
+  "documentAccess": "dynamic-page",
+  "main": "dist/code.js",
+  "ui": "ui.html",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

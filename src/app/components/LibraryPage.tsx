@@ -3,7 +3,27 @@ import { motion, AnimatePresence } from "framer-motion/dist/framer-motion";
 import "../styles/library.css";
 import { useState, useEffect, useCallback } from "react";
 
-const LibraryPage = ({
+// Interface para as bibliotecas de componentes
+interface ComponentLibrary {
+  id: string;
+  name: string;
+  tokens?: any;
+  fillsCount?: number;
+  textCount?: number;
+  effectsCount?: number;
+  count?: number; // Adicionado para suportar a propriedade count
+  componentKeys?: string[]; // Adicionado para suportar a propriedade componentKeys
+  styles?: any; // Adicionado para suportar a propriedade styles
+}
+
+interface LibraryPageProps {
+  libraries: ComponentLibrary[];
+  onUpdateLibraries: (libraries: ComponentLibrary[]) => void;
+  localStyles: any;
+  activeComponentLibraries: ComponentLibrary[];
+}
+
+const LibraryPage: React.FC<LibraryPageProps> = ({
   libraries = [],
   onUpdateLibraries,
   localStyles,
@@ -16,7 +36,30 @@ const LibraryPage = ({
     parent.postMessage({ pluginMessage: { type: "save-library" } }, "*");
   };
 
-  const removeLibrary = async index => {
+  const updateLibrary = (index: number, key: string, value: any) => {
+    // Update the library at the specified index
+    const updatedLibraries = [...libraries];
+    updatedLibraries[index][key] = value;
+
+    // Update the state with the new libraries array
+    onUpdateLibraries(updatedLibraries);
+
+    // Send a message to the plugin layer to update the library in client storage
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "update-library",
+          index: index,
+          key: key,
+          value: value,
+          storageArray: updatedLibraries
+        }
+      },
+      "*"
+    );
+  };
+
+  const removeLibrary = async (index: number) => {
     // Remove the library from the libraries array
     const updatedLibraries = [...libraries];
     updatedLibraries.splice(index, 1);
@@ -244,7 +287,7 @@ const LibraryPage = ({
               >
                 <h3 className="item-content-title">{library.name}</h3>
                 <span className="item-content-styles">
-                  {library.styles} styles
+                  {library.styles ? library.styles.length : 0} styles
                 </span>
               </div>
               <motion.button
