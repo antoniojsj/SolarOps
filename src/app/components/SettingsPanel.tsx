@@ -617,36 +617,111 @@ function SettingsPanel(props: SettingsPanelProps) {
         props.onUpdateLibraries(libs);
       }
 
-      // Se houver tokens de design, salvá-los junto
+      // Salvar tokens de design e bibliotecas
+      const savePromises: Promise<void>[] = [];
+
+      // 1. Salvar tokens de design se existirem
       if (props.designTokens) {
         console.log("[SettingsPanel] Salvando tokens de design...");
-        await new Promise<void>(resolve => {
-          const handleSaveResponse = (event: MessageEvent) => {
-            const { pluginMessage } = event.data;
-            if (pluginMessage && pluginMessage.type === "design-tokens-saved") {
-              window.removeEventListener("message", handleSaveResponse);
-              console.log(
-                "[SettingsPanel] Tokens de design salvos com sucesso"
-              );
-              resolve();
-            }
-          };
-
-          window.addEventListener("message", handleSaveResponse);
-
-          parent.postMessage(
-            {
-              pluginMessage: {
-                type: "save-design-tokens",
-                tokens: props.designTokens
+        savePromises.push(
+          new Promise<void>((resolve, reject) => {
+            const handleSaveResponse = (event: MessageEvent) => {
+              const { pluginMessage } = event.data;
+              if (
+                pluginMessage &&
+                pluginMessage.type === "design-tokens-saved"
+              ) {
+                window.removeEventListener("message", handleSaveResponse);
+                if (pluginMessage.success) {
+                  console.log(
+                    "[SettingsPanel] Tokens de design salvos com sucesso"
+                  );
+                  resolve();
+                } else {
+                  console.error(
+                    "[SettingsPanel] Erro ao salvar tokens de design:",
+                    pluginMessage.message
+                  );
+                  reject(new Error(pluginMessage.message));
+                }
               }
-            },
-            "*"
-          );
+            };
 
-          // Timeout para garantir que não fique travado
-          setTimeout(resolve, 5000);
-        });
+            window.addEventListener("message", handleSaveResponse);
+
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "save-design-tokens",
+                  tokens: props.designTokens
+                }
+              },
+              "*"
+            );
+
+            // Timeout para garantir que não fique travado
+            setTimeout(() => resolve(), 5000);
+          })
+        );
+      }
+
+      // 2. Salvar bibliotecas de tokens
+      if (libs && libs.length > 0) {
+        console.log("[SettingsPanel] Salvando bibliotecas de tokens...");
+        savePromises.push(
+          new Promise<void>((resolve, reject) => {
+            const handleSaveResponse = (event: MessageEvent) => {
+              const { pluginMessage } = event.data;
+              if (
+                pluginMessage &&
+                pluginMessage.type === "library-tokens-saved"
+              ) {
+                window.removeEventListener("message", handleSaveResponse);
+                if (pluginMessage.success) {
+                  console.log(
+                    `[SettingsPanel] Biblioteca de tokens salva com sucesso em: ${pluginMessage.filePath}`
+                  );
+                  resolve();
+                } else {
+                  console.error(
+                    "[SettingsPanel] Erro ao salvar biblioteca de tokens:",
+                    pluginMessage.message
+                  );
+                  // Não rejeitamos a promise para não interromper o fluxo
+                  resolve();
+                }
+              }
+            };
+
+            window.addEventListener("message", handleSaveResponse);
+
+            // Gerar um nome amigável para o arquivo baseado nas bibliotecas
+            const libNames = libs
+              .map(lib => lib.name.replace(/[^a-z0-9]/gi, "_").toLowerCase())
+              .join("_");
+            const filename = `libraries_${libNames ||
+              "all"}_${new Date().getTime()}`;
+
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "save-library-tokens",
+                  libraries: libs,
+                  filename: filename
+                }
+              },
+              "*"
+            );
+
+            // Timeout para garantir que não fique travado
+            setTimeout(resolve, 5000);
+          })
+        );
+      }
+
+      // Aguardar todas as operações de salvamento
+      if (savePromises.length > 0) {
+        await Promise.all(savePromises);
       }
 
       // Salvar as bibliotecas

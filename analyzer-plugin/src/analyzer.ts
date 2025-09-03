@@ -60,7 +60,9 @@ function analyzeNodeColors(
         });
         
         if (!isStyleInDesignSystem(fillStyleId, 'colorStyles', stylesData)) {
-          nonCompliantColors++;
+          if (nonCompliantColors === 0) { // Only increment if not already marked as non-compliant for colors
+            nonCompliantColors++;
+          }
           console.log(`  ❌ Cor não conforme encontrada (fill):`, {
             nodeId: node.id,
             nodeName: node.name,
@@ -71,13 +73,14 @@ function analyzeNodeColors(
         }
       } else if (hasNonImageFills(node)) {
         // If node has non-image fills but no style, count as non-compliant
-        nonCompliantColors++;
+        if (nonCompliantColors === 0) { // Only increment if not already marked as non-compliant for colors
+          nonCompliantColors++;
+        }
         console.log(`  ❌ Cor não conforme encontrada (fill):`, {
           nodeId: node.id,
           nodeName: node.name,
           reason: 'Sem estilo vinculado (e não é imagem)'
-        });
-      }
+          });
     }
 
     // Check strokeStyleId
@@ -92,7 +95,9 @@ function analyzeNodeColors(
         });
         
         if (!isStyleInDesignSystem(strokeStyleId, 'colorStyles', stylesData)) {
-          nonCompliantColors++;
+          if (nonCompliantColors === 0) { // Only increment if not already marked as non-compliant for colors
+            nonCompliantColors++;
+          }
           console.log(`  ❌ Cor não conforme encontrada (stroke):`, {
             nodeId: node.id,
             nodeName: node.name,
@@ -103,7 +108,9 @@ function analyzeNodeColors(
         }
       } else if (hasStrokes(node)) {
         // If node has strokes but no style, count as non-compliant
-        nonCompliantColors++;
+        if (nonCompliantColors === 0) { // Only increment if not already marked as non-compliant for colors
+          nonCompliantColors++;
+        }
         console.log(`  ❌ Cor não conforme encontrada (stroke):`, {
           nodeId: node.id,
           nodeName: node.name,

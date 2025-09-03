@@ -30,10 +30,6 @@ function Navigation(props) {
   // - stylesClick
   // - Funções relacionadas a abas que não estão mais sendo usadas
 
-  const handleLintRulesChange = boolean => {
-    props.updateLintRules(boolean);
-  };
-
   const handlePanelVisible = boolean => {
     setPanelVisible(boolean);
   };
@@ -135,7 +131,7 @@ function Navigation(props) {
         onHandlePanelVisible={handlePanelVisible}
         ignoredErrorArray={props.ignoredErrorArray}
         borderRadiusValues={props.borderRadiusValues}
-        updateLintRules={handleLintRulesChange}
+        updateLintRules={props.updateLintRules}
         lintVectors={props.lintVectors}
         libraries={props.libraries}
         onUpdateLibraries={props.onUpdateLibraries}

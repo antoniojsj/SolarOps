@@ -58,17 +58,43 @@ function BulkErrorList(props) {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-  // const availableFilters = [
-  //   "Geral",
-  //   "text",
-  //   "fill",
-  //   "stroke",
-  //   "radius",
-  //   "effects"
-  // ];
+  // Helper: normalize error object fields
+  const getErrorNodeId = (err: any) =>
+    err.nodeId || (err.node && err.node.id) || err.id;
+  const getErrorValue = (err: any) => err.value;
+  const getErrorType = (err: any) => err.type || err.errorType || err.category;
 
-  // Node-level array coming from plugin (each item has id and errors[])
-  const errorArray = Array.isArray(props.errorArray) ? props.errorArray : [];
+  // The data is coming flat, so we need to group it by node ID.
+  const errorArray = React.useMemo(() => {
+    const flatErrorsFromProps = Array.isArray(props.errorArray)
+      ? props.errorArray
+      : [];
+    const errorsByNode = new Map<
+      string,
+      { id: string; name: string; errors: any[] }
+    >();
+
+    flatErrorsFromProps.forEach(error => {
+      const nodeId = getErrorNodeId(error);
+      const nodeName = error.nodeName || (error.node && error.node.name);
+
+      if (!nodeId) return;
+
+      let nodeWithErrors = errorsByNode.get(nodeId);
+      if (!nodeWithErrors) {
+        nodeWithErrors = {
+          id: nodeId,
+          name: nodeName || "Unknown Node",
+          errors: []
+        };
+        errorsByNode.set(nodeId, nodeWithErrors);
+      }
+      nodeWithErrors.errors.push(error);
+    });
+
+    return Array.from(errorsByNode.values());
+  }, [props.errorArray]);
+
   const ignoredErrorArray = Array.isArray(props.ignoredErrorArray)
     ? props.ignoredErrorArray
     : [];
@@ -81,12 +107,6 @@ function BulkErrorList(props) {
     }
     ignoredErrorsMap[nodeId].add(ignoredError.value);
   });
-
-  // Helper: normalize error object fields
-  const getErrorNodeId = (err: any) =>
-    err.nodeId || (err.node && err.node.id) || err.id;
-  const getErrorValue = (err: any) => err.value;
-  const getErrorType = (err: any) => err.type || err.errorType || err.category;
 
   // Derive a flat list of errors from the node-level structure
   const flatErrors: any[] = React.useMemo(() => {
@@ -113,8 +133,8 @@ function BulkErrorList(props) {
   });
 
   // Filter nodes: keep nodes that still have at least one non-ignored error
-  const filteredErrorArray = Array.isArray(props.errorArray)
-    ? props.errorArray
+  const filteredErrorArray = Array.isArray(errorArray)
+    ? errorArray
         .map(node => {
           const id = node.id;
           const ignoredValues = ignoredErrorsMap[id] || new Set();
@@ -489,8 +509,8 @@ function BulkErrorList(props) {
     );
   }
 
-  // Fallback visual se não houver dados de análise
-  if (!Array.isArray(props.errorArray) || props.errorArray.length === 0) {
+  // Fallback visual se não houver nós para analisar
+  if (!Array.isArray(props.nodeArray) || props.nodeArray.length === 0) {
     return (
       <div style={{ color: "#fff", textAlign: "center", marginTop: 64 }}>
         Nenhum dado de análise encontrado.
@@ -594,143 +614,73 @@ function BulkErrorList(props) {
    */
   function getConformityByType(
     typeKey: string
-  ): { conform: number; nonConform: number; percent: number } {
-    let conformCount = 0;
-    let nonConformCount = 0;
-    let totalProcessed = 0;
+  ): {
+    conform: number;
+    nonConform: number;
+    percent: number;
+  } {
+    const applicableNodeIds = new Set<string>();
+    const nonConformantNodeIds = new Set<string>();
 
-    try {
-      // Validate input
-      if (!props.nodeArray || !Array.isArray(props.nodeArray)) {
-        console.warn(
-          `[getConformityByType] nodeArray inválido para tipo ${typeKey}`
-        );
-        return { conform: 0, nonConform: 0, percent: 0 };
+    // Helper para percorrer recursivamente a árvore de nós
+    const walk = (node: any) => {
+      if (!node || !node.id) return;
+
+      if (isNodeApplicable(node, typeKey)) {
+        applicableNodeIds.add(node.id);
       }
 
-      console.log(
-        `[getConformityByType] Iniciando análise de conformidade para ${props.nodeArray.length} nós do tipo ${typeKey}`
-      );
+      if (Array.isArray(node.children)) {
+        node.children.forEach(walk);
+      }
+    };
 
-      // Process each node
-      props.nodeArray.forEach((node: any) => {
-        if (!node) return;
-
-        // Skip nodes not applicable to this token type
-        if (!isNodeApplicable(node, typeKey)) {
-          console.log(
-            `[getConformityByType] Nó ${node.id} não é aplicável ao tipo ${typeKey}`
-          );
-          return;
-        }
-
-        totalProcessed++;
-
-        // Check if node is conformant based on token type
-        let isConform = false;
-        const styleTokens = node.styleTokens || {};
-
-        switch (typeKey) {
-          case "fill":
-            isConform = !!(
-              styleTokens.fillStyleId ||
-              node.fillStyleId ||
-              (Array.isArray(node.fills) &&
-                node.fills.some(
-                  (fill: any) => fill.styleId || fill.fillStyleId
-                ))
-            );
-            break;
-
-          case "text":
-            isConform = !!(styleTokens.textStyleId || node.textStyleId);
-            break;
-
-          case "stroke":
-            isConform = !!(
-              styleTokens.strokeStyleId ||
-              node.strokeStyleId ||
-              (Array.isArray(node.strokes) &&
-                node.strokes.some(
-                  (stroke: any) => stroke.styleId || stroke.strokeStyleId
-                ))
-            );
-            break;
-
-          case "effects":
-            isConform = !!(styleTokens.effectStyleId || node.effectStyleId);
-            break;
-
-          case "gap":
-            // For gap, we consider it conformant if it has itemSpacing or gap properties
-            isConform =
-              node.itemSpacing !== undefined || node.gap !== undefined;
-            break;
-
-          case "radius":
-            // For radius, we consider it conformant if it has any radius properties
-            isConform = !!(
-              node.cornerRadius !== undefined ||
-              node.topLeftRadius !== undefined ||
-              node.topRightRadius !== undefined ||
-              node.bottomLeftRadius !== undefined ||
-              node.bottomRightRadius !== undefined
-            );
-            break;
-
-          case "component":
-            // For components, we consider it conformant if it's a component or instance
-            isConform = node.type === "COMPONENT" || node.type === "INSTANCE";
-            break;
-
-          default:
-            console.warn(
-              `[getConformityByType] Tipo não suportado: ${typeKey}`
-            );
-            return { conform: 0, nonConform: 0, percent: 0 };
-        }
-
-        // Update counters
-        if (isConform) {
-          conformCount++;
-          console.log(
-            `[getConformityByType] Nó ${node.id} (${node.name ||
-              "sem nome"}) CONFORME para ${typeKey}`
-          );
-        } else {
-          nonConformCount++;
-          console.log(
-            `[getConformityByType] Nó ${node.id} (${node.name ||
-              "sem nome"}) NÃO CONFORME para ${typeKey}`
-          );
-        }
-      });
-
-      // Calculate conformity percentage
-      const total = conformCount + nonConformCount;
-      const percent =
-        total > 0 ? Math.round((conformCount / total) * 100) : 100;
-
-      console.log(`[getConformityByType] Resumo para ${typeKey}:`, {
-        totalNodes: props.nodeArray.length,
-        totalProcessed,
-        conform: conformCount,
-        nonConform: nonConformCount,
-        percent
-      });
-
-      return {
-        conform: conformCount,
-        nonConform: nonConformCount,
-        percent
-      };
-    } catch (error) {
-      console.error(
-        `[getConformityByType] Erro ao processar tipo ${typeKey}:`,
-        error
-      );
-      return { conform: 0, nonConform: 0, percent: 0 };
+    // 1. Encontra todos os nós aplicáveis para este tipo a partir do nodeArray completo
+    if (Array.isArray(props.nodeArray)) {
+      props.nodeArray.forEach(walk);
     }
+
+    // 2. Encontra nós não conformes a partir do errorArray
+    // O errorArray já está filtrado para não incluir erros ignorados.
+    filteredErrorArray.forEach(nodeWithErrors => {
+      if (
+        !nodeWithErrors ||
+        !nodeWithErrors.id ||
+        !Array.isArray(nodeWithErrors.errors)
+      )
+        return;
+
+      // Verifica se este nó é aplicável para o tipo que estamos calculando
+      if (applicableNodeIds.has(nodeWithErrors.id)) {
+        // Verifica se algum de seus erros corresponde ao typeKey
+        const hasErrorForType = nodeWithErrors.errors.some(error => {
+          const errorType = getErrorType(error);
+          // Mapeia tipos de erro para tipos de gráfico, se forem diferentes
+          if (typeKey === "component" && errorType === "detach") return true;
+          // Verifica se o errorType começa com o typeKey para abranger sub-tipos como 'fill-style-library'
+          if (typeof errorType === "string" && typeof typeKey === "string") {
+            return errorType.startsWith(typeKey);
+          }
+          return errorType === typeKey;
+        });
+
+        if (hasErrorForType) {
+          nonConformantNodeIds.add(nodeWithErrors.id);
+        }
+      }
+    });
+
+    const totalApplicable = applicableNodeIds.size;
+    const nonConform = nonConformantNodeIds.size;
+    const conform = totalApplicable - nonConform;
+    const percent =
+      totalApplicable > 0 ? Math.round((conform / totalApplicable) * 100) : 100;
+
+    return {
+      conform,
+      nonConform,
+      percent
+    };
   }
 
   // Listener para receber o JSON exportado e baixar

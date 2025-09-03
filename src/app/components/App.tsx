@@ -820,7 +820,7 @@ const App = ({}) => {
         />
       )}
       {activePage === "devmode" ? (
-        <DevMode />
+        <DevMode selectedNode={selectedNode} onInspectClick={() => {}} />
       ) : activePage === "styles" ? (
         <StylesPage stylesInUse={stylesInUse} />
       ) : activePage === "layers" ? (

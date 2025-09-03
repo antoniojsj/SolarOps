@@ -1,4 +1,0 @@
-diff a/src/app/styles/ui.css b/src/app/styles/ui.css	(rejected hunks)
-@@ -981 +981 @@ button,
--  font-family: 'SF Mono', 'Roboto Mono', monospace;
-+  font-family: "SF Mono", "Roboto Mono", monospace;

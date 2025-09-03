@@ -27,108 +27,6 @@ export function convertColor(color: any) {
   }
 }
 
-// Função para comparar cores
-function colorsMatch(
-  color1: any,
-  color2: any,
-  tolerance: number = 0.01
-): boolean {
-  try {
-    const c1 = convertColor(color1);
-    const c2 = convertColor(color2);
-
-    return (
-      Math.abs(c1.r - c2.r) <= tolerance &&
-      Math.abs(c1.g - c2.g) <= tolerance &&
-      Math.abs(c1.b - c2.b) <= tolerance &&
-      Math.abs(c1.a - c2.a) <= tolerance
-    );
-  } catch (error) {
-    return false;
-  }
-}
-
-// Função para verificar se uma cor corresponde a um token salvo
-function isColorInTokens(color: any, tokens: any[]): boolean {
-  if (!tokens || !Array.isArray(tokens)) return false;
-
-  try {
-    const targetColor = convertColor(color);
-
-    return tokens.some(token => {
-      if (!token.value) return false;
-
-      // Handle different token value formats
-      let tokenColor;
-      if (typeof token.value === "string") {
-        // Handle hex colors
-        if (token.value.startsWith("#")) {
-          const hex = token.value.replace("#", "");
-          const r = parseInt(hex.substring(0, 2), 16) / 255;
-          const g = parseInt(hex.substring(2, 4), 16) / 255;
-          const b = parseInt(hex.substring(4, 6), 16) / 255;
-          const a =
-            hex.length > 6 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
-          tokenColor = { r, g, b, a };
-        }
-      } else if (token.value.r !== undefined) {
-        // Handle RGB/RGBA objects
-        tokenColor = {
-          r: token.value.r / 255,
-          g: token.value.g / 255,
-          b: token.value.b / 255,
-          a: token.value.a !== undefined ? token.value.a : 1
-        };
-      }
-
-      return tokenColor ? colorsMatch(targetColor, tokenColor) : false;
-    });
-  } catch (error) {
-    console.error("[isColorInTokens] Erro:", error);
-    return false;
-  }
-}
-
-// Função para verificar se uma cor está na biblioteca ou nos tokens salvos
-function isColorInLibrary(
-  color: any,
-  library: any,
-  savedTokens: any[] = []
-): boolean {
-  // Primeiro verifica nos tokens salvos
-  if (isColorInTokens(color, savedTokens)) {
-    return true;
-  }
-
-  // Depois verifica na biblioteca
-  try {
-    if (!library || !library.fills || !Array.isArray(library.fills)) {
-      return false;
-    }
-
-    for (const fillStyle of library.fills) {
-      if (
-        fillStyle.paint &&
-        fillStyle.paint.type === "SOLID" &&
-        fillStyle.paint.color
-      ) {
-        if (colorsMatch(color, fillStyle.paint.color)) {
-          return true;
-        }
-      }
-      if (fillStyle.value && fillStyle.value.r !== undefined) {
-        if (colorsMatch(color, fillStyle.value)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  } catch (error) {
-    console.error("[isColorInLibrary] Erro:", error);
-    return false;
-  }
-}
-
 // Função para verificar se um estilo de texto corresponde a um token salvo
 function isTextStyleInTokens(node: any, tokens: any[]): boolean {
   if (!tokens || !Array.isArray(tokens)) return false;
@@ -207,21 +105,13 @@ function isTextStyleInTokens(node: any, tokens: any[]): boolean {
 // Função para verificar se um estilo de texto está na biblioteca ou nos tokens salvos
 function isTextStyleInLibrary(
   styleId: string,
-  library: any,
-  savedTokens: any[] = []
+  preprocessedLibs: { text: Set<string> }
 ): boolean {
-  // Primeiro verifica nos tokens salvos
-  if (isTextStyleInTokens(styleId, savedTokens)) {
-    return true;
-  }
-
-  // Depois verifica na biblioteca
   try {
-    if (!library || !library.text || !Array.isArray(library.text)) {
+    if (!preprocessedLibs || !preprocessedLibs.text) {
       return false;
     }
-
-    return library.text.some((textStyle: any) => textStyle.id === styleId);
+    return preprocessedLibs.text.has(styleId);
   } catch (error) {
     console.error("[isTextStyleInLibrary] Erro:", error);
     return false;
@@ -229,49 +119,17 @@ function isTextStyleInLibrary(
 }
 
 // Função para verificar se um estilo de efeito está na biblioteca
-function isEffectStyleInLibrary(styleId: string, library: any): boolean {
+function isEffectStyleInLibrary(
+  styleId: string,
+  preprocessedLibs: { effects: Set<string> }
+): boolean {
   try {
-    if (!library || !library.effects || !Array.isArray(library.effects)) {
+    if (!preprocessedLibs || !preprocessedLibs.effects) {
       return false;
     }
-
-    return library.effects.some(
-      (effectStyle: any) => effectStyle.id === styleId
-    );
+    return preprocessedLibs.effects.has(styleId);
   } catch (error) {
     console.error("[isEffectStyleInLibrary] Erro:", error);
-    return false;
-  }
-}
-
-// Função auxiliar para verificar se um efeito específico está na biblioteca
-function isEffectInLibrary(effect: any, library: any): boolean {
-  try {
-    if (!library || !library.effects || !Array.isArray(library.effects)) {
-      return false;
-    }
-
-    return library.effects.some((effectStyle: any) => {
-      if (effectStyle.effect && effectStyle.effect.type === effect.type) {
-        // Compara propriedades básicas do efeito
-        const sameColor =
-          !effect.color ||
-          (effectStyle.effect.color &&
-            colorsMatch(effect.color, effectStyle.effect.color));
-        const sameOffset =
-          !effect.offset ||
-          (effectStyle.effect.offset &&
-            effect.offset.x === effectStyle.effect.offset.x &&
-            effect.offset.y === effectStyle.effect.offset.y);
-        const sameRadius =
-          !effect.radius || effectStyle.effect.radius === effect.radius;
-
-        return sameColor && sameOffset && sameRadius;
-      }
-      return false;
-    });
-  } catch (error) {
-    console.error("[isEffectInLibrary] Erro:", error);
     return false;
   }
 }
@@ -280,67 +138,56 @@ function isEffectInLibrary(effect: any, library: any): boolean {
 export function checkType(
   node: any,
   errors: any[],
-  libraries: any[],
+  preprocessedLibs: { text: Set<string> },
   savedTokens: any[] = []
 ) {
   try {
-    if (!node) return;
+    // Aplica-se apenas a nós de TEXTO visíveis com algum conteúdo.
+    if (
+      !node ||
+      node.type !== "TEXT" ||
+      node.visible === false ||
+      !node.characters ||
+      node.characters.length === 0
+    ) {
+      return;
+    }
 
-    // Verifica se o nó tem um estilo de texto
-    if (node.textStyleId && typeof node.textStyleId === "string") {
-      let isStyleValid = false;
-      let tokenLib = null;
+    // Erro se houver estilos de texto mistos, pois não é possível validar.
+    if (typeof node.textStyleId === "symbol") {
+      errors.push({
+        type: "text",
+        message: "Texto com estilos mistos",
+        nodeId: node.id,
+        nodeName: node.name
+      });
+      return;
+    }
 
-      // Verificar se o texto tem estilo definido
-      if (node.textStyleId === "") {
+    // Erro se não houver um estilo de texto aplicado.
+    if (!node.textStyleId || node.textStyleId === "") {
+      const styleDesc = `${node.fontName.family} ${node.fontSize}px`;
+      errors.push({
+        type: "text",
+        message: "Estilo de texto não utiliza um token (estilo)",
+        nodeId: node.id,
+        nodeName: node.name,
+        value: styleDesc
+      });
+    } else {
+      // Se um estilo é aplicado, verifica se ele pertence a uma biblioteca válida.
+      const styleFound = isTextStyleInLibrary(
+        node.textStyleId,
+        preprocessedLibs
+      );
+
+      if (!styleFound) {
         errors.push({
-          type: "text-style",
-          message: "Texto sem estilo definido",
+          type: "text-style-library",
+          message: "Estilo de texto não pertence a uma biblioteca selecionada",
           nodeId: node.id,
-          nodeName: node.name,
-          suggestions: []
+          nodeName: node.name
         });
-        return;
-      }
-
-      // Primeiro verifica nos tokens salvos
-      if (
-        savedTokens &&
-        savedTokens.length > 0 &&
-        isTextStyleInTokens(node, savedTokens)
-      ) {
-        isStyleValid = true;
-      }
-      // Se não encontrou nos tokens, verifica nas bibliotecas
-      else if (libraries && libraries.length > 0) {
-        isStyleValid = libraries.some(library =>
-          isTextStyleInLibrary(node.textStyleId, library, savedTokens)
-        );
-
-        if (!isStyleValid) {
-          errors.push({
-            type: "text-style-library",
-            message:
-              "Estilo de texto não está na biblioteca nem nos tokens salvos",
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        }
-      }
-
-      // Verificar propriedades de texto
-      if (node.fontSize && typeof node.fontSize === "number") {
-        // Verificar se o tamanho da fonte é um valor padrão problemático
-        if (node.fontSize === 12 || node.fontSize === 14) {
-          errors.push({
-            type: "text-font-size",
-            message: `Tamanho de fonte padrão (${node.fontSize}px)`,
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        }
       }
     }
   } catch (error) {
@@ -352,127 +199,77 @@ export function checkType(
 export function newCheckFills(
   node: any,
   errors: any[],
-  libraries: any[],
+  preprocessedLibs: { fills: Set<string> },
   savedTokens: any[] = []
-  // usedRemoteStyles?: any,
-  // storageArray?: any,
-  // ignoredErrorArray?: any
 ) {
   try {
-    if (!node) return;
+    if (
+      !node ||
+      node.visible === false ||
+      !node.fills ||
+      (Array.isArray(node.fills) && node.fills.length === 0)
+    ) {
+      return;
+    }
 
-    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
-    if (!libraries || libraries.length === 0) {
+    if (typeof node.fills === "symbol") {
       errors.push({
-        type: "fill-unvalidated",
-        message:
-          "Nenhuma biblioteca selecionada; preenchimentos não podem ser validados",
+        type: "fill",
+        message: "Preenchimento com valores mistos",
         nodeId: node.id,
-        nodeName: node.name,
-        suggestions: []
+        nodeName: node.name
       });
       return;
     }
 
-    // Verificar se tem estilo de fill definido
-    if (node.fillStyleId && node.fillStyleId !== "") {
-      // Verificar se o estilo está na biblioteca (se houver biblioteca)
-      if (libraries && libraries.length > 0) {
-        let styleFound = false;
-        for (const library of libraries) {
-          if (isColorStyleInLibrary(node.fillStyleId, library)) {
-            styleFound = true;
-            break;
-          }
+    const hasVisibleFills = node.fills.some(fill => fill.visible !== false);
+
+    if (hasVisibleFills) {
+      if (!node.fillStyleId || node.fillStyleId === "") {
+        const firstVisibleFill = node.fills.find(
+          fill => fill.visible !== false
+        );
+        let fillValue = "Preenchimento complexo";
+
+        if (firstVisibleFill && firstVisibleFill.type === "SOLID") {
+          const color = convertColor(firstVisibleFill.color);
+          const r = Math.round(color.r * 255)
+            .toString(16)
+            .padStart(2, "0");
+          const g = Math.round(color.g * 255)
+            .toString(16)
+            .padStart(2, "0");
+          const b = Math.round(color.b * 255)
+            .toString(16)
+            .padStart(2, "0");
+          fillValue = `#${r}${g}${b}`.toUpperCase();
+        } else if (firstVisibleFill) {
+          fillValue = firstVisibleFill.type;
         }
+
+        errors.push({
+          type: "fill",
+          message: "Preenchimento não utiliza um token (estilo)",
+          nodeId: node.id,
+          nodeName: node.name,
+          value: fillValue
+        });
+      } else {
+        const styleFound = isColorStyleInLibrary(
+          node.fillStyleId,
+          preprocessedLibs
+        );
 
         if (!styleFound) {
           errors.push({
             type: "fill-style-library",
-            message: "Estilo de preenchimento não está na biblioteca",
+            message:
+              "Estilo de preenchimento não pertence a uma biblioteca selecionada",
             nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
+            nodeName: node.name
           });
         }
       }
-      return;
-    }
-
-    // Verificar fills diretos
-    if (node.fills && Array.isArray(node.fills) && node.fills.length > 0) {
-      for (const fill of node.fills) {
-        if (fill.type === "SOLID" && fill.color) {
-          const color = convertColor(fill.color);
-          let colorFound = false;
-
-          // Primeiro verifica nos tokens salvos
-          if (
-            savedTokens &&
-            savedTokens.length > 0 &&
-            isColorInTokens(color, savedTokens)
-          ) {
-            colorFound = true;
-          }
-          // Se não encontrou nos tokens, verifica nas bibliotecas
-          else if (libraries && libraries.length > 0) {
-            colorFound = libraries.some(library =>
-              isColorInLibrary(color, library, savedTokens)
-            );
-          }
-
-          // Se não encontrou nos tokens, verifica se é uma cor padrão problemática
-          if (!colorFound) {
-            if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
-              errors.push({
-                type: "fill-color-default",
-                message: "Preenchimento com cor preta padrão",
-                nodeId: node.id,
-                nodeName: node.name,
-                suggestions: []
-              });
-            } else if (colorsMatch(color, { r: 1, g: 1, b: 1, a: 1 })) {
-              errors.push({
-                type: "fill-color-default",
-                message: "Preenchimento com cor branca padrão",
-                nodeId: node.id,
-                nodeName: node.name,
-                suggestions: []
-              });
-            } else {
-              // Verificar se a cor está na biblioteca (se houver biblioteca)
-              if (libraries && libraries.length > 0) {
-                let libraryColorFound = false;
-                for (const library of libraries) {
-                  if (isColorInLibrary(color, library)) {
-                    libraryColorFound = true;
-                    break;
-                  }
-                }
-
-                if (!libraryColorFound) {
-                  errors.push({
-                    type: "fill-color-library",
-                    message: "Cor não está na biblioteca",
-                    nodeId: node.id,
-                    nodeName: node.name,
-                    suggestions: []
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // Node sem fill definido
-      errors.push({
-        type: "fill-missing",
-        message: "Elemento sem preenchimento definido",
-        nodeId: node.id,
-        nodeName: node.name,
-        suggestions: []
-      });
     }
   } catch (error) {
     console.error("[newCheckFills] Erro:", error);
@@ -480,13 +277,15 @@ export function newCheckFills(
 }
 
 // Função auxiliar para verificar se um estilo de cor está na biblioteca
-function isColorStyleInLibrary(styleId: string, library: any): boolean {
+function isColorStyleInLibrary(
+  styleId: string,
+  preprocessedLibs: { fills: Set<string> }
+): boolean {
   try {
-    if (!library || !library.fills || !Array.isArray(library.fills)) {
+    if (!preprocessedLibs || !preprocessedLibs.fills) {
       return false;
     }
-
-    return library.fills.some((fillStyle: any) => fillStyle.id === styleId);
+    return preprocessedLibs.fills.has(styleId);
   } catch (error) {
     console.error("[isColorStyleInLibrary] Erro:", error);
     return false;
@@ -497,139 +296,58 @@ function isColorStyleInLibrary(styleId: string, library: any): boolean {
 export function newCheckEffects(
   node: any,
   errors: any[],
-  libraries: any[],
+  preprocessedLibs: { effects: Set<string> },
   savedTokens: any[] = []
-  // usedRemoteStyles?: any,
-  // storageArray?: any
 ) {
   try {
-    if (!node) return;
+    if (
+      !node ||
+      node.visible === false ||
+      !node.effects ||
+      (Array.isArray(node.effects) && node.effects.length === 0)
+    ) {
+      return;
+    }
 
-    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
-    if (!libraries || libraries.length === 0) {
+    if (typeof node.effects === "symbol") {
       errors.push({
-        type: "effect-unvalidated",
-        message:
-          "Nenhuma biblioteca selecionada; efeitos não podem ser validados",
+        type: "effects",
+        message: "Efeitos com valores mistos",
         nodeId: node.id,
-        nodeName: node.name,
-        suggestions: []
+        nodeName: node.name
       });
       return;
     }
 
-    // Verificar se tem estilo de efeito definido
-    if (node.effectStyleId && node.effectStyleId !== "") {
-      // Verificar se o estilo está na biblioteca (se houver biblioteca)
-      if (libraries && libraries.length > 0) {
-        let styleFound = false;
-        for (const library of libraries) {
-          if (isEffectStyleInLibrary(node.effectStyleId, library)) {
-            styleFound = true;
-            break;
-          }
-        }
+    const hasVisibleEffects = node.effects.some(
+      effect => effect.visible !== false
+    );
 
-        if (!styleFound) {
-          console.log(
-            "[Lint] Erro: Estilo de efeito não encontrado na biblioteca em",
-            node.name
-          );
-          errors.push({
-            type: "effect-style-library",
-            message: "Estilo de efeito não está na biblioteca",
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        }
-      }
-      return;
-    }
-
-    // Verificar effects diretos
     if (
-      node.effects &&
-      Array.isArray(node.effects) &&
-      node.effects.length > 0
+      hasVisibleEffects &&
+      (!node.effectStyleId || node.effectStyleId === "")
     ) {
-      for (const effect of node.effects) {
-        if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
-          let effectFound = false;
+      const firstEffect = node.effects.find(e => e.visible !== false);
+      errors.push({
+        type: "effects",
+        message: "Efeito não utiliza um token (estilo)",
+        nodeId: node.id,
+        nodeName: node.name,
+        value: firstEffect.type
+      });
+    } else if (node.effectStyleId) {
+      const styleFound = isEffectStyleInLibrary(
+        node.effectStyleId,
+        preprocessedLibs
+      );
 
-          // Primeiro verifica nos tokens salvos
-          if (savedTokens && savedTokens.length > 0) {
-            for (const tokenLib of savedTokens) {
-              if (tokenLib.tokens && tokenLib.tokens.effects) {
-                const matchingToken = tokenLib.tokens.effects.find(
-                  (token: any) => {
-                    if (token.effect && token.effect.type === effect.type) {
-                      // Compara propriedades básicas do efeito
-                      const sameColor =
-                        !effect.color ||
-                        (token.effect.color &&
-                          colorsMatch(effect.color, token.effect.color));
-                      const sameOffset =
-                        !effect.offset ||
-                        (token.effect.offset &&
-                          effect.offset.x === token.effect.offset.x &&
-                          effect.offset.y === token.effect.offset.y);
-                      const sameRadius =
-                        !effect.radius || token.effect.radius === effect.radius;
-
-                      return sameColor && sameOffset && sameRadius;
-                    }
-                    return false;
-                  }
-                );
-
-                if (matchingToken) {
-                  effectFound = true;
-                  break;
-                }
-              }
-            }
-          }
-
-          // Se não encontrou nos tokens, verifica se tem valores problemáticos
-          if (!effectFound) {
-            // Verificar se o efeito tem offset zero
-            if (
-              effect.offset &&
-              effect.offset.x === 0 &&
-              effect.offset.y === 0
-            ) {
-              errors.push({
-                type: "effect-offset",
-                message: "Efeito com offset zero",
-                nodeId: node.id,
-                nodeName: node.name,
-                suggestions: []
-              });
-            }
-
-            // Verificar se o efeito está na biblioteca (se houver biblioteca)
-            if (libraries && libraries.length > 0) {
-              let libraryEffectFound = false;
-              for (const library of libraries) {
-                if (isEffectInLibrary(effect, library)) {
-                  libraryEffectFound = true;
-                  break;
-                }
-              }
-
-              if (!libraryEffectFound) {
-                errors.push({
-                  type: "effect-library",
-                  message: `Efeito ${effect.type.toLowerCase()} não está na biblioteca`,
-                  nodeId: node.id,
-                  nodeName: node.name,
-                  suggestions: []
-                });
-              }
-            }
-          }
-        }
+      if (!styleFound) {
+        errors.push({
+          type: "effect-style-library",
+          message: "Estilo de efeito não pertence a uma biblioteca selecionada",
+          nodeId: node.id,
+          nodeName: node.name
+        });
       }
     }
   } catch (error) {
@@ -641,85 +359,75 @@ export function newCheckEffects(
 export function newCheckStrokes(
   node: any,
   errors: any[],
-  libraries: any[],
+  preprocessedLibs: { fills: Set<string> },
   savedTokens: any[] = []
-  // usedRemoteStyles?: any,
-  // storageArray?: any
 ) {
   try {
-    if (!node) return;
+    if (
+      !node ||
+      node.visible === false ||
+      !node.strokes ||
+      (Array.isArray(node.strokes) && node.strokes.length === 0)
+    ) {
+      return;
+    }
 
-    // Se nenhuma biblioteca foi selecionada, marcar como não validado e sair
-    if (!libraries || libraries.length === 0) {
+    if (typeof node.strokes === "symbol") {
       errors.push({
-        type: "stroke-unvalidated",
-        message: "Nenhuma biblioteca selecionada para validação de strokes",
+        type: "stroke",
+        message: "Borda com valores mistos",
         nodeId: node.id,
-        nodeName: node.name,
-        suggestions: []
+        nodeName: node.name
       });
       return;
     }
 
-    // Verificar se o node tem strokes
-    if (node.strokes && node.strokes.length > 0) {
-      // Verificar cada stroke
-      for (const stroke of node.strokes) {
-        if (stroke.visible !== false) {
-          // Se o stroke estiver visível
-          // Verificar se o stroke tem uma cor
-          if (stroke.color) {
-            if (stroke.type === "SOLID") {
-              const color = convertColor(stroke.color);
+    const hasVisibleStrokes = node.strokes.some(
+      stroke => stroke.visible !== false
+    );
 
-              // Primeiro verifica se é uma cor padrão problemática
-              if (colorsMatch(color, { r: 0, g: 0, b: 0, a: 1 })) {
-                console.log(
-                  "[Lint] Erro: Stroke com cor preta padrão em",
-                  node.name
-                );
-                errors.push({
-                  type: "stroke-color-default",
-                  message: "Stroke com cor preta padrão",
-                  nodeId: node.id,
-                  nodeName: node.name,
-                  suggestions: []
-                });
-              } else {
-                // Verificar se a cor está nos tokens salvos ou na biblioteca
-                let colorFound = false;
+    if (hasVisibleStrokes) {
+      if (!node.strokeStyleId || node.strokeStyleId === "") {
+        const firstVisibleStroke = node.strokes.find(s => s.visible !== false);
+        let strokeValue = "Borda complexa";
 
-                // Primeiro verifica nos tokens salvos
-                if (
-                  savedTokens &&
-                  savedTokens.length > 0 &&
-                  isColorInTokens(color, savedTokens)
-                ) {
-                  colorFound = true;
-                }
-                // Se não encontrou nos tokens, verifica nas bibliotecas
-                else if (libraries && libraries.length > 0) {
-                  colorFound = libraries.some(library =>
-                    isColorInLibrary(color, library, savedTokens)
-                  );
-                }
+        if (firstVisibleStroke && firstVisibleStroke.type === "SOLID") {
+          const color = convertColor(firstVisibleStroke.color);
+          const r = Math.round(color.r * 255)
+            .toString(16)
+            .padStart(2, "0");
+          const g = Math.round(color.g * 255)
+            .toString(16)
+            .padStart(2, "0");
+          const b = Math.round(color.b * 255)
+            .toString(16)
+            .padStart(2, "0");
+          strokeValue = `#${r}${g}${b}`.toUpperCase();
+        } else if (firstVisibleStroke) {
+          strokeValue = firstVisibleStroke.type;
+        }
 
-                if (!colorFound) {
-                  console.log(
-                    "[Lint] Erro: Cor de stroke não encontrada na biblioteca em",
-                    node.name
-                  );
-                  errors.push({
-                    type: "stroke-color-library",
-                    message: "Cor do stroke não está na biblioteca",
-                    nodeId: node.id,
-                    nodeName: node.name,
-                    suggestions: []
-                  });
-                }
-              }
-            }
-          }
+        errors.push({
+          type: "stroke",
+          message: "Borda não utiliza um token (estilo)",
+          nodeId: node.id,
+          nodeName: node.name,
+          value: strokeValue
+        });
+      } else {
+        const styleFound = isColorStyleInLibrary(
+          node.strokeStyleId,
+          preprocessedLibs
+        );
+
+        if (!styleFound) {
+          errors.push({
+            type: "stroke-style-library",
+            message:
+              "Estilo de borda não pertence a uma biblioteca selecionada",
+            nodeId: node.id,
+            nodeName: node.name
+          });
         }
       }
     }
@@ -731,139 +439,69 @@ export function newCheckStrokes(
 // Função para verificar radius
 export function checkRadius(node: any, errors: any[], savedTokens: any[] = []) {
   try {
-    if (!node) return;
+    if (!node || node.visible === false) return;
 
-    // Verificar se o node tem cornerRadius
-    if (node.cornerRadius !== undefined) {
-      const radius = node.cornerRadius;
-      let radiusFoundInTokens = false;
-
-      // Primeiro verifica nos tokens salvos
-      if (savedTokens && savedTokens.length > 0 && typeof radius === "number") {
-        for (const tokenLib of savedTokens) {
-          if (tokenLib.tokens && tokenLib.tokens.radius) {
-            const matchingToken = tokenLib.tokens.radius.find((token: any) => {
-              // Verifica se o token tem um valor que corresponde ao raio do node
-              return token.value === radius;
-            });
-
-            if (matchingToken) {
-              radiusFoundInTokens = true;
-              break;
-            }
-          }
-        }
+    // Helper para verificar uma propriedade de raio.
+    // O token para raio é uma variável, então verificamos `boundVariables`.
+    const checkRadiusProperty = (
+      radiusValue,
+      propertyName,
+      variableBinding
+    ) => {
+      // Ignora se o raio não estiver definido ou for 0.
+      if (radiusValue === undefined || radiusValue === 0) {
+        return;
       }
 
-      // Se não encontrou nos tokens, faz as verificações padrão
-      if (!radiusFoundInTokens) {
-        if (typeof radius === "number") {
-          if (radius < 0) {
-            errors.push({
-              type: "corner-radius-negative",
-              message: "Corner radius negativo",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-          } else if (radius > 100) {
-            errors.push({
-              type: "corner-radius-high",
-              message: "Corner radius muito alto",
-              nodeId: node.id,
-              nodeName: node.name,
-              suggestions: []
-            });
-          }
-        } else {
-          errors.push({
-            type: "corner-radius-invalid",
-            message: "Corner radius inválido",
-            nodeId: node.id,
-            nodeName: node.name,
-            suggestions: []
-          });
-        }
+      // Se um raio é definido, ele DEVE estar vinculado a uma variável.
+      if (!variableBinding) {
+        errors.push({
+          type: "radius",
+          message: `Raio (${propertyName}) não utiliza um token (variável)`,
+          nodeId: node.id,
+          nodeName: node.name,
+          value: `${radiusValue}px`
+        });
       }
+      // Opcional: se estiver vinculado, poderíamos validar se a variável pertence
+      // a uma coleção válida, mas por enquanto, apenas a verificação de vínculo
+      // atende ao requisito.
+    };
+
+    // Verifica o raio de canto uniforme.
+    if (
+      node.cornerRadius !== undefined &&
+      typeof node.cornerRadius !== "symbol"
+    ) {
+      checkRadiusProperty(
+        node.cornerRadius,
+        "cornerRadius",
+        node.boundVariables?.cornerRadius
+      );
     }
 
-    // Verificar cornerRadius individual
-    if (
-      node.topLeftRadius !== undefined ||
-      node.topRightRadius !== undefined ||
-      node.bottomLeftRadius !== undefined ||
-      node.bottomRightRadius !== undefined
-    ) {
-      const radii = [
-        { value: node.topLeftRadius, corner: "topLeft" },
-        { value: node.topRightRadius, corner: "topRight" },
-        { value: node.bottomLeftRadius, corner: "bottomLeft" },
-        { value: node.bottomRightRadius, corner: "bottomRight" }
-      ];
-
-      for (const { value: radius, corner } of radii) {
-        if (radius !== undefined) {
-          let radiusFoundInTokens = false;
-
-          // Primeiro verifica nos tokens salvos
-          if (
-            savedTokens &&
-            savedTokens.length > 0 &&
-            typeof radius === "number"
-          ) {
-            for (const tokenLib of savedTokens) {
-              if (tokenLib.tokens && tokenLib.tokens.radius) {
-                const matchingToken = tokenLib.tokens.radius.find(
-                  (token: any) => {
-                    // Verifica se o token tem um valor que corresponde ao raio do node
-                    return (
-                      token.value === radius &&
-                      (!token.corner ||
-                        token.corner === corner ||
-                        token.corner === "all")
-                    );
-                  }
-                );
-
-                if (matchingToken) {
-                  radiusFoundInTokens = true;
-                  break;
-                }
-              }
-            }
-          }
-
-          // Se não encontrou nos tokens, faz as verificações padrão
-          if (!radiusFoundInTokens) {
-            if (typeof radius !== "number" || radius < 0) {
-              console.log(
-                `[Lint] Erro: Corner radius ${corner} inválido em`,
-                node.name
-              );
-              errors.push({
-                type: "corner-radius-individual",
-                message: `Corner radius ${corner} inválido`,
-                nodeId: node.id,
-                nodeName: node.name,
-                suggestions: []
-              });
-              break;
-            } else if (radius > 100) {
-              console.log(
-                `[Lint] Aviso: Corner radius ${corner} muito alto em`,
-                node.name
-              );
-              errors.push({
-                type: "corner-radius-individual-high",
-                message: `Corner radius ${corner} muito alto`,
-                nodeId: node.id,
-                nodeName: node.name,
-                suggestions: []
-              });
-            }
-          }
-        }
-      }
+    // Verifica raios de canto individuais se o raio uniforme for misto.
+    if (typeof node.cornerRadius === "symbol") {
+      checkRadiusProperty(
+        node.topLeftRadius,
+        "topLeftRadius",
+        node.boundVariables?.topLeftRadius
+      );
+      checkRadiusProperty(
+        node.topRightRadius,
+        "topRightRadius",
+        node.boundVariables?.topRightRadius
+      );
+      checkRadiusProperty(
+        node.bottomLeftRadius,
+        "bottomLeftRadius",
+        node.boundVariables?.bottomLeftRadius
+      );
+      checkRadiusProperty(
+        node.bottomRightRadius,
+        "bottomRightRadius",
+        node.boundVariables?.bottomRightRadius
+      );
     }
   } catch (error) {
     console.error("[checkRadius] Erro:", error);

@@ -96,6 +96,20 @@ function BulkErrorListItem(props) {
   const errorNodes = error.nodes || [];
   const errorCount = error.count || 1;
 
+  const getErrorIcon = type => {
+    const mainType = type.split("-")[0].toLowerCase();
+    const lowerCaseType = type.toLowerCase();
+    try {
+      return require(`../assets/error-type/${lowerCaseType}.svg`);
+    } catch (e) {
+      try {
+        return require(`../assets/error-type/${mainType}.svg`);
+      } catch (e2) {
+        return require("../assets/error-type/effects.svg");
+      }
+    }
+  };
+
   return (
     <motion.li
       className="error-list-item"
@@ -111,11 +125,7 @@ function BulkErrorListItem(props) {
         <span
           className={`error-type error-background-${errorType.toLowerCase()}`}
         >
-          <img
-            src={require("../assets/error-type/" +
-              errorType.toLowerCase() +
-              ".svg")}
-          />
+          <img src={getErrorIcon(errorType)} />
         </span>
         <span className="error-description">
           {errorNodes.length > 1 ? (

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from "react";
 import SettingsPanel from "./SettingsPanel";
 import DocumentationSearch from "./DocumentationSearch";
 import ContrastChecker from "./ContrastChecker";
-import DevModeTab from "./DevModeTab";
+import DevMode from "./DevMode";
 import WCAGContent from "./WCAGContent";
 
 function InitialContent(props) {
@@ -548,20 +548,7 @@ function InitialContent(props) {
             overflow: "hidden"
           }}
         >
-          <DevModeTab
-            selectedNode={selectedNode}
-            onInspectClick={() => {
-              console.log("Iniciando modo de inspeção...");
-              parent.postMessage(
-                {
-                  pluginMessage: {
-                    type: "start-inspection"
-                  }
-                },
-                "*"
-              );
-            }}
-          />
+          <DevMode selectedNode={selectedNode} onInspectClick={() => {}} />
         </div>
       )}
       {activeTab === "auditoria" && (

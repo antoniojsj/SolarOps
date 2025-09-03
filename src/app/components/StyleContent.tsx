@@ -1,10 +1,15 @@
 import * as React from "react";
 
 function truncateStyle(string) {
+  if (!string) return "";
   return string.length > 28 ? string.substring(0, 28) + "..." : string;
 }
 
 const StyleContent = ({ style, type, error }) => {
+  if (!style) {
+    return null;
+  }
+
   const renderStylePreview = () => {
     switch (type) {
       case "fill":
