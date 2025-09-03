@@ -101,27 +101,37 @@ function BulkErrorListItem(props) {
         backgroundColor: "rgba(255, 255, 255, 0.05)",
         border: "1px solid rgba(255, 255, 255, 0.1)",
         borderRadius: "8px",
-        color: "white"
+        color: "white",
+        marginBottom: "8px",
+        boxShadow: "none"
       }}
     >
-      <div className="flex-row" ref={ref} onClick={showMenu}>
+      <div
+        className="error-description__message"
+        style={{
+          fontWeight: 400,
+          color: "white",
+          padding: "8px 8px 4px 8px",
+          textAlign: "left"
+        }}
+      >
+        {errorMessage}
+        {errorNodes.length > 1 && (
+          <span className="error-description__count">· ({errorCount})</span>
+        )}
+      </div>
+      <div
+        className="flex-row"
+        ref={ref}
+        onClick={showMenu}
+        style={{
+          border: "1px solid #444",
+          padding: "8px",
+          borderRadius: "4px",
+          margin: "4px 8px 8px 8px"
+        }}
+      >
         <span className="error-description">
-          {errorNodes.length > 1 ? (
-            <div
-              className="error-description__message"
-              style={{ fontWeight: 400, color: "white" }}
-            >
-              {errorMessage}{" "}
-              <span className="error-description__count">· ({errorCount})</span>
-            </div>
-          ) : (
-            <div
-              className="error-description__message"
-              style={{ fontWeight: 400, color: "white" }}
-            >
-              {errorMessage}
-            </div>
-          )}
           {errorValue ? (
             <div
               className="current-value tooltip"
@@ -132,16 +142,6 @@ function BulkErrorListItem(props) {
             </div>
           ) : null}
         </span>
-        <motion.span
-          whileTap={{ scale: 0.98, opacity: 0.8 }}
-          className="context-icon"
-        >
-          <div className="menu" ref={ref}>
-            <div className="menu-trigger" onClick={showMenu}>
-              <img src={require("../assets/context.svg")} />
-            </div>
-          </div>
-        </motion.span>
 
         {errorNodes.length > 1 ? (
           <ul
@@ -258,19 +258,14 @@ function BulkErrorListItem(props) {
         )}
       </div>
       {error.suggestions && (
-        <>
-          <span
-            className="suggestion-label"
-            style={{ fontSize: "12px", color: "white" }}
-          >
-            Sugestões
-          </span>
+        <div style={{ padding: "0px 8px 8px 8px" }}>
           <div
             className="auto-fix-suggestion"
             style={{
               backgroundColor: "transparent",
               display: "flex",
-              justifyContent: "space-between"
+              justifyContent: "space-between",
+              alignItems: "center"
             }}
           >
             <div
@@ -298,7 +293,8 @@ function BulkErrorListItem(props) {
               style={{
                 backgroundColor: "transparent",
                 display: "flex",
-                justifyContent: "space-between"
+                justifyContent: "space-between",
+                alignItems: "center"
               }}
             >
               <div
@@ -321,7 +317,7 @@ function BulkErrorListItem(props) {
               />
             </div>
           )}
-        </>
+        </div>
       )}
     </motion.li>
   );
