@@ -2,7 +2,6 @@ import * as React from "react";
 import StyleContent from "./StyleContent";
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion/dist/framer-motion";
-import Button from "./Button";
 import SuggestionButton from "./SuggestionButton";
 import "../styles/modal.css";
 
@@ -22,9 +21,7 @@ function BulkErrorListItem(props) {
   };
 
   function handlePanelVisible(boolean, error, index) {
-    props.handlePanelVisible(boolean);
-    props.handleUpdatePanelError(error);
-    props.handleUpdatePanelSuggestion(index);
+    props.handlePanelVisible(boolean, error, index);
   }
 
   function handleIgnoreChange(error) {
@@ -41,10 +38,6 @@ function BulkErrorListItem(props) {
 
   function handleIgnoreAll(error) {
     props.handleIgnoreAll(error);
-  }
-
-  function handleFixAll(error) {
-    props.handleFixAll(error);
   }
 
   function handleBorderRadiusUpdate(value) {
@@ -85,30 +78,14 @@ function BulkErrorListItem(props) {
   const hasNoMatches = !error.matches || error.matches.length === 0;
   const errorTypeIsNotRadius = error.type !== "radius";
 
-  // Obter nodeId de forma segura
   const nodeId =
     error.nodeId || (error.node && error.node.id) || `error-${props.index}`;
 
-  // Verificações de segurança
   const errorType = error.type || "unknown";
   const errorMessage = error.message || "Erro desconhecido";
   const errorValue = error.value || "";
   const errorNodes = error.nodes || [];
   const errorCount = error.count || 1;
-
-  const getErrorIcon = type => {
-    const mainType = type.split("-")[0].toLowerCase();
-    const lowerCaseType = type.toLowerCase();
-    try {
-      return require(`../assets/error-type/${lowerCaseType}.svg`);
-    } catch (e) {
-      try {
-        return require(`../assets/error-type/${mainType}.svg`);
-      } catch (e2) {
-        return require("../assets/error-type/effects.svg");
-      }
-    }
-  };
 
   return (
     <motion.li
@@ -120,24 +97,37 @@ function BulkErrorListItem(props) {
       animate="enter"
       exit="exit"
       type={errorType.toLowerCase()}
+      style={{
+        backgroundColor: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: "8px",
+        color: "white"
+      }}
     >
       <div className="flex-row" ref={ref} onClick={showMenu}>
-        <span
-          className={`error-type error-background-${errorType.toLowerCase()}`}
-        >
-          <img src={getErrorIcon(errorType)} />
-        </span>
         <span className="error-description">
           {errorNodes.length > 1 ? (
-            <div className="error-description__message">
+            <div
+              className="error-description__message"
+              style={{ fontWeight: 400, color: "white" }}
+            >
               {errorMessage}{" "}
               <span className="error-description__count">· ({errorCount})</span>
             </div>
           ) : (
-            <div className="error-description__message">{errorMessage}</div>
+            <div
+              className="error-description__message"
+              style={{ fontWeight: 400, color: "white" }}
+            >
+              {errorMessage}
+            </div>
           )}
           {errorValue ? (
-            <div className="current-value tooltip" data-text="Tooltip">
+            <div
+              className="current-value tooltip"
+              data-text="Tooltip"
+              style={{ color: "white" }}
+            >
               {truncate(errorValue)}
             </div>
           ) : null}
@@ -267,22 +257,22 @@ function BulkErrorListItem(props) {
           </ul>
         )}
       </div>
-      {error.matches && (
-        <div className="auto-fix-content">
-          <div className="auto-fix-style">
-            <StyleContent
-              style={error.matches[0]}
-              type={errorType.toLowerCase()}
-              error={error}
-            />
-          </div>
-          <Button error={error} applyStyle={handleFixAll} />
-        </div>
-      )}
       {error.suggestions && (
         <>
-          <span className="suggestion-label">Suggestions</span>
-          <div className="auto-fix-suggestion">
+          <span
+            className="suggestion-label"
+            style={{ fontSize: "12px", color: "white" }}
+          >
+            Sugestões
+          </span>
+          <div
+            className="auto-fix-suggestion"
+            style={{
+              backgroundColor: "transparent",
+              display: "flex",
+              justifyContent: "space-between"
+            }}
+          >
             <div
               className="auto-fix-style auto-fix-style-clickable"
               onClick={event => {
@@ -303,7 +293,14 @@ function BulkErrorListItem(props) {
             />
           </div>
           {error.suggestions[1] && (
-            <div className="auto-fix-suggestion suggestion-last">
+            <div
+              className="auto-fix-suggestion suggestion-last"
+              style={{
+                backgroundColor: "transparent",
+                display: "flex",
+                justifyContent: "space-between"
+              }}
+            >
               <div
                 className="auto-fix-style auto-fix-style-clickable"
                 onClick={event => {

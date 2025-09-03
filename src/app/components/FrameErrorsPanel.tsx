@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion/dist/framer-motion";
 import PanelHeader from "./PanelHeader";
+import BulkErrorListItem from "./BulkErrorListItem";
 import "../styles/panel.css";
 
 interface FrameErrorsPanelProps {
@@ -8,13 +9,25 @@ interface FrameErrorsPanelProps {
   onBack: () => void;
   frameErrors: any[];
   isVisible: boolean;
+  handleIgnoreChange: (error: any) => void;
+  handleSelectAll: (error: any) => void;
+  handleCreateStyle: (error: any) => void;
+  handleSelect: (error: any) => void;
+  handleIgnoreAll: (error: any) => void;
+  handleFixAll: (error: any) => void;
+  handleSuggestion: (error: any, index: number) => void;
+  handleBorderRadiusUpdate: (value: any) => void;
+  handlePanelVisible: (boolean: boolean, error?: any, index?: number) => void;
+  handleUpdatePanelError: (error: any) => void;
+  handleUpdatePanelSuggestion: (index: number) => void;
 }
 
 const FrameErrorsPanel: React.FC<FrameErrorsPanelProps> = ({
   frameName,
   onBack,
   frameErrors,
-  isVisible
+  isVisible,
+  ...handlers
 }) => {
   const variants = {
     open: { opacity: 1, x: 0 },
@@ -44,62 +57,16 @@ const FrameErrorsPanel: React.FC<FrameErrorsPanelProps> = ({
             Nenhum erro encontrado neste frame.
           </div>
         ) : (
-          <div style={{ color: "#fff" }}>
-            <div
-              style={{
-                fontSize: "14px",
-                color: "rgba(255, 255, 255, 0.7)",
-                marginBottom: "16px"
-              }}
-            >
-              {frameErrors.length}{" "}
-              {frameErrors.length === 1
-                ? "erro encontrado"
-                : "erros encontrados"}
-            </div>
-            <div
-              style={{
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "8px",
-                overflow: "hidden"
-              }}
-            >
-              {frameErrors.map((error, index) => (
-                <div
-                  key={index}
-                  style={{
-                    padding: "12px 16px",
-                    borderBottom:
-                      index < frameErrors.length - 1
-                        ? "1px solid rgba(255, 255, 255, 0.05)"
-                        : "none",
-                    backgroundColor:
-                      index % 2 === 0
-                        ? "rgba(255, 255, 255, 0.02)"
-                        : "transparent",
-                    fontSize: "13px",
-                    lineHeight: "1.5"
-                  }}
-                >
-                  <div style={{ fontWeight: 500, marginBottom: "4px" }}>
-                    {error.message || "Erro de validação"}
-                  </div>
-                  {error.type && (
-                    <div
-                      style={{
-                        color: "rgba(255, 255, 255, 0.6)",
-                        fontSize: "12px",
-                        fontFamily: "monospace",
-                        marginTop: "4px"
-                      }}
-                    >
-                      {error.type}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <ul className="errors-list" style={{ padding: 0 }}>
+            {frameErrors.map((error, index) => (
+              <BulkErrorListItem
+                error={error}
+                index={index}
+                key={`${error.nodeId}-${error.type}-${index}`}
+                {...handlers}
+              />
+            ))}
+          </ul>
         )}
       </div>
     </motion.div>

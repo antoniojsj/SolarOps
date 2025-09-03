@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion/dist/framer-motion";
+import "../styles/Button.css";
 
 function SuggestionButton({ error, index, applyStyle }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +34,8 @@ function SuggestionButton({ error, index, applyStyle }) {
       onClick={() => handleClick(error, index)}
       className={
         isLoading
-          ? "loading-button disabled match-button"
-          : "loading-button match-button"
+          ? "loading-button disabled button button--secondary-white"
+          : "loading-button button button--secondary-white"
       }
     >
       {isLoading ? (
@@ -44,7 +45,7 @@ function SuggestionButton({ error, index, applyStyle }) {
           <span className="button-dot" />
         </div>
       ) : (
-        <>Apply</>
+        <>Aplicar</>
       )}
     </motion.button>
   );

@@ -1122,18 +1122,15 @@ function BulkErrorList(props) {
                 </div>
               </li>
             </motion.ul>
-            {/* Lista de erros e banner - mostrar sempre quando há análise completa */}
-            {props.initialLoadComplete && (
+            {/* Banner - mostrar sempre quando há análise completa */}
+            {props.initialLoadComplete && totalErrorsWithMatches > 0 && (
               <motion.ul className="errors-list">
-                {totalErrorsWithMatches > 0 && (
-                  <li style={{ listStyle: "none" }} key="banner-item">
-                    <Banner
-                      totalErrorsWithMatches={totalErrorsWithMatches}
-                      handleFixAllErrors={handleFixAllFromBanner}
-                    />
-                  </li>
-                )}
-                {errorListItems.length > 0 && errorListItems}
+                <li style={{ listStyle: "none" }} key="banner-item">
+                  <Banner
+                    totalErrorsWithMatches={totalErrorsWithMatches}
+                    handleFixAllErrors={handleFixAllFromBanner}
+                  />
+                </li>
               </motion.ul>
             )}
           </>
@@ -1374,6 +1371,17 @@ function BulkErrorList(props) {
           frameErrors={selectedFrame.errors}
           onBack={() => setSelectedFrame(null)}
           isVisible={!!selectedFrame}
+          handleIgnoreChange={handleIgnoreChange}
+          handleSelectAll={handleSelectAll}
+          handleCreateStyle={handleCreateStyle}
+          handleSelect={handleSelect}
+          handleIgnoreAll={handleIgnoreAll}
+          handleFixAll={handleFixAll}
+          handleSuggestion={handleSuggestion}
+          handleBorderRadiusUpdate={handleBorderRadiusUpdate}
+          handlePanelVisible={handlePanelVisible}
+          handleUpdatePanelError={handleUpdatePanelError}
+          handleUpdatePanelSuggestion={handleUpdatePanelSuggestion}
         />
       )}
 
