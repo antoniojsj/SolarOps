@@ -1389,7 +1389,19 @@ figma.on("selectionchange", () => {
 
               // Processa o valor da propriedade
               let value;
-              if (typeof prop.value === "boolean") {
+              if (
+                prop.type === "INSTANCE_SWAP" &&
+                typeof prop.value === "string"
+              ) {
+                const instanceNode = figma.getNodeById(prop.value);
+                if (instanceNode && instanceNode.mainComponent) {
+                  value = instanceNode.mainComponent.name;
+                } else if (instanceNode) {
+                  value = instanceNode.name;
+                } else {
+                  value = prop.value; // fallback to ID
+                }
+              } else if (typeof prop.value === "boolean") {
                 value = prop.value;
               } else if (typeof prop.value === "string") {
                 value = prop.value.trim();

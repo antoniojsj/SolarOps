@@ -353,61 +353,6 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
                           // Tratar diferentes tipos de valor
                           if (typeof value === "object") {
                             displayValue = JSON.stringify(value);
-                          } else if (
-                            key.toLowerCase().includes("swap") &&
-                            typeof value === "string" &&
-                            value.includes(":")
-                          ) {
-                            // Tratamento especial para propriedades de swap que contêm IDs de componente
-                            try {
-                              // Usar a API do Figma diretamente
-                              if ((window as any).figma) {
-                                // Tentar obter o nó pelo ID
-                                const node = (window as any).figma.getNodeById(
-                                  value
-                                );
-
-                                if (node) {
-                                  // Se for um componente ou instância, pegar o nome
-                                  if (
-                                    node.type === "COMPONENT" ||
-                                    node.type === "INSTANCE"
-                                  ) {
-                                    displayValue = node.name;
-                                  }
-                                  // Se for um nó de texto, pegar o conteúdo
-                                  else if (node.type === "TEXT") {
-                                    displayValue = node.characters;
-                                  }
-                                  // Para outros tipos, tentar pegar o nome
-                                  else if (node.name) {
-                                    displayValue = node.name;
-                                  }
-                                } else {
-                                  // Se não encontrar pelo ID, tentar buscar na página atual
-                                  const page = (window as any).figma
-                                    .currentPage;
-                                  const nodes = page.findAll(
-                                    n => n.id === value
-                                  );
-                                  if (
-                                    nodes &&
-                                    nodes.length > 0 &&
-                                    nodes[0].name
-                                  ) {
-                                    displayValue = nodes[0].name;
-                                  } else {
-                                    displayValue = `[ID: ${value}]`;
-                                  }
-                                }
-                              }
-                            } catch (error) {
-                              console.error(
-                                "Erro ao buscar componente:",
-                                error
-                              );
-                              displayValue = `[Erro ao buscar componente]`;
-                            }
                           }
 
                           return (
