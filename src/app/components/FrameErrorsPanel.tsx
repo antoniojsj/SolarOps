@@ -1,66 +1,37 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion } from "framer-motion/dist/framer-motion";
+import PanelHeader from "./PanelHeader";
+import "../styles/panel.css";
 
 interface FrameErrorsPanelProps {
   frameName: string;
   onBack: () => void;
   frameErrors: any[];
+  isVisible: boolean;
 }
 
 const FrameErrorsPanel: React.FC<FrameErrorsPanelProps> = ({
   frameName,
   onBack,
-  frameErrors
+  frameErrors,
+  isVisible
 }) => {
+  const variants = {
+    open: { opacity: 1, x: 0 },
+    closed: { opacity: 0, x: "100%" }
+  };
+
   return (
-    <div className="panel">
-      <div className="panel-header" style={{ padding: "16px" }}>
-        <button
-          onClick={onBack}
-          className="back-button"
-          style={{
-            background: "none",
-            border: "none",
-            color: "#fff",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "8px 0",
-            fontSize: "14px",
-            fontFamily: "inherit"
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M15 18L9 12L15 6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Voltar
-        </button>
-        <h2
-          style={{
-            fontSize: "16px",
-            fontWeight: 600,
-            color: "#fff",
-            margin: "16px 0",
-            padding: 0
-          }}
-        >
-          {frameName}
-        </h2>
-      </div>
-      <div className="panel-body" style={{ padding: "0 16px 16px" }}>
+    <motion.div
+      className="panel info-panel-root"
+      initial={{ opacity: 0, x: "100%" }}
+      animate={isVisible ? "open" : "closed"}
+      transition={{ duration: 0.3, type: "tween" }}
+      variants={variants}
+      key="frame-errors-panel"
+    >
+      <PanelHeader title={frameName} handleHide={onBack} />
+      <div className="info-panel-content">
         {frameErrors.length === 0 ? (
           <div
             style={{
@@ -131,7 +102,7 @@ const FrameErrorsPanel: React.FC<FrameErrorsPanelProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

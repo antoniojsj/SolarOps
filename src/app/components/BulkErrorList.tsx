@@ -1,6 +1,4 @@
 import * as React from "react";
-
-declare function require(path: string): any;
 import { motion } from "framer-motion/dist/framer-motion";
 import BulkErrorListItem from "./BulkErrorListItem";
 import Banner from "./Banner";
@@ -10,7 +8,10 @@ import AnalysisResultsCard from "./AnalysisResultsCard";
 import ConformityScoreBar from "./ConformityScoreBar";
 import ConformityItemChart from "./ConformityItemChart";
 import Preloader from "./Preloader";
+import FrameErrorsPanel from "./FrameErrorsPanel";
 import "../styles/ui.css";
+
+declare function require(path: string): any;
 
 function BulkErrorList(props) {
   const [currentError, setCurrentError] = React.useState(null);
@@ -19,6 +20,11 @@ function BulkErrorList(props) {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [panelVisible, setPanelVisible] = React.useState(false);
   const [tab, setTab] = React.useState("Geral");
+  const [selectedFrame, setSelectedFrame] = React.useState<{
+    id: string;
+    name: string;
+    errors: any[];
+  } | null>(null);
 
   // Get current date and time for analysis
   const now = new Date();
@@ -253,6 +259,32 @@ function BulkErrorList(props) {
     walk(frame);
     return ids;
   }, []);
+
+  const getFrameErrors = React.useCallback(
+    (frameId: string) => {
+      if (!frameId || !Array.isArray(props.errorArray)) return [];
+
+      const nodeArray = Array.isArray(props.nodeArray) ? props.nodeArray : [];
+      const frameNode = nodeArray.find(node => node.id === frameId) || null;
+      if (!frameNode) return [];
+
+      const frameNodeIds = new Set<string>();
+      const collectNodeIds = (node: any) => {
+        if (!node || !node.id) return;
+        frameNodeIds.add(node.id);
+        if (Array.isArray(node.children)) {
+          node.children.forEach(collectNodeIds);
+        }
+      };
+      collectNodeIds(frameNode);
+
+      return props.errorArray.filter((error: any) => {
+        const errorNodeId = error.nodeId || error.id;
+        return errorNodeId && frameNodeIds.has(errorNodeId);
+      });
+    },
+    [props.errorArray, props.nodeArray]
+  );
 
   // Create an array of errors that have matches
   const errorsWithMatches = bulkErrorList.filter((error: any) => {
@@ -681,6 +713,15 @@ function BulkErrorList(props) {
       nonConform,
       percent
     };
+  }
+
+  function handleVerificarErros(frame) {
+    const frameErrors = getFrameErrors(frame.id);
+    setSelectedFrame({
+      id: frame.id,
+      name: frame.name,
+      errors: frameErrors
+    });
   }
 
   // Listener para receber o JSON exportado e baixar
@@ -1122,16 +1163,6 @@ function BulkErrorList(props) {
                 ).length;
                 // Score de conformidade
                 const correct = conformElements;
-                // const score =
-                //   totalElements > 0
-                //     ? Math.round((correct / totalElements) * 100)
-                //     : 0;
-                // Handler do botão
-                const handleVerificarErros = () => {
-                  if (props.onSelectedListUpdate && frame.id) {
-                    props.onSelectedListUpdate([frame.id]);
-                  }
-                };
                 return (
                   <div key={frame.id} style={{ marginBottom: 48 }}>
                     <div
@@ -1296,7 +1327,7 @@ function BulkErrorList(props) {
                             justifyContent: "center",
                             gap: 8
                           }}
-                          onClick={handleVerificarErros}
+                          onClick={() => handleVerificarErros(frame)}
                         >
                           <span>Verificar erros</span>
                           <img
@@ -1336,6 +1367,16 @@ function BulkErrorList(props) {
           </div>
         </div>
       )}
+
+      {selectedFrame && (
+        <FrameErrorsPanel
+          frameName={selectedFrame.name}
+          frameErrors={selectedFrame.errors}
+          onBack={() => setSelectedFrame(null)}
+          isVisible={!!selectedFrame}
+        />
+      )}
+
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
