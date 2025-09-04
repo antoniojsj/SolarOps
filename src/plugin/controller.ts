@@ -860,7 +860,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           libs.length,
           "bibliotecas no clientStorage"
         );
-        figma.clientStorage.setAsync("sherlock_selected_libs", libs);
+        figma.clientStorage.setAsync("solarops_selected_libs", libs);
         figma.ui.postMessage({ type: "user-libs-saved", success: true });
       } catch (e) {
         console.error("[Controller] Erro ao salvar bibliotecas:", e);
@@ -876,7 +876,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       // Retorna as bibliotecas salvas do usuário
       try {
         const libs =
-          (await figma.clientStorage.getAsync("sherlock_selected_libs")) || [];
+          (await figma.clientStorage.getAsync("solarops_selected_libs")) || [];
         console.log(
           "[Controller] Carregando",
           libs.length,
@@ -897,7 +897,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       );
       try {
         await figma.clientStorage.setAsync(
-          "sherlock_selected_libs",
+          "solarops_selected_libs",
           msg.libraries
         );
         console.log("[Controller] Bibliotecas ativas salvas com sucesso");
@@ -952,7 +952,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           );
           try {
             const savedLibs = await figma.clientStorage.getAsync(
-              "sherlock_selected_libs"
+              "solarops_selected_libs"
             );
             console.log(
               "[Controller] Bibliotecas salvas no clientStorage:",

@@ -1,4 +1,4 @@
-# Sherlock - Plugin para Figma
+# SolarOps - Plugin para Figma
 
 O SolarOps é uma iniciativa do Studio de Design da Compass UOL, que oferece aos clientes parceiros diversas ações para aprimorar seus processos e potencializar os ganhos operacionais em design.
 
@@ -34,8 +34,8 @@ Além da auditoria de conformidade, o plugin possibilita identificar falhas e co
 
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/antoniojsj/sherlock.git
-   cd sherlock
+   git clone https://github.com/antoniojsj/SolarOps.git
+   cd SolarOps
    ```
 
 2. Instale as dependências:

@@ -1,5 +1,5 @@
 // Using Figma's clientStorage for data persistence instead of file system
-const DATA_NAMESPACE = "sherlock_data";
+const DATA_NAMESPACE = "solarops_data";
 const TOKENS_KEY = `${DATA_NAMESPACE}/tokens`;
 const LIBRARIES_KEY = `${DATA_NAMESPACE}/libraries`;
 

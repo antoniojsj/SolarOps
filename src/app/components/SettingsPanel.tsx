@@ -783,10 +783,7 @@ function SettingsPanel(props: SettingsPanelProps) {
         }}
         key="settings-panel"
       >
-        <PanelHeader
-          title={"Bibliotecas de Tokens Detectadas"}
-          handleHide={handleHide}
-        />
+        <PanelHeader title={"Configurações das libs"} handleHide={handleHide} />
         <div
           className="info-panel-content settings-panel-content"
           style={{

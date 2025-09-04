@@ -742,7 +742,7 @@ function BulkErrorList(props) {
           downloadAnchorNode.setAttribute("href", dataStr);
           downloadAnchorNode.setAttribute(
             "download",
-            "sherlock-inspector.json"
+            "solarops-inspector.json"
           );
           document.body.appendChild(downloadAnchorNode);
           downloadAnchorNode.click();

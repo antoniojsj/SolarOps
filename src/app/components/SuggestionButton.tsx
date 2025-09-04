@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion/dist/framer-motion";
-import "../styles/Button.css";
+import "../styles/ui.css";
 
 function SuggestionButton({ error, index, applyStyle }) {
   const [isLoading, setIsLoading] = useState(false);
