@@ -1128,24 +1128,6 @@ function SettingsPanel(props: SettingsPanelProps) {
                               tokens={lib.grids}
                             />
                           )}
-                          {lib.gaps && lib.gaps.length > 0 && (
-                            <TokenAccordion
-                              category="Spacing Gaps"
-                              tokens={lib.gaps}
-                            />
-                          )}
-                          {lib.paddings && lib.paddings.length > 0 && (
-                            <TokenAccordion
-                              category="Spacing Paddings"
-                              tokens={lib.paddings}
-                            />
-                          )}
-                          {lib.strokeWidths && lib.strokeWidths.length > 0 && (
-                            <TokenAccordion
-                              category="Stroke Widths"
-                              tokens={lib.strokeWidths}
-                            />
-                          )}
                         </div>
                       </div>
                     </li>
@@ -1234,6 +1216,30 @@ function SettingsPanel(props: SettingsPanelProps) {
                             <TokenAccordion
                               category="Stroke styles"
                               tokens={lib.strokes}
+                            />
+                          )}
+                          {lib.gaps && lib.gaps.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Gaps"
+                              tokens={lib.gaps}
+                            />
+                          )}
+                          {lib.paddings && lib.paddings.length > 0 && (
+                            <TokenAccordion
+                              category="Spacing Paddings"
+                              tokens={lib.paddings}
+                            />
+                          )}
+                          {lib.strokeWidths && lib.strokeWidths.length > 0 && (
+                            <TokenAccordion
+                              category="Stroke Widths"
+                              tokens={lib.strokeWidths}
+                            />
+                          )}
+                          {lib.grids && lib.grids.length > 0 && (
+                            <TokenAccordion
+                              category="Grids"
+                              tokens={lib.grids}
                             />
                           )}
                         </div>
