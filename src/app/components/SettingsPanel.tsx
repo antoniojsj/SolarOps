@@ -155,7 +155,7 @@ function SettingsPanel(props: SettingsPanelProps) {
   // Simples verificação de código (pode ser trocado por chamada de API depois)
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (accessCode.trim() === "sherlock2024") {
+    if (accessCode.trim() === "solarops2024") {
       setIsAuthenticated(true);
       setError("");
     } else {
