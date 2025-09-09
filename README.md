@@ -8,6 +8,15 @@ Além da auditoria de conformidade, o plugin possibilita identificar falhas e co
 
 ## ✨ Funcionalidades
 
+- **Medição no Canvas (Novo)**:
+  - Distância: linha dividida em 2 com gap central e rótulo centralizado (texto acima do fundo)
+  - Área: label "L × A = X px²" centralizada no objeto
+  - Ângulo: arcos nos cantos (fora do objeto, offset 8px, raio 24, stroke 2) com rótulo do corner radius em px
+- **Presets de Medida Rápida**:
+  - Distância: Topo, Base, Esquerda, Direita, Centro Horizontal, Centro Vertical
+  - Ângulo: Top Left, Top Right, Bottom Left, Bottom Right e Total (insere os 4 cantos)
+- **Mostrar/Ocultar Guias**: Alterna a visibilidade de todas as medições do canvas sem removê-las
+- **Limpar**: Remove todas as medições criadas
 - **Verificador de Contraste**: Analise e valide o contraste entre cores de acordo com as diretrizes WCAG
 - **Guia WCAG**: Consulte critérios de acessibilidade WCAG com descrições detalhadas em português
 - **Filtragem por Categorias**: Navegue pelos critérios WCAG usando filtros por categorias
@@ -67,6 +76,25 @@ npm run build
 
 Os arquivos de build serão armazenados no diretório `dist/`.
 
+## 🧭 Como usar (Medições)
+
+### 1) Presets de Distância
+- Selecione um ou mais objetos no canvas
+- Na UI do plugin, selecione o modo "Distância" e clique em um preset (Topo, Base, Esquerda, Direita, Centro H/V)
+- Uma linha azul é inserida junto ao objeto, dividida em duas com gap central e a label centralizada acima do fundo
+
+### 2) Presets de Ângulo
+- Selecione um ou mais objetos
+- Selecione o modo "Ângulo" e clique em um canto (Top Left/Right, Bottom Left/Right) ou em "Total" para inserir os 4 cantos
+- O arco fica FORA do objeto, a 8px do canto, com raio 24 e stroke 2. A label mostra o valor do corner radius (0px quando não houver)
+
+### 3) Área
+- Selecione objetos no modo "Área" para inserir automaticamente a label "L × A = X px²" centralizada
+
+### 4) Mostrar/Ocultar Guias e Limpar
+- "Mostrar/Ocultar Guias": alterna a visibilidade de todas as medições sem apagar
+- "Limpar": remove todas as medições criadas no canvas
+
 ## 📦 Instalação no Figma
 
 1. Abra o aplicativo Figma Desktop
@@ -77,4 +105,13 @@ Os arquivos de build serão armazenados no diretório `dist/`.
 ## 📄 Licença
 
 Este projeto está licenciado sob a licença ISC - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 🤝 Contribuindo
+
+Sinta-se à vontade para abrir issues e PRs. Para contribuições:
+
+1. Crie um branch a partir de `main`: `git checkout -b feature/nome-da-feature`
+2. Faça seus commits seguindo boas mensagens: `docs:`, `feat:`, `fix:`, etc.
+3. Abra um Pull Request descrevendo claramente as mudanças e passos de teste
+
 

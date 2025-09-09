@@ -16,6 +16,53 @@ import {
   fetchRemoteStyles
 } from "./remoteStyleFunctions";
 
+// Import the measurement controller
+import {
+  initializeMeasurementController,
+  createMeasurement,
+  clearMeasurements,
+  createAreaMeasurementForNode,
+  createPresetMeasurementForNode,
+  setMeasurementsVisible,
+  createAnglePresetForNode
+} from "./measurementController"; // MODIFIED
+
+// Estado simples para o modo de medição vindo da UI
+let MEASURE_STATE: {
+  isMeasuring: boolean;
+  mode: "distance" | "area" | "angle";
+  showGuides: boolean;
+} = {
+  isMeasuring: false,
+  mode: "distance",
+  showGuides: true
+};
+
+// Estado de runtime para captura por seleção (clique 1 -> clique 2)
+let MEASURE_RUNTIME: {
+  firstNodeId?: string;
+} = {};
+
+function getAbsoluteCenter(node: any) {
+  try {
+    const m = node.absoluteTransform as [
+      [number, number, number],
+      [number, number, number]
+    ];
+    const absX = m[0][2];
+    const absY = m[1][2];
+    const w = "width" in node ? node.width : 0;
+    const h = "height" in node ? node.height : 0;
+    return { x: absX + w / 2, y: absY + h / 2 };
+  } catch {
+    // fallback relativo
+    return {
+      x: (node.x || 0) + (node.width || 0) / 2,
+      y: (node.y || 0) + (node.height || 0) / 2
+    };
+  }
+}
+
 // Interface para arquivos de tokens salvos
 interface SavedTokenFile {
   filename: string;
@@ -88,6 +135,60 @@ const {
 // @ts-ignore - __html__ é fornecido pelo Figma
 figma.showUI(__html__, { width: 480, height: 700 });
 figma.ui.resize(480, 700);
+
+// Inicializa controlador de medições (carrega fontes e registra observers)
+initializeMeasurementController();
+
+// Sempre que a seleção mudar, notificar a UI e, se estiver em modo de medição,
+// criar uma medição simples entre dois itens selecionados (modo distância)
+figma.on("selectionchange", async () => {
+  try {
+    figma.ui.postMessage({
+      type: "selection-updated",
+      payload: { count: figma.currentPage.selection?.length || 0 }
+    });
+
+    if (
+      MEASURE_STATE.isMeasuring &&
+      (MEASURE_STATE.mode === "distance" || MEASURE_STATE.mode === "angle")
+    ) {
+      const sel = figma.currentPage.selection as any[];
+      if (!sel || sel.length === 0) {
+        return;
+      }
+      const current = sel[0];
+      if (!MEASURE_RUNTIME.firstNodeId) {
+        // primeiro clique
+        MEASURE_RUNTIME.firstNodeId = current.id;
+        return;
+      }
+      if (
+        MEASURE_RUNTIME.firstNodeId &&
+        current.id !== MEASURE_RUNTIME.firstNodeId
+      ) {
+        // segundo clique
+        const a = figma.getNodeById(MEASURE_RUNTIME.firstNodeId) as any;
+        const b = current;
+        if (a && b) {
+          const ca = getAbsoluteCenter(a);
+          const cb = getAbsoluteCenter(b);
+          createMeasurement(ca.x, ca.y, cb.x, cb.y, MEASURE_STATE.mode as any);
+        }
+        // pronto para nova captura
+        MEASURE_RUNTIME.firstNodeId = undefined;
+      }
+    } else if (MEASURE_STATE.isMeasuring && MEASURE_STATE.mode === "area") {
+      const sel = figma.currentPage.selection as any[];
+      if (!sel || sel.length === 0) return;
+      // Criar medição de área para todos os nós selecionados
+      for (const node of sel) {
+        await createAreaMeasurementForNode(node as SceneNode);
+      }
+    }
+  } catch (e) {
+    console.warn("[Controller] selectionchange handler error", e);
+  }
+});
 
 // Função principal de linting otimizada
 function lint(
@@ -426,6 +527,85 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
 
   try {
+    // ===== Handlers do Medidor (canvas) =====
+    if (msg.type === "init-measurement-tool") {
+      MEASURE_STATE.isMeasuring = Boolean(msg.payload?.isMeasuring);
+      MEASURE_STATE.mode = msg.payload?.mode || "distance";
+      MEASURE_STATE.showGuides = msg.payload?.showGuides ?? true;
+
+      figma.ui.postMessage({
+        type: "selection-updated",
+        payload: { count: figma.currentPage.selection?.length || 0 }
+      });
+      return;
+    }
+
+    if (msg.type === "get-selection-count") {
+      figma.ui.postMessage({
+        type: "selection-updated",
+        payload: { count: figma.currentPage.selection?.length || 0 }
+      });
+      return;
+    }
+
+    if (msg.type === "set-measurement-mode") {
+      if (typeof msg.payload?.isMeasuring === "boolean") {
+        MEASURE_STATE.isMeasuring = msg.payload.isMeasuring;
+      }
+      if (msg.payload?.mode) {
+        MEASURE_STATE.mode = msg.payload.mode;
+      }
+      return;
+    }
+
+    if (msg.type === "toggle-guides") {
+      MEASURE_STATE.showGuides = Boolean(msg.payload?.showGuides);
+      // Mostrar/ocultar medições no canvas conforme estado
+      setMeasurementsVisible(MEASURE_STATE.showGuides);
+      return;
+    }
+
+    if (msg.type === "create-preset-measurement") {
+      const position = msg.payload?.position as
+        | "top"
+        | "bottom"
+        | "left"
+        | "right"
+        | "h-center"
+        | "v-center";
+      const offset =
+        typeof msg.payload?.offset === "number" ? msg.payload.offset : 10;
+      const sel = figma.currentPage.selection as SceneNode[];
+      if (!position || !sel || sel.length === 0) {
+        figma.notify("Selecione ao menos um objeto para aplicar a medida.");
+        return;
+      }
+      for (const node of sel) {
+        await createPresetMeasurementForNode(node, position, offset);
+      }
+      return;
+    }
+
+    if (msg.type === "create-angle-preset") {
+      const corner = msg.payload?.corner as
+        | "top-left"
+        | "top-right"
+        | "bottom-left"
+        | "bottom-right"
+        | "all";
+      const sel = figma.currentPage.selection as SceneNode[];
+      if (!corner || !sel || sel.length === 0) {
+        figma.notify("Selecione ao menos um objeto para inserir ângulos.");
+        return;
+      }
+      for (const node of sel) {
+        await createAnglePresetForNode(node, corner);
+      }
+      // Garantir visibilidade conforme estado atual
+      setMeasurementsVisible(MEASURE_STATE.showGuides);
+      return;
+    }
+
     // Carregar tokens salvos
     if (msg.type === "load-saved-tokens") {
       const result = await loadSavedTokens();
@@ -496,6 +676,39 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
       return;
     }
+
+    if (msg.type === "measurement-tool-ready") {
+      const selection = figma.currentPage.selection;
+      const node = selection.length > 0 ? selection[0] : null;
+      figma.ui.postMessage({
+        type: "selection-changed",
+        payload: node
+          ? {
+              id: node.id,
+              x: node.x,
+              y: node.y,
+              width: "width" in node ? node.width : 0,
+              height: "height" in node ? node.height : 0,
+              rotation: "rotation" in node ? node.rotation : 0,
+              visible: "visible" in node ? node.visible : true,
+              measurements: {}
+            }
+          : null
+      });
+      return;
+    }
+
+    if (msg.type === "create-measurement") {
+      const { startX, startY, endX, endY } = msg.payload;
+      createMeasurement(startX, startY, endX, endY);
+      return;
+    }
+
+    if (msg.type === "clear-measurements") {
+      clearMeasurements();
+      return;
+    }
+
     if (msg.type === "close") {
       console.log("[Controller] Fechando plugin");
       figma.closePlugin();
@@ -1168,11 +1381,19 @@ async function loadSavedTokens() {
     )) {
       try {
         const tokens = await figma.clientStorage.getAsync(file.filename);
-        if (tokens) {
-          tokensList.push({
-            ...file,
-            tokens: JSON.parse(tokens)
-          });
+        if (typeof tokens === "string" && tokens.trim().length) {
+          try {
+            const parsed = JSON.parse(tokens);
+            tokensList.push({
+              ...file,
+              tokens: parsed
+            });
+          } catch (e) {
+            console.warn(
+              "[loadSavedTokens] Ignorando conteúdo inválido em",
+              file.filename
+            );
+          }
         }
       } catch (error) {
         console.error(`Erro ao carregar tokens de ${file.filename}:`, error);
@@ -1479,10 +1700,31 @@ figma.on("selectionchange", () => {
         type: "selected-node",
         node: extractNodeData(selectedNodes[0])
       });
+
+      // For measurement tool
+      const node = selectedNodes[0];
+      figma.ui.postMessage({
+        type: "selection-changed",
+        payload: {
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          width: "width" in node ? node.width : 0,
+          height: "height" in node ? node.height : 0,
+          rotation: "rotation" in node ? node.rotation : 0,
+          visible: "visible" in node ? node.visible : true,
+          measurements: {}
+        }
+      });
     } else {
       console.log("Nenhum nó selecionado");
       figma.ui.postMessage({
         type: "no-selection"
+      });
+      // For measurement tool
+      figma.ui.postMessage({
+        type: "selection-changed",
+        payload: null
       });
     }
 
@@ -1505,3 +1747,6 @@ figma.on("selectionchange", () => {
     });
   }
 });
+
+// Initialize the measurement controller
+initializeMeasurementController(); // ADDED
