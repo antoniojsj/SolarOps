@@ -109,7 +109,7 @@ export const fills = async (node, parent, { fontColor = "", fontSize = 0 }) => {
     if (node.fillStyleId) {
       fills = await getFillsByFillStyleId(node.fillStyleId);
     } else {
-      if (!fills && node?.fills !== figma.mixed) {
+      if (!fills && node && node.fills !== figma.mixed) {
         fills = node.fills;
       }
     }

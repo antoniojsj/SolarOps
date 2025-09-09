@@ -3,53 +3,6 @@ import { solidColor, hexToRgb } from "../helper";
 
 import { addNode } from "./types";
 
-const createArrow = (tooltipFrame, settings, { horizontal, vertical }) => {
-  const arrowFrame = figma.createFrame();
-  const arrow = figma.createRectangle();
-
-  const bg = hexToRgb(settings.backgroundColor);
-
-  const ARROW_WIDTH = settings.fontSize;
-  const ARROW_HEIGHT = settings.fontSize;
-  const FRAME_WIDTH = ARROW_WIDTH / 2;
-
-  // frame
-  arrowFrame.name = "Arrow";
-  arrowFrame.resize(FRAME_WIDTH, ARROW_HEIGHT);
-  arrowFrame.x -= FRAME_WIDTH;
-  arrowFrame.y = tooltipFrame.height / 2 - ARROW_HEIGHT / 2;
-  arrowFrame.fills = [];
-
-  // arrow
-  arrow.resize(ARROW_WIDTH, ARROW_HEIGHT);
-  arrow.fills = [].concat(solidColor(bg.r, bg.g, bg.b));
-  arrow.x = 0;
-  arrow.y = arrowFrame.height / 2;
-  arrow.rotation = 45;
-
-  if (horizontal === TooltipPositions.LEFT) {
-    arrowFrame.rotation = 180;
-    arrowFrame.x += tooltipFrame.width + ARROW_WIDTH;
-    arrowFrame.y = tooltipFrame.height / 2 + ARROW_HEIGHT / 2;
-  }
-
-  if (vertical === TooltipPositions.TOP) {
-    arrowFrame.rotation = 90;
-    arrowFrame.x = tooltipFrame.width / 2 - ARROW_WIDTH / 2;
-    arrowFrame.y = tooltipFrame.height + ARROW_HEIGHT / 2;
-  }
-
-  if (vertical === TooltipPositions.BOTTOM) {
-    arrowFrame.rotation = -90;
-    arrowFrame.x = tooltipFrame.width / 2 + ARROW_WIDTH / 2;
-    arrowFrame.y = -(ARROW_HEIGHT / 2);
-  }
-
-  arrowFrame.appendChild(arrow);
-
-  return arrowFrame;
-};
-
 const getTooltipFrame = (node): FrameNode => {
   let tooltipFrame;
 
@@ -148,14 +101,7 @@ export const setTooltip = async (
 
     // ----
 
-    const arrow = createArrow(contentFrame, data, {
-      horizontal: data.horizontal,
-      vertical: data.vertical
-    });
-
-    if (arrow) {
-      tooltipFrame.appendChild(arrow);
-    }
+    // Removido: não criamos seta. Apenas o card de conteúdo.
 
     tooltipFrame.resize(contentFrame.width, contentFrame.height);
     // ----

@@ -6,7 +6,7 @@ import {
 } from "../../../helper";
 
 export const fontName = async (node, parent, showFontSize, fontPattern) => {
-  const fontFamilyName = node?.fontName;
+  const fontFamilyName = node && node.fontName;
 
   if (fontFamilyName) {
     const fontData = await getFontNameData(node);

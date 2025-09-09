@@ -18,13 +18,13 @@ import {
 
 // Import the measurement controller
 import {
-  initializeMeasurementController,
   createMeasurement,
   clearMeasurements,
   createAreaMeasurementForNode,
   createPresetMeasurementForNode,
   setMeasurementsVisible,
-  createAnglePresetForNode
+  createAnglePresetForNode,
+  createBalloonForNode
 } from "./measurementController"; // MODIFIED
 
 // Estado simples para o modo de medição vindo da UI
@@ -136,16 +136,19 @@ const {
 figma.showUI(__html__, { width: 480, height: 700 });
 figma.ui.resize(480, 700);
 
-// Inicializa controlador de medições (carrega fontes e registra observers)
-initializeMeasurementController();
+// Inicialização do controlador de medições não é necessária aqui; measurementController gerencia seus próprios estados.
 
 // Sempre que a seleção mudar, notificar a UI e, se estiver em modo de medição,
 // criar uma medição simples entre dois itens selecionados (modo distância)
 figma.on("selectionchange", async () => {
   try {
+    const selLen =
+      figma.currentPage.selection && figma.currentPage.selection.length
+        ? figma.currentPage.selection.length
+        : 0;
     figma.ui.postMessage({
       type: "selection-updated",
-      payload: { count: figma.currentPage.selection?.length || 0 }
+      payload: { count: selLen }
     });
 
     if (
@@ -405,15 +408,15 @@ function serializeNodes(nodes: any[]): any[] {
       nodes.map(n => ({
         name: n.name,
         type: n.type,
-        hasChildren: n.children?.length > 0
+        hasChildren: n.children && n.children.length > 0 ? true : false
       }))
     );
 
     const serializeNode = (node: any): any => {
+      const childCount =
+        node.children && node.children.length ? node.children.length : 0;
       console.log(
-        `[Controller] Serializando node: ${node.name} (${
-          node.type
-        }) - filhos: ${node.children?.length || 0}`
+        `[Controller] Serializando node: ${node.name} (${node.type}) - filhos: ${childCount}`
       );
 
       const serializedNode: any = {
@@ -481,18 +484,24 @@ function groupErrorsByNode(errors: any[]): any[] {
   // O BulkErrorList espera um array de erros individuais
   const result = errors.map(err => {
     // Garantir que cada erro tenha a estrutura esperada
+    const fallbackId = err && err.node && err.node.id ? err.node.id : undefined;
+    const fallbackName =
+      err && err.node && err.node.name ? err.node.name : undefined;
     return {
       ...err,
-      parentFrameId: err.parentFrameId || null, // garantir que sempre exista
-      nodeId: err.nodeId || err.node?.id,
-      nodeName: err.nodeName || err.node?.name,
-      type: err.type || "unknown",
-      message: err.message || "Erro desconhecido",
-      value: err.value || "",
-      count: err.count || 1,
-      nodes: err.nodes || [err.nodeId || err.node?.id],
-      matches: err.matches || [],
-      suggestions: err.suggestions || []
+      parentFrameId: err && err.parentFrameId ? err.parentFrameId : null,
+      nodeId: err && err.nodeId ? err.nodeId : fallbackId,
+      nodeName: err && err.nodeName ? err.nodeName : fallbackName,
+      type: err && err.type ? err.type : "unknown",
+      message: err && err.message ? err.message : "Erro desconhecido",
+      value: err && err.value ? err.value : "",
+      count: err && err.count ? err.count : 1,
+      nodes:
+        err && err.nodes
+          ? err.nodes
+          : [err && err.nodeId ? err.nodeId : fallbackId],
+      matches: err && err.matches ? err.matches : [],
+      suggestions: err && err.suggestions ? err.suggestions : []
     };
   });
 
@@ -529,52 +538,73 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   try {
     // ===== Handlers do Medidor (canvas) =====
     if (msg.type === "init-measurement-tool") {
-      MEASURE_STATE.isMeasuring = Boolean(msg.payload?.isMeasuring);
-      MEASURE_STATE.mode = msg.payload?.mode || "distance";
-      MEASURE_STATE.showGuides = msg.payload?.showGuides ?? true;
+      MEASURE_STATE.isMeasuring =
+        msg && msg.payload && typeof msg.payload.isMeasuring === "boolean"
+          ? msg.payload.isMeasuring
+          : false;
+      MEASURE_STATE.mode =
+        msg && msg.payload && msg.payload.mode ? msg.payload.mode : "distance";
+      MEASURE_STATE.showGuides =
+        msg && msg.payload && typeof msg.payload.showGuides === "boolean"
+          ? msg.payload.showGuides
+          : true;
 
       figma.ui.postMessage({
         type: "selection-updated",
-        payload: { count: figma.currentPage.selection?.length || 0 }
+        payload: {
+          count:
+            figma.currentPage.selection && figma.currentPage.selection.length
+              ? figma.currentPage.selection.length
+              : 0
+        }
       });
       return;
     }
 
     if (msg.type === "get-selection-count") {
+      var selCount =
+        figma.currentPage.selection && figma.currentPage.selection.length
+          ? figma.currentPage.selection.length
+          : 0;
       figma.ui.postMessage({
         type: "selection-updated",
-        payload: { count: figma.currentPage.selection?.length || 0 }
+        payload: { count: selCount }
       });
       return;
     }
 
     if (msg.type === "set-measurement-mode") {
-      if (typeof msg.payload?.isMeasuring === "boolean") {
-        MEASURE_STATE.isMeasuring = msg.payload.isMeasuring;
+      var p = msg && msg.payload ? msg.payload : ({} as any);
+      if (typeof p.isMeasuring === "boolean") {
+        MEASURE_STATE.isMeasuring = p.isMeasuring;
       }
-      if (msg.payload?.mode) {
-        MEASURE_STATE.mode = msg.payload.mode;
+      if (p.mode) {
+        MEASURE_STATE.mode = p.mode;
       }
       return;
     }
 
     if (msg.type === "toggle-guides") {
-      MEASURE_STATE.showGuides = Boolean(msg.payload?.showGuides);
+      var tgl =
+        msg && msg.payload && typeof msg.payload.showGuides === "boolean"
+          ? msg.payload.showGuides
+          : MEASURE_STATE.showGuides;
+      MEASURE_STATE.showGuides = Boolean(tgl);
       // Mostrar/ocultar medições no canvas conforme estado
       setMeasurementsVisible(MEASURE_STATE.showGuides);
       return;
     }
 
     if (msg.type === "create-preset-measurement") {
-      const position = msg.payload?.position as
+      var payload1 = msg && msg.payload ? msg.payload : ({} as any);
+      const position = payload1.position as
         | "top"
         | "bottom"
         | "left"
         | "right"
         | "h-center"
         | "v-center";
-      const offset =
-        typeof msg.payload?.offset === "number" ? msg.payload.offset : 10;
+      const offset = typeof payload1.offset === "number" ? payload1.offset : 10;
       const sel = figma.currentPage.selection as SceneNode[];
       if (!position || !sel || sel.length === 0) {
         figma.notify("Selecione ao menos um objeto para aplicar a medida.");
@@ -587,7 +617,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     if (msg.type === "create-angle-preset") {
-      const corner = msg.payload?.corner as
+      var payload2 = msg && msg.payload ? msg.payload : ({} as any);
+      const corner = payload2.corner as
         | "top-left"
         | "top-right"
         | "bottom-left"
@@ -603,6 +634,37 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
       // Garantir visibilidade conforme estado atual
       setMeasurementsVisible(MEASURE_STATE.showGuides);
+      return;
+    }
+
+    if (msg.type === "create-balloon") {
+      var payload3 = msg && msg.payload ? msg.payload : ({} as any);
+      const position = payload3.position as "left" | "right" | "top" | "bottom";
+      const sel = figma.currentPage.selection as SceneNode[];
+      if (!position || !sel || sel.length === 0) {
+        figma.notify(
+          "Selecione ao menos um objeto para inserir o balão de anotação."
+        );
+        return;
+      }
+      try {
+        for (const node of sel) {
+          try {
+            await createBalloonForNode(node, position);
+          } catch (e) {
+            console.error("[Controller] createBalloonForNode error", e);
+            figma.notify(
+              "Falha ao criar balão: " +
+                (e && (e as any).message ? (e as any).message : String(e)),
+              { timeout: 2500 }
+            );
+          }
+        }
+        setMeasurementsVisible(MEASURE_STATE.showGuides);
+      } catch (e) {
+        console.error("[Controller] create-balloon handler error", e);
+        figma.notify("Erro ao criar balão de anotação.", { timeout: 2500 });
+      }
       return;
     }
 
@@ -721,7 +783,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
     if (msg.type === "select-layer") {
       console.log("[Controller] Selecionando layer");
-      const node = figma.getNodeById(msg.nodes?.[0] || "");
+      const nodesArr = msg && msg.nodes && msg.nodes.length ? msg.nodes : [];
+      const node = figma.getNodeById(nodesArr.length > 0 ? nodesArr[0] : "");
       if (node) {
         figma.currentPage.selection = [node];
         figma.viewport.scrollAndZoomIntoView([node]);
@@ -731,12 +794,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     if (msg.type === "select-multiple-layers") {
       console.log("[Controller] Selecionando múltiplas layers");
       const nodesToBeSelected: any[] = [];
-      msg.nodes?.forEach(item => {
-        const layer = figma.getNodeById(item);
-        if (layer) {
-          nodesToBeSelected.push(layer);
-        }
-      });
+      if (msg && Array.isArray(msg.nodes)) {
+        msg.nodes.forEach(item => {
+          const layer = figma.getNodeById(item);
+          if (layer) {
+            nodesToBeSelected.push(layer);
+          }
+        });
+      }
       if (nodesToBeSelected.length > 0) {
         figma.currentPage.selection = nodesToBeSelected;
         figma.viewport.scrollAndZoomIntoView(nodesToBeSelected);
@@ -1198,9 +1263,9 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           effectiveLibraries.length,
           "bibliotecas:",
           effectiveLibraries.map((lib: any) => ({
-            name: lib?.name,
-            id: lib?.id,
-            tokens: lib?.tokens ? Object.keys(lib.tokens) : []
+            name: lib && lib.name ? lib.name : undefined,
+            id: lib && lib.id ? lib.id : undefined,
+            tokens: lib && lib.tokens ? Object.keys(lib.tokens) : []
           }))
         );
 
@@ -1583,9 +1648,18 @@ figma.on("selectionchange", () => {
         // Componentes
         if (node.type === "INSTANCE") {
           nodeData.componentProperties = {
-            name: node.mainComponent?.name || "Sem nome",
-            key: node.mainComponent?.key,
-            description: node.mainComponent?.description || ""
+            name:
+              node.mainComponent && node.mainComponent.name
+                ? node.mainComponent.name
+                : "Sem nome",
+            key:
+              node.mainComponent && node.mainComponent.key
+                ? node.mainComponent.key
+                : undefined,
+            description:
+              node.mainComponent && node.mainComponent.description
+                ? node.mainComponent.description
+                : ""
           };
 
           // Adiciona todas as propriedades do componente
@@ -1638,9 +1712,18 @@ figma.on("selectionchange", () => {
 
             // Cria o objeto final de propriedades
             nodeData.componentProperties = {
-              name: node.mainComponent?.name || "Sem nome",
-              key: node.mainComponent?.key,
-              description: node.mainComponent?.description || "",
+              name:
+                node.mainComponent && node.mainComponent.name
+                  ? node.mainComponent.name
+                  : "Sem nome",
+              key:
+                node.mainComponent && node.mainComponent.key
+                  ? node.mainComponent.key
+                  : undefined,
+              description:
+                node.mainComponent && node.mainComponent.description
+                  ? node.mainComponent.description
+                  : "",
               ...Object.fromEntries(uniqueProps)
             };
           }
@@ -1748,5 +1831,4 @@ figma.on("selectionchange", () => {
   }
 });
 
-// Initialize the measurement controller
-initializeMeasurementController(); // ADDED
+// measurementController is self-contained; no explicit initialize function is needed here.

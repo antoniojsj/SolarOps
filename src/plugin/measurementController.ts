@@ -68,7 +68,8 @@ const getAllMeasurementNodes = async (
   const storedData = node.getPluginDataKeys();
 
   if (node.type === "INSTANCE") {
-    componentId = (await node.getMainComponentAsync())?.id;
+    const mainComp = await node.getMainComponentAsync();
+    componentId = mainComp ? mainComp.id : componentId;
   }
 
   if (node.name === GROUP_NAME_DETACHED) {
@@ -152,7 +153,8 @@ const removeDataFromNode = async node => {
         ? data.connectedNodes
         : [];
       for (const id of connected) {
-        (await figma.getNodeByIdAsync(id))?.remove();
+        const rn = await figma.getNodeByIdAsync(id);
+        if (rn && !rn.removed) rn.remove();
       }
     } catch (e) {
       console.log("failed to remove connected node", e);
@@ -162,6 +164,91 @@ const removeDataFromNode = async node => {
     node.setPluginData("spacing", "");
     node.setPluginData("data", "{}");
     node.setPluginData("parent", "");
+  }
+};
+
+// Cria um balão de anotações (propriedades) ao redor do node, em uma posição dada
+export const createBalloonForNode = async (
+  node: SceneNode,
+  position: "left" | "right" | "top" | "bottom"
+) => {
+  if (!node) {
+    try {
+      figma.notify("Nenhum nó selecionado para criar balão.");
+    } catch {}
+    return;
+  }
+  let state: any = {};
+  try {
+    state = await getState();
+  } catch (e) {
+    state = {};
+  }
+  const positionMap: Record<string, TooltipPositions> = {
+    left: TooltipPositions.LEFT,
+    right: TooltipPositions.RIGHT,
+    top: TooltipPositions.TOP,
+    bottom: TooltipPositions.BOTTOM
+  };
+
+  // Garantir que os principais campos apareçam no balão
+  const base = state && state.tooltip ? state.tooltip : ({} as any);
+  const flags = {
+    width: true,
+    height: true,
+    fontName: Boolean(base.fontName),
+    fontSize: Boolean(base.fontSize),
+    color: true,
+    opacity: true,
+    stroke: Boolean(base.stroke),
+    cornerRadius: true,
+    points: Boolean(base.points),
+    name: true,
+    variants: Boolean(base.variants),
+    effects: Boolean(base.effects),
+    onlyEffectStyle: Boolean(base.onlyEffectStyle)
+  };
+
+  let tooltip: FrameNode | GroupNode | null = null;
+  try {
+    tooltip = (await setTooltip(
+      {
+        flags,
+        offset: 16,
+        position: positionMap[position]
+          ? positionMap[position]
+          : TooltipPositions.RIGHT,
+        labelPattern: state && state.labelPattern ? state.labelPattern : "",
+        fontPattern: state && state.fontPattern ? state.fontPattern : "",
+        backgroundColor: "#000000",
+        fontColor: "#FFFFFF",
+        labelFontSize: 12
+      },
+      node
+    )) as any;
+  } catch (e) {
+    try {
+      console.error("[measurementController] setTooltip error", e);
+    } catch {}
+    try {
+      figma.notify("Erro ao montar balão de anotação.");
+    } catch {}
+    tooltip = null;
+  }
+
+  if (tooltip) {
+    // anexar ao canvas e nomear; visibilidade será controlada por varredura de nomes
+    try {
+      figma.currentPage.appendChild(tooltip);
+    } catch {}
+    try {
+      (tooltip as FrameNode).name = `Annotation (${position})`;
+    } catch {}
+    tooltip.visible = true;
+  } else {
+    try {
+      figma.notify("Não foi possível criar o balão.");
+    } catch {}
   }
 };
 
@@ -277,305 +364,7 @@ EventEmitter.on("resize", ({ width, height }) =>
 
 EventEmitter.answer("current selection", async () => getSelectionArray());
 
-EventEmitter.on("set measurements", async (store: ExchangeStoreValues) =>
-  setMeasurements(store)
-);
-
-const setMeasurements = async (
-  store?: ExchangeStoreValues,
-  shouldIncludeGroups = false,
-  nodes = figma.currentPage.selection
-) => {
-  const state = await getState();
-
-  let data: PluginNodeData = null;
-
-  let settings = {
-    ...store
-  };
-
-  for (const node of nodes) {
-    const found = await figma.getNodeByIdAsync(node?.id);
-
-    if (!found) continue;
-    let surrounding: SurroundingSettings = store.surrounding;
-
-    if (!state.detached) {
-      if (
-        node.name !== GROUP_NAME_ATTACHED &&
-        node.name !== GROUP_NAME_DETACHED &&
-        (node.type === "GROUP" || node.type === "FRAME") &&
-        shouldIncludeGroups
-      ) {
-        if (node.children.length > 0) {
-          setMeasurements(store, shouldIncludeGroups, node.children);
-        }
-      }
-
-      try {
-        data = JSON.parse(node.getPluginData("data") || "{}");
-
-        if (
-          data.surrounding &&
-          Object.keys(data.surrounding).length > 0 &&
-          !store.surrounding
-        ) {
-          surrounding = data.surrounding;
-          settings = {
-            ...settings,
-            ...data
-          };
-        }
-      } catch (e) {
-        console.log(e);
-        node.setPluginData("data", "{}");
-        console.log("Could not set data");
-        if (!store) {
-          continue;
-        }
-      }
-
-      // remove all connected nodes
-      if (data?.connectedNodes?.length > 0) {
-        for (const id of data.connectedNodes) {
-          const foundNode = await figma.getNodeByIdAsync(id);
-          if (foundNode) {
-            foundNode.remove();
-          }
-        }
-      }
-    }
-
-    // spacing
-    const spacing = getSpacing(node);
-    if (Object.keys(spacing).length > 0 && !state.detached) {
-      // biome-ignore lint/complexity/noForEach: <explanation>
-      (
-        await Promise.all(
-          Object.keys(spacing).filter(async connectedNodeId => {
-            // check if group exists
-            const foundGroup = await figma.getNodeByIdAsync(
-              spacing[connectedNodeId]
-            );
-            if (!foundGroup) {
-              delete spacing[connectedNodeId];
-              setSpacing(node, spacing);
-            }
-
-            // get connected node
-            const foundConnectedNode = ((await figma.getNodeByIdAsync(
-              connectedNodeId
-            )) as unknown) as SceneNode;
-
-            // node removed
-            if (!foundConnectedNode) {
-              try {
-                (
-                  await figma.getNodeByIdAsync(spacing[connectedNodeId])
-                )?.remove();
-                delete spacing[connectedNodeId];
-                setSpacing(node, spacing);
-              } catch {
-                console.log("Could not remove connected node");
-              }
-            } else {
-              // check connected node group
-              const connectedNodeSpacing = getSpacing(foundConnectedNode);
-              const foundConnectedGroup = await figma.getNodeByIdAsync(
-                connectedNodeSpacing[node.id]
-              );
-              if (!foundConnectedGroup) {
-                delete connectedNodeSpacing[node.id];
-                setSpacing(foundConnectedNode, connectedNodeSpacing);
-              }
-
-              return connectedNodeId;
-            }
-          })
-        )
-      ).forEach(async connectedNodeId => {
-        drawSpacing(
-          [
-            node,
-            ((await figma.getNodeByIdAsync(
-              connectedNodeId
-            )) as unknown) as SceneNode
-          ],
-          {
-            color: settings.color,
-            labels: settings.labels,
-            labelsOutside: settings.labelsOutside,
-            labelPattern: settings.labelPattern,
-            strokeCap: settings.strokeCap
-            // strokeOffset: settings.strokeOffset,
-          }
-        );
-      });
-    }
-
-    const connectedNodes = [];
-
-    // Padding
-    const padding = getPadding(node);
-    if (padding && !state.detached) {
-      const elements = Object.keys(Alignments).filter(
-        k => k !== Alignments.CENTER && padding[k]
-      ) as Alignments[];
-      for (const direction of elements) {
-        removePaddingGroup(node, direction, state.isGlobalGroup);
-
-        const paddingLine = createPaddingLine({
-          ...settings,
-          direction,
-          currentNode: node,
-          parent: (await figma.getNodeByIdAsync(
-            padding[direction]
-          )) as SceneNode,
-          labelFontSize: state.labelFontSize
-        });
-
-        if (paddingLine) {
-          connectedNodes.push(paddingLine);
-        }
-      }
-    }
-
-    if (surrounding && Object.keys(surrounding).length !== 0) {
-      if (surrounding.center) {
-        const fillNode = createFill(node, {
-          fill: store.fill,
-          opacity: store.opacity,
-          color: settings.color
-        });
-
-        if (fillNode) {
-          connectedNodes.push(fillNode);
-        }
-      }
-
-      if (surrounding.tooltip) {
-        const tooltip = await setTooltip(
-          {
-            flags: store.tooltip,
-            offset: store.tooltipOffset,
-            position: surrounding.tooltip || TooltipPositions.NONE,
-            labelPattern: settings.labelPattern,
-            fontPattern: settings.fontPattern
-          },
-          node
-        );
-
-        if (tooltip) {
-          connectedNodes.push(tooltip);
-        }
-      }
-
-      if (surrounding.rightBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "vertical",
-            name: `vertical line ${Alignments.RIGHT.toLowerCase()}`,
-            lineVerticalAlign: Alignments.RIGHT
-          })
-        );
-      }
-
-      if (surrounding.leftBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "vertical",
-            name: `vertical line ${Alignments.LEFT.toLowerCase()}`,
-            lineVerticalAlign: Alignments.LEFT
-          })
-        );
-      }
-
-      if (surrounding.topBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "horizontal",
-            name: `horizontal line ${Alignments.TOP.toLowerCase()}`,
-            lineHorizontalAlign: Alignments.TOP
-          })
-        );
-      }
-
-      if (surrounding.bottomBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "horizontal",
-            name: `horizontal line ${Alignments.BOTTOM.toLowerCase()}`,
-            lineHorizontalAlign: Alignments.BOTTOM
-          })
-        );
-      }
-
-      if (surrounding.horizontalBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "horizontal",
-            name: "horizontal line " + Alignments.CENTER.toLowerCase(),
-            lineHorizontalAlign: Alignments.CENTER
-          })
-        );
-      }
-
-      if (surrounding.verticalBar) {
-        connectedNodes.push(
-          createLine({
-            ...settings,
-            node,
-            direction: "vertical",
-            name: "vertical line " + Alignments.CENTER.toLowerCase(),
-            lineVerticalAlign: Alignments.CENTER
-          })
-        );
-      }
-    }
-    // if (data.detached && Object.keys(data).length === 0) {
-
-    if (state.detached) {
-      if (connectedNodes.length > 0) {
-        appendElementsToGroup({
-          node,
-          isGlobalGroup: state.isGlobalGroup,
-          nodes: connectedNodes,
-          name: GROUP_NAME_DETACHED,
-          locked: state.lockDetachedGroup
-        });
-      }
-    } else {
-      node.setPluginData(
-        "data",
-        JSON.stringify({
-          ...settings,
-          //
-          connectedNodes: connectedNodes.map(({ id }) => id),
-          version: VERSION
-        } as PluginNodeData)
-      );
-
-      if (connectedNodes.length > 0) {
-        appendElementsToGroup({
-          node,
-          isGlobalGroup: state.isGlobalGroup,
-          nodes: connectedNodes,
-          locked: state.lockAttachedGroup
-        });
-      }
-    }
-  }
-};
+// Removed: setMeasurements (handled by original measurement module). This controller exposes discrete factories only.
 
 let measurementNodes: SceneNode[] = [];
 
@@ -920,69 +709,6 @@ export const createAnglePresetForNode = async (
     arc2.x = cx2;
     arc2.y = cy2;
 
-    // Label com valor do corner radius do nó (0px permitido)
-    const text = figma.createText();
-    try {
-      await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-      text.fontName = { family: "Inter", style: "Regular" };
-    } catch {}
-    // obter raio do canto do node
-    let rValue = 0;
-    const anyNode = node as any;
-    if (
-      "cornerRadius" in anyNode &&
-      typeof anyNode.cornerRadius === "number" &&
-      isFinite(anyNode.cornerRadius)
-    ) {
-      rValue = anyNode.cornerRadius || 0;
-    }
-    if ("topLeftRadius" in anyNode && t.key === "top-left")
-      rValue = anyNode.topLeftRadius || 0;
-    if ("topRightRadius" in anyNode && t.key === "top-right")
-      rValue = anyNode.topRightRadius || 0;
-    if ("bottomLeftRadius" in anyNode && t.key === "bottom-left")
-      rValue = anyNode.bottomLeftRadius || 0;
-    if ("bottomRightRadius" in anyNode && t.key === "bottom-right")
-      rValue = anyNode.bottomRightRadius || 0;
-    const value = `${Math.round(rValue)}px`;
-    text.fontSize = 12;
-    text.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
-    try {
-      (text as any).effects = [
-        {
-          type: "DROP_SHADOW",
-          radius: 1,
-          color: { r: 0, g: 0, b: 0, a: 0.4 },
-          offset: { x: 0, y: 1 },
-          visible: true,
-          blendMode: "NORMAL"
-        }
-      ];
-    } catch {}
-    text.characters = value;
-
-    // posicionar no ângulo médio (45°) afastado do canto, respeitando inset
-    let dx = 0,
-      dy = 0;
-    if (t.key === "top-left") {
-      dx = 1;
-      dy = 1;
-    } else if (t.key === "top-right") {
-      dx = -1;
-      dy = 1;
-    } else if (t.key === "bottom-left") {
-      dx = 1;
-      dy = -1;
-    } else {
-      dx = -1;
-      dy = -1;
-    }
-    const labelDist = inset + radius + 10;
-    const lx = t.cx + dx * ux.x * labelDist + dy * uy.x * labelDist;
-    const ly = t.cy + dx * ux.y * labelDist + dy * uy.y * labelDist;
-    text.x = lx - text.width / 2;
-    text.y = ly - text.height / 2;
-
     const group = figma.group([arc1, arc2, bg, text], figma.currentPage);
     group.name = `Angle (${value})`;
     group.locked = true;
@@ -1075,7 +801,9 @@ export const setMeasurementsVisible = (visible: boolean) => {
         (n.name.startsWith("Measurement (") ||
           n.name.startsWith("Dimension (") ||
           n.name.startsWith("Area (") ||
-          n.name.startsWith("Angle ("))
+          n.name.startsWith("Angle (") ||
+          n.name.startsWith("Tooltip ") ||
+          n.name.startsWith("Annotation ("))
     );
     for (const n of candidates) {
       (n as SceneNode).visible = visible;
@@ -1301,53 +1029,4 @@ export const createPresetMeasurementForNode = async (
   measurementNodes.push(group);
 };
 
-export function initializeMeasurementController() {
-  // Exported function to be called by SolarOps's main controller
-  figma.on("selectionchange", () => {
-    sendSelection();
-  });
-
-  figma.on("documentchange", async ({ documentChanges }) => {
-    if (
-      documentChanges.filter(
-        change =>
-          change.type === "PROPERTY_CHANGE" &&
-          (change.node.removed ||
-            isPartOfAttachedGroup(change.node as SceneNode) ||
-            [GROUP_NAME_ATTACHED, GROUP_NAME_DETACHED].includes(
-              (change.node as SceneNode).name
-            ))
-      ).length > 0
-    ) {
-      return;
-    }
-
-    const state = await getState();
-    const store: ExchangeStoreValues = {
-      labelsOutside: state.labelsOutside,
-      labels: state.labels,
-      color: state.color,
-      fill: state.fill,
-      opacity: state.opacity,
-      strokeCap: state.strokeCap,
-      strokeOffset: state.strokeOffset,
-      tooltipOffset: state.tooltipOffset,
-      tooltip: state.tooltip,
-      labelPattern: state.labelPattern,
-      fontPattern: state.fontPattern,
-      labelFontSize: state.labelFontSize
-    };
-
-    await setMeasurements(store, true);
-  });
-
-  // Initial setup
-  (async function main() {
-    await figma.loadFontAsync({ family: "Roboto", style: "Regular" });
-    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
-    await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-
-    await figma.loadAllPagesAsync();
-    sendSelection(); // Send initial selection
-  })();
-}
+// Removed initializeMeasurementController; not needed in this consolidated controller.

@@ -23,7 +23,7 @@ export const strokes = async (
     node.strokeRightWeight
   ];
   // Stroke
-  if (node?.strokes?.length && strokes.some(Boolean)) {
+  if (node && node.strokes && node.strokes.length && strokes.some(Boolean)) {
     const textNode = createTooltipTextNode({
       fontColor,
       fontSize

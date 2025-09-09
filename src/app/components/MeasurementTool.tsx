@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import styled from "styled-components";
 
 // Tipos para o estado do plugin
-type MeasurementMode = "distance" | "area" | "angle";
+type MeasurementMode = "distance" | "notes" | "angle";
 
 interface PluginState {
   isMeasuring: boolean;
@@ -27,13 +27,13 @@ const MeasurementContainer = styled.div`
   height: 100%;
   position: relative;
   overflow: hidden;
-  background: ${COLORS.background};
+  background: transparent;
   color: ${COLORS.text};
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   font-size: 12px;
   line-height: 1.5;
-  padding: 16px;
+  padding: 0;
   box-sizing: border-box;
 `;
 
@@ -133,7 +133,7 @@ const MeasurementTool: React.FC = observer(() => {
   const [showGuides, setShowGuides] = useState(true);
   const [selectionCount, setSelectionCount] = useState(0);
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(
-    "distance"
+    "notes"
   );
 
   // Inicializa o plugin
@@ -239,21 +239,31 @@ const MeasurementTool: React.FC = observer(() => {
   // Altera o modo de medição
   const setMode = (mode: MeasurementMode) => {
     setMeasurementMode(mode);
-
-    if (isMeasuring) {
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "set-measurement-mode",
-            payload: { mode }
-          }
-        },
-        "*"
-      );
-    }
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "set-measurement-mode",
+          payload: { mode }
+        }
+      },
+      "*"
+    );
   };
 
-  // Medidas rápidas em posições pré-definidas (como no mock)
+  // Criar balão de propriedades na posição desejada
+  const createBalloon = (position: "left" | "top" | "right" | "bottom") => {
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "create-balloon",
+          payload: { position }
+        }
+      },
+      "*"
+    );
+  };
+
+  // Distância: presets no canvas
   const createPreset = (
     position: "top" | "bottom" | "left" | "right" | "h-center" | "v-center"
   ) => {
@@ -268,6 +278,7 @@ const MeasurementTool: React.FC = observer(() => {
     );
   };
 
+  // Ângulo: presets de cantos
   const createAnglePreset = (
     corner: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "all"
   ) => {
@@ -288,36 +299,40 @@ const MeasurementTool: React.FC = observer(() => {
         <PanelTitle>Modo de Medição</PanelTitle>
         <Toolbar>
           <ToolButton
+            active={measurementMode === "notes"}
+            onClick={() => setMode("notes")}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H7l-4 3V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
+            </svg>
+            Anotações
+          </ToolButton>
+          <ToolButton
             active={measurementMode === "distance"}
             onClick={() => setMode("distance")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+            <span
+              style={{
+                display: "inline-block",
+                fontSize: "16px",
+                lineHeight: "16px",
+                width: "16px",
+                height: "16px",
+                textAlign: "center",
+                verticalAlign: "middle",
+                color: "#fff"
+              }}
             >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Distância
-          </ToolButton>
-          <ToolButton
-            active={measurementMode === "area"}
-            onClick={() => setMode("area")}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            </svg>
-            Área
+              📐
+            </span>
+            Medidas
           </ToolButton>
           <ToolButton
             active={measurementMode === "angle"}
@@ -345,22 +360,22 @@ const MeasurementTool: React.FC = observer(() => {
           <>
             <PresetGrid>
               <PresetButton onClick={() => createPreset("top")}>
-                Topo
+                Top
               </PresetButton>
               <PresetButton onClick={() => createPreset("h-center")}>
-                Centro Horizontal
+                Center Horizontal
               </PresetButton>
               <PresetButton onClick={() => createPreset("bottom")}>
-                Base
+                Bottom
               </PresetButton>
               <PresetButton onClick={() => createPreset("left")}>
-                Esquerda
+                Left
               </PresetButton>
               <PresetButton onClick={() => createPreset("v-center")}>
-                Centro Vertical
+                Center Vertical
               </PresetButton>
               <PresetButton onClick={() => createPreset("right")}>
-                Direita
+                Right
               </PresetButton>
             </PresetGrid>
             <InstructionText style={{ marginTop: 8 }}>
@@ -398,11 +413,27 @@ const MeasurementTool: React.FC = observer(() => {
             </InstructionText>
           </>
         )}
-        {measurementMode === "area" && (
+        {measurementMode === "notes" && (
           <>
-            <InstructionText>
-              Com o modo Área, ao selecionar objetos a label é inserida
-              automaticamente no centro.
+            <PresetGrid>
+              <PresetButton onClick={() => createBalloon("left")}>
+                left
+              </PresetButton>
+              <PresetButton onClick={() => createBalloon("top")}>
+                top
+              </PresetButton>
+              <PresetButton onClick={() => createBalloon("right")}>
+                right
+              </PresetButton>
+              <div />
+              <PresetButton onClick={() => createBalloon("bottom")}>
+                bottom
+              </PresetButton>
+              <div />
+            </PresetGrid>
+            <InstructionText style={{ marginTop: 8 }}>
+              Selecione um ou mais objetos e escolha a posição do balão de
+              anotação.
             </InstructionText>
           </>
         )}
@@ -442,22 +473,7 @@ const MeasurementTool: React.FC = observer(() => {
         </Toolbar>
       </PanelSection>
 
-      <PanelSection>
-        <PanelTitle>Instruções</PanelTitle>
-        <InstructionText>
-          <strong>Selecionado:</strong> {selectionCount}{" "}
-          {selectionCount === 1 ? "item" : "itens"}
-        </InstructionText>
-        <InstructionText>
-          Use os botões de posições para inserir medidas rápidas junto ao objeto
-          selecionado.
-        </InstructionText>
-        <InstructionText>
-          Utilize "{showGuides ? "Ocultar Guias" : "Mostrar Guias"}" para
-          esconder/mostrar todas as medidas no canvas. "Limpar" remove todas as
-          medidas criadas.
-        </InstructionText>
-      </PanelSection>
+      {null}
     </MeasurementContainer>
   );
 });
