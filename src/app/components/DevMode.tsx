@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import styled from "styled-components";
+import MeasurementTool from "./MeasurementTool";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -36,6 +38,14 @@ interface DevModeTabProps {
   selectedNode: any;
   onInspectClick: () => void;
 }
+
+const TabContent = styled.div`
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: #1e1e1e;
+  color: #e0e0e0;
+`;
 
 const DevModeTab: React.FC<DevModeTabProps> = ({
   selectedNode,
@@ -664,23 +674,8 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
         )}
 
         {activeTab === "measure" && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              color: "#888",
-              textAlign: "center",
-              padding: "32px 16px"
-            }}
-          >
-            <p
-              style={{ margin: "16px 0 0 0", fontSize: "14px", color: "#fff" }}
-            >
-              Conteúdo da aba Mensurar (a ser implementado)
-            </p>
+          <div style={{ height: "100%" }}>
+            <MeasurementTool />
           </div>
         )}
       </div>

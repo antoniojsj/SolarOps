@@ -1,6 +1,6 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2017",
     "outDir": "dist",
     "jsx": "react",
     "noUnusedLocals": false,
@@ -13,16 +13,12 @@
       "./node_modules/@types",
       "./src/types"
     ],
-    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
-    "lib": ["es2017", "dom"],
+    "lib": ["es2015", "dom"],
     "noEmitOnError": false,
-    "module": "commonjs",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowJs": true,
-    "strict": true,
     "baseUrl": ".",
     "paths": {
       "*": ["node_modules/*", "src/types/*"]
@@ -32,6 +28,5 @@
     "src/**/*",
     "**/*.ts",
     "**/*.tsx"
-  ],
-  "exclude": ["node_modules"]
+  ]
 }

@@ -80,7 +80,8 @@ function analyzeNodeColors(
           nodeId: node.id,
           nodeName: node.name,
           reason: 'Sem estilo vinculado (e não é imagem)'
-          });
+        });
+      }
     }
 
     // Check strokeStyleId
@@ -115,16 +116,17 @@ function analyzeNodeColors(
           nodeId: node.id,
           nodeName: node.name,
           reason: 'Sem estilo vinculado'
-          });
-        }
+        });
       }
+    }
   } catch (error) {
     console.error('Erro ao analisar cores:', error);
   }
 
   return nonCompliantColors;
-  }
+}
 
+// Helper function to check if node has visible non-image fills
 // Helper function to check if node has visible non-image fills
 function hasNonImageFills(node: SceneNode): boolean {
   try {
