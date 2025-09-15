@@ -48,30 +48,15 @@ const ConformityItemChart: React.FC<ConformityItemChartProps> = ({
           marginBottom: "12px"
         }}
       >
-        <div
+        <span
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
+            fontWeight: 600,
+            fontSize: "14px",
+            color: "#FFFFFF"
           }}
         >
-          <img
-            src={type.icon}
-            alt={type.label}
-            width={20}
-            height={20}
-            style={{ flexShrink: 0 }}
-          />
-          <span
-            style={{
-              fontWeight: 600,
-              fontSize: "14px",
-              color: "#FFFFFF"
-            }}
-          >
-            {type.label}
-          </span>
-        </div>
+          {type.label}
+        </span>
 
         <div
           style={{
