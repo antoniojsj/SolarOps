@@ -842,7 +842,8 @@ function getNodeAbs(node: any) {
 export const createPresetMeasurementForNode = async (
   node: SceneNode,
   position: PresetPosition,
-  offset = 10
+  offset = 10,
+  strokeCap: VectorStrokeCap = "NONE"
 ) => {
   const { x, y, w, h } = getNodeAbs(node as any);
 
@@ -947,8 +948,8 @@ export const createPresetMeasurementForNode = async (
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const px = -uy,
-    py = ux; // perpendicular para ticks
+  const px = -uy;
+  const py = ux; // perpendicular para ticks
   const halfGap = (bw + 8) / 2 + 4;
 
   const leftLen = Math.max(0, len / 2 - halfGap);
@@ -966,7 +967,6 @@ export const createPresetMeasurementForNode = async (
     }
   ];
   leftVec.strokeWeight = 1;
-  leftVec.strokeCap = "ROUND";
   leftVec.x = midX - ux * (halfGap + leftLen);
   leftVec.y = midY - uy * (halfGap + leftLen);
 
@@ -982,40 +982,20 @@ export const createPresetMeasurementForNode = async (
     }
   ];
   rightVec.strokeWeight = 1;
-  rightVec.strokeCap = "ROUND";
   rightVec.x = midX + ux * halfGap;
   rightVec.y = midY + uy * halfGap;
 
-  // Ticks nas pontas (|)
-  const tickSize = 6;
-  const makeTick = (cx: number, cy: number) => {
-    const tx = (px * tickSize) / 2;
-    const ty = (py * tickSize) / 2;
-    const v = figma.createVector();
-    v.vectorPaths = [
-      { windingRule: "NONE", data: `M ${-tx} ${-ty} L ${tx} ${ty}` }
-    ];
-    v.strokes = [
-      {
-        type: "SOLID",
-        color: { r: 59 / 255, g: 130 / 255, b: 246 / 255 },
-        opacity: 1
-      }
-    ];
-    v.strokeWeight = 1;
-    v.strokeCap = "ROUND";
-    v.x = cx;
-    v.y = cy;
-    return v;
-  };
+  const groupNodes = [leftVec, rightVec, bg, text];
 
-  const startTick = makeTick(startX, startY);
-  const endTick = makeTick(endX, endY);
+  if (strokeCap === "STANDARD") {
+    leftVec.strokeCap = "NONE";
+    rightVec.strokeCap = "NONE";
+  } else {
+    leftVec.strokeCap = strokeCap;
+    rightVec.strokeCap = strokeCap;
+  }
 
-  const group = figma.group(
-    [leftVec, rightVec, startTick, endTick, bg, text],
-    figma.currentPage
-  );
+  const group = figma.group(groupNodes, figma.currentPage);
   group.name = `Dimension (${labelText})`;
   group.locked = true;
   try {

@@ -47,11 +47,17 @@ export const createLabel = ({
 
   if (baseNode) {
     if (isVertical) {
-      labelFrame.x -= labelFrame.width / 2;
-      labelFrame.y += baseNode.height / 2 - labelFrame.height / 2;
+      labelFrame.x = Number(labelFrame.x) - Number(labelFrame.width) / 2;
+      labelFrame.y =
+        Number(labelFrame.y) +
+        Number(baseNode.height) / 2 -
+        Number(labelFrame.height) / 2;
     } else {
-      labelFrame.x += baseNode.width / 2 - labelFrame.width / 2;
-      labelFrame.y -= labelFrame.height / 2;
+      labelFrame.x =
+        Number(labelFrame.x) +
+        Number(baseNode.width) / 2 -
+        Number(labelFrame.width) / 2;
+      labelFrame.y = Number(labelFrame.y) - Number(labelFrame.height) / 2;
     }
   }
   labelFrame.fills = [].concat(color);
@@ -76,6 +82,138 @@ export const getLineFrame = (node, data) => {
   return lineFrame;
 };
 
+/**
+ * Creates a line cap (T-shaped end) for measurement lines
+ * @param params Configuration for the line cap
+ * @returns The created line cap node
+ */
+/**
+ * Cria uma extremidade em T para as linhas de medição
+ * @param params Parâmetros de configuração
+ * @returns O nó da linha de extremidade criada
+ */
+const createLineCap = (params: {
+  /** Grupo pai para adicionar a extremidade */
+  group?: FrameNode | GroupNode;
+  /** Linha à qual a extremidade será adicionada */
+  line: VectorNode;
+  /** Se a linha é horizontal (true) ou vertical (false) */
+  isHorizontal: boolean;
+  /** Altura da linha */
+  height: number;
+  /** Largura da linha */
+  width: number;
+  /** Cor da extremidade */
+  mainColor: SolidPaint;
+  /** Qual extremidade da linha ('start' ou 'end') */
+  position: "start" | "end";
+  /** Se deve adicionar ao grupo (padrão: true) */
+  addToGroup?: boolean;
+}) => {
+  const {
+    group,
+    line,
+    isHorizontal,
+    height,
+    width,
+    mainColor,
+    position,
+    addToGroup = true
+  } = params;
+
+  // Garantir que strokeWeight é um número
+  const strokeWeight =
+    typeof line.strokeWeight === "number" ? line.strokeWeight : 1;
+
+  // Tamanho da extremidade (3px de cada lado = 6px no total)
+  const capLength = 6;
+  const halfCapLength = capLength / 2;
+
+  // Criar a linha da extremidade
+  const capLine = figma.createLine();
+
+  // Estilização padrão para todas as extremidades
+  capLine.strokeWeight = strokeWeight;
+  capLine.strokes = [mainColor];
+  capLine.strokeCap = "NONE";
+  capLine.strokeJoin = "MITER";
+  capLine.strokeMiterLimit = 1;
+
+  // Obter a posição da linha
+  const lineX = "x" in line ? (typeof line.x === "number" ? line.x : 0) : 0;
+  const lineY = "y" in line ? (typeof line.y === "number" ? line.y : 0) : 0;
+
+  if (isHorizontal) {
+    // Para linhas horizontais, criar extremidades verticais
+    capLine.resize(0, capLength);
+
+    // Posicionar a extremidade
+    if (position === "start") {
+      // Extremidade esquerda
+      capLine.x = lineX;
+      capLine.y = lineY - halfCapLength + strokeWeight / 2;
+
+      // Configurar restrições para redimensionamento
+      capLine.constraints = {
+        vertical: "CENTER",
+        horizontal: "MIN"
+      };
+    } else {
+      // Extremidade direita
+      capLine.x = lineX + width - strokeWeight;
+      capLine.y = lineY - halfCapLength + strokeWeight / 2;
+
+      // Configurar restrições para redimensionamento
+      capLine.constraints = {
+        vertical: "CENTER",
+        horizontal: "MAX"
+      };
+    }
+  } else {
+    // Para linhas verticais, criar extremidades horizontais
+    capLine.resize(capLength, 0);
+
+    // Posicionar a extremidade
+    if (position === "start") {
+      // Extremidade superior
+      capLine.x = lineX - halfCapLength;
+      capLine.y = lineY;
+
+      // Configurar restrições para redimensionamento
+      capLine.constraints = {
+        vertical: "MIN",
+        horizontal: "CENTER"
+      };
+    } else {
+      // Extremidade inferior
+      capLine.x = lineX - halfCapLength;
+      capLine.y = lineY + height - strokeWeight;
+
+      // Configurar restrições para redimensionamento
+      capLine.constraints = {
+        vertical: "MAX",
+        horizontal: "CENTER"
+      };
+    }
+  }
+
+  // Adicionar ao grupo, se especificado
+  if (addToGroup && group) {
+    group.appendChild(capLine);
+  }
+
+  return capLine;
+};
+
+interface CreateStandardCapForSpacingParams {
+  line: VectorNode;
+  height: number;
+  width: number;
+  mainColor: SolidPaint;
+  isHorizontal?: boolean;
+  isFirst?: boolean;
+}
+
 export const createStandardCapForSpacing = ({
   line,
   height,
@@ -83,41 +221,19 @@ export const createStandardCapForSpacing = ({
   mainColor,
   isHorizontal = false,
   isFirst = false
-}) => {
-  const transformPosition = line.absoluteTransform;
-  const lineX = transformPosition[0][2];
-  const lineY = transformPosition[1][2];
-
-  const strokeCapWidth = line.strokeWeight + 6;
-
-  const strokeCapLine = figma.createLine();
-  strokeCapLine.relativeTransform = transformPosition;
-  strokeCapLine.strokeWeight = line.strokeWeight;
-  strokeCapLine.strokes = [].concat(mainColor);
-  strokeCapLine.resize(strokeCapWidth, 0);
-
-  if (!isHorizontal) {
-    if (isFirst) {
-      strokeCapLine.x = lineX - strokeCapWidth / 2;
-      strokeCapLine.y += strokeCapLine.strokeWeight;
-    } else {
-      strokeCapLine.x = lineX - strokeCapWidth / 2;
-      strokeCapLine.y += height;
-    }
-  } else {
-    if (isFirst) {
-      strokeCapLine.rotation = 90;
-      strokeCapLine.x += strokeCapLine.strokeWeight;
-      strokeCapLine.y = lineY + strokeCapWidth / 2;
-    } else {
-      strokeCapLine.rotation = 90;
-      strokeCapLine.x += width;
-      strokeCapLine.y = lineY + strokeCapWidth / 2;
-    }
-  }
-
-  return strokeCapLine;
+}: CreateStandardCapForSpacingParams) => {
+  // Return null to prevent creating any caps
+  return null;
 };
+
+interface CreateStandardCapParams {
+  group: FrameNode;
+  line: VectorNode;
+  isHorizontal: boolean;
+  height: number;
+  width: number;
+  mainColor: SolidPaint;
+}
 
 export const createStandardCap = ({
   group,
@@ -126,57 +242,9 @@ export const createStandardCap = ({
   height,
   width,
   mainColor
-}) => {
-  const firstMeasureLine = figma.createLine();
-  const secondMeasureLine = figma.createLine();
-  firstMeasureLine.strokeWeight = line.strokeWeight;
-  secondMeasureLine.strokeWeight = line.strokeWeight;
-
-  group.appendChild(firstMeasureLine);
-  group.appendChild(secondMeasureLine);
-
-  const strokeCapWidth = line.strokeWeight + 6;
-
-  firstMeasureLine.strokes = [].concat(mainColor);
-  secondMeasureLine.strokes = [].concat(mainColor);
-  firstMeasureLine.resize(strokeCapWidth, 0);
-  secondMeasureLine.resize(strokeCapWidth, 0);
-
-  if (!isHorizontal) {
-    firstMeasureLine.x = line.x - strokeCapWidth / 2;
-    firstMeasureLine.y += firstMeasureLine.strokeWeight;
-
-    secondMeasureLine.x = line.x - strokeCapWidth / 2;
-    secondMeasureLine.y += height;
-  } else {
-    firstMeasureLine.rotation = 90;
-    firstMeasureLine.x += firstMeasureLine.strokeWeight;
-    firstMeasureLine.y = line.y + strokeCapWidth / 2;
-
-    secondMeasureLine.rotation = 90;
-    secondMeasureLine.x += width;
-    secondMeasureLine.y = line.y + strokeCapWidth / 2;
-  }
-
-  if (isHorizontal) {
-    firstMeasureLine.constraints = {
-      vertical: "CENTER",
-      horizontal: "MIN"
-    };
-    secondMeasureLine.constraints = {
-      vertical: "CENTER",
-      horizontal: "MAX"
-    };
-  } else {
-    firstMeasureLine.constraints = {
-      vertical: "MIN",
-      horizontal: "CENTER"
-    };
-    secondMeasureLine.constraints = {
-      vertical: "MAX",
-      horizontal: "CENTER"
-    };
-  }
+}: CreateStandardCapParams) => {
+  // Do nothing to prevent creating any caps
+  return;
 };
 
 export const createLine = options => {
@@ -266,8 +334,8 @@ export const createLine = options => {
         windingRule: "NONE",
         // M x y L x y Z is close
         data: isHorizontal
-          ? `M 0 0 L ${node.height} 0 Z`
-          : `M 0 0 L 0 ${node.width} Z`
+          ? `M 0 0 L ${node.height} 0`
+          : `M 0 0 L 0 ${node.width}`
       }
     ];
 
@@ -277,19 +345,10 @@ export const createLine = options => {
       isHorizontal ? line.strokeWeight : node.height
     );
 
-    // STROKE CAP
-    if (strokeCap === "STANDARD") {
-      createStandardCap({
-        group,
-        line,
-        isHorizontal,
-        mainColor,
-        width: nodeWidth,
-        height: nodeHeight
-      });
-    } else {
-      line.strokeCap = strokeCap as StrokeCap;
-    }
+    // Configure stroke properties to ensure no caps are shown
+    line.strokeCap = "NONE";
+    line.strokeJoin = "MITER";
+    line.strokeMiterLimit = 1;
 
     line.handleMirroring = "ANGLE_AND_LENGTH";
 
@@ -297,7 +356,8 @@ export const createLine = options => {
     if (labels) {
       if (isHorizontal) {
         labelFrame.x = 0;
-        labelFrame.y += nodeHeight - LINE_OFFSET - line.strokeWeight;
+        labelFrame.y =
+          Number(nodeHeight) - Number(LINE_OFFSET) - Number(line.strokeWeight);
 
         // vertical text align
         if (txtVerticalAlign === Alignments.CENTER) {
@@ -327,7 +387,7 @@ export const createLine = options => {
 
         // vertical text align
         if (txtVerticalAlign === Alignments.CENTER) {
-          labelFrame.y += nodeHeight / 2 - labelFrame.height / 2;
+          labelFrame.y = Number(nodeHeight) / 2 - Number(labelFrame.height) / 2;
         }
 
         // vertical text align
@@ -336,8 +396,11 @@ export const createLine = options => {
             if (lineVerticalAlign === Alignments.RIGHT) {
               labelFrame.x = labelFrame.width / 2 + LABEL_OUTSIDE_MARGIN;
             } else if (lineVerticalAlign === Alignments.LEFT) {
-              labelFrame.x -=
-                labelFrame.width / 2 + LABEL_OUTSIDE_MARGIN + line.strokeWeight;
+              labelFrame.x =
+                Number(labelFrame.x) -
+                (Number(labelFrame.width) / 2 +
+                  Number(LABEL_OUTSIDE_MARGIN) +
+                  Number(line.strokeWeight));
             } else {
               labelFrame.x = 0;
             }
@@ -365,74 +428,149 @@ export const createLine = options => {
     // horizonzal line position
     if (isHorizontal) {
       if (lineHorizontalAlign === Alignments.CENTER) {
-        newY += (nodeHeight - group.height) / 2 - line.strokeWeight / 2;
+        newY =
+          Number(newY) +
+          (Number(nodeHeight) - Number(group.height)) / 2 -
+          Number(line.strokeWeight) / 2;
       } else if (lineHorizontalAlign === Alignments.TOP) {
-        newY -= group.height / 2 - LINE_OFFSET + line.strokeWeight;
+        newY =
+          Number(newY) -
+          (Number(group.height) / 2 -
+            Number(LINE_OFFSET) +
+            Number(line.strokeWeight));
       }
       // BOTTOM
       else {
-        newY += nodeHeight - group.height / 2 - LINE_OFFSET;
+        newY =
+          Number(newY) +
+          Number(nodeHeight) -
+          Number(group.height) / 2 -
+          Number(LINE_OFFSET);
       }
 
       // check if element is rotated
-      if (node.rotation > 0 || node.rotation < 0) {
+      const rotation =
+        "relativeTransform" in node
+          ? Math.atan2(
+              node.relativeTransform[1][0],
+              node.relativeTransform[0][0]
+            ) *
+            (180 / Math.PI)
+          : 0;
+      if (rotation > 0 || rotation < 0) {
         // reset
         newX = transformPosition[0][2];
         newY = transformPosition[1][2];
 
         // center
         if (lineHorizontalAlign === Alignments.CENTER) {
-          newY += ySin * (nodeHeight / 2 - halfGroupHeight);
-          newX -= yCos * (nodeHeight / 2 - halfGroupHeight);
+          newY =
+            Number(newY) +
+            Number(ySin) * (Number(nodeHeight) / 2 - Number(halfGroupHeight));
+          newX =
+            Number(newX) -
+            Number(yCos) * (Number(nodeHeight) / 2 - Number(halfGroupHeight));
         }
         // top
         else if (lineHorizontalAlign === Alignments.TOP) {
-          newY -= ySin * (halfGroupHeight - LINE_OFFSET + line.strokeWeight);
-          newX += yCos * (halfGroupHeight - LINE_OFFSET + line.strokeWeight);
+          newY =
+            Number(newY) -
+            Number(ySin) *
+              (Number(halfGroupHeight) -
+                Number(LINE_OFFSET) +
+                Number(line.strokeWeight));
+          newX =
+            Number(newX) +
+            Number(yCos) *
+              (Number(halfGroupHeight) -
+                Number(LINE_OFFSET) +
+                Number(line.strokeWeight));
         }
         // bottom
         else {
-          newY += ySin * (nodeHeight - halfGroupHeight - LINE_OFFSET);
-          newX -= yCos * (nodeHeight - halfGroupHeight - LINE_OFFSET);
+          newY =
+            Number(newY) +
+            Number(ySin) *
+              (Number(nodeHeight) -
+                Number(halfGroupHeight) -
+                Number(LINE_OFFSET));
+          newX =
+            Number(newX) -
+            Number(yCos) *
+              (Number(nodeHeight) -
+                Number(halfGroupHeight) -
+                Number(LINE_OFFSET));
         }
       }
     }
     // vertical line position
     else {
       if (lineVerticalAlign === Alignments.CENTER) {
-        newX += (nodeWidth - group.width) / 2 + line.strokeWeight / 2;
+        newX =
+          Number(newX) +
+          (Number(nodeWidth) - Number(group.width)) / 2 +
+          Number(line.strokeWeight) / 2;
       } else if (lineVerticalAlign === Alignments.RIGHT) {
-        newX += nodeWidth - group.width / 2 - LINE_OFFSET + line.strokeWeight;
+        newX =
+          Number(newX) +
+          Number(nodeWidth) -
+          Number(group.width) / 2 -
+          Number(LINE_OFFSET) +
+          Number(line.strokeWeight);
       }
       // LEFT
       else {
-        newX -= group.width / 2 - LINE_OFFSET;
+        newX = Number(newX) - (Number(group.width) / 2 - Number(LINE_OFFSET));
       }
 
       // check if element is rotated
-      if (node.rotation > 0 || node.rotation < 0) {
+      const rotation =
+        "relativeTransform" in node
+          ? Math.atan2(
+              node.relativeTransform[1][0],
+              node.relativeTransform[0][0]
+            ) *
+            (180 / Math.PI)
+          : 0;
+      if (rotation > 0 || rotation < 0) {
         // reset
         newX = transformPosition[0][2];
         newY = transformPosition[1][2];
 
         // center
         if (lineVerticalAlign === Alignments.CENTER) {
-          newY -= (xSin * (nodeWidth - group.width)) / 2;
-          newX += (xCos * (nodeWidth - group.width)) / 2;
+          newY =
+            Number(newY) -
+            (Number(xSin) * (Number(nodeWidth) - Number(group.width))) / 2;
+          newX =
+            Number(newX) +
+            (Number(xCos) * (Number(nodeWidth) - Number(group.width))) / 2;
         }
         // right
         else if (lineVerticalAlign === Alignments.RIGHT) {
-          newY -=
-            xSin *
-            (nodeWidth - halfGroupWidth - LINE_OFFSET + line.strokeWeight);
-          newX +=
-            xCos *
-            (nodeWidth - halfGroupWidth - LINE_OFFSET + line.strokeWeight);
+          newY =
+            Number(newY) -
+            Number(xSin) *
+              (Number(nodeWidth) -
+                Number(halfGroupWidth) -
+                Number(LINE_OFFSET) +
+                Number(line.strokeWeight));
+          newX =
+            Number(newX) +
+            Number(xCos) *
+              (Number(nodeWidth) -
+                Number(halfGroupWidth) -
+                Number(LINE_OFFSET) +
+                Number(line.strokeWeight));
         }
         // left
         else {
-          newY += xSin * (halfGroupWidth - LINE_OFFSET);
-          newX -= xCos * (halfGroupWidth - LINE_OFFSET);
+          newY =
+            Number(newY) +
+            Number(xSin) * (Number(halfGroupWidth) - Number(LINE_OFFSET));
+          newX =
+            Number(newX) -
+            Number(xCos) * (Number(halfGroupWidth) - Number(LINE_OFFSET));
         }
       }
     }

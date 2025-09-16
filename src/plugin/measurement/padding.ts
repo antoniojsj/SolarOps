@@ -567,18 +567,8 @@ export const createPaddingLine = ({
     }
   }
 
-  if (strokeCap === "STANDARD") {
-    createStandardCap({
-      group,
-      line,
-      isHorizontal: IS_HORIZONTAL,
-      mainColor,
-      width: widthOrHeight,
-      height: widthOrHeight
-    });
-  } else {
-    line.strokeCap = strokeCap;
-  }
+  // Always set strokeCap to NONE and don't add any caps
+  line.strokeCap = "NONE";
 
   if (widthOrHeight === 0) {
     figma.notify("The distance is zero", {

@@ -605,13 +605,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         | "h-center"
         | "v-center";
       const offset = typeof payload1.offset === "number" ? payload1.offset : 10;
+      const strokeCap = (payload1.strokeCap as VectorStrokeCap) || "NONE";
       const sel = figma.currentPage.selection as SceneNode[];
       if (!position || !sel || sel.length === 0) {
         figma.notify("Selecione ao menos um objeto para aplicar a medida.");
         return;
       }
       for (const node of sel) {
-        await createPresetMeasurementForNode(node, position, offset);
+        await createPresetMeasurementForNode(node, position, offset, strokeCap);
       }
       return;
     }

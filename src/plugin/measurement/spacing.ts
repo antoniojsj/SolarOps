@@ -254,47 +254,15 @@ export const drawSpacing = async (
     line1.strokes = [].concat(mainColor);
     line1.strokeWeight = STROKE_WIDTH;
 
-    if (cutsVerticalRectPoints) {
-      if (strokeCap === "STANDARD") {
-        spacingGroup.push(
-          ...[true, false].map(isFirst =>
-            createStandardCapForSpacing({
-              line: line1,
-              isFirst,
-              mainColor,
-              width: line1.width,
-              height: line1.height
-            })
-          )
-        );
-      } else {
-        line1.strokeCap = strokeCap as StrokeCap;
-      }
-    } else {
-      if (strokeCap === "STANDARD") {
-        spacingGroup.push(
-          createStandardCapForSpacing({
-            line: line1,
-            isFirst: horizontalDirection === "top",
-            mainColor,
-            width: line1.width,
-            height: line1.height
-          })
-        );
-      } else {
-        line1.vectorNetwork = {
-          ...line1.vectorNetwork,
-          vertices: line1.vectorNetwork.vertices.map(vector => ({
-            ...vector,
-            strokeCap:
-              (horizontalDirection === "bottom" && vector.y !== 0) ||
-              (horizontalDirection === "top" && vector.y === 0)
-                ? (strokeCap as StrokeCap)
-                : "NONE"
-          }))
-        };
-      }
-    }
+    // Always set strokeCap to NONE and don't add any caps
+    line1.strokeCap = "NONE";
+    line1.vectorNetwork = {
+      ...line1.vectorNetwork,
+      vertices: line1.vectorNetwork.vertices.map(vector => ({
+        ...vector,
+        strokeCap: "NONE"
+      }))
+    };
 
     spacingGroup.push(line1);
 

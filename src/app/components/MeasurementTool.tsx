@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import styled from "styled-components";
+import LineChooser, { StrokeCap } from "./LineChooser";
 
 // Tipos para o estado do plugin
-type MeasurementMode = "distance" | "notes" | "angle";
+type MeasurementMode = "distance" | "notes";
 
 interface PluginState {
   isMeasuring: boolean;
@@ -133,8 +134,10 @@ const MeasurementTool: React.FC = observer(() => {
   const [showGuides, setShowGuides] = useState(true);
   const [selectionCount, setSelectionCount] = useState(0);
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(
-    "notes"
+    "distance"
   );
+  const [strokeCap, setStrokeCap] = useState<StrokeCap>("STANDARD");
+  const [strokeOffset, setStrokeOffset] = useState(10);
 
   // Inicializa o plugin
   useEffect(() => {
@@ -271,22 +274,7 @@ const MeasurementTool: React.FC = observer(() => {
       {
         pluginMessage: {
           type: "create-preset-measurement",
-          payload: { position }
-        }
-      },
-      "*"
-    );
-  };
-
-  // Ângulo: presets de cantos
-  const createAnglePreset = (
-    corner: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "all"
-  ) => {
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: "create-angle-preset",
-          payload: { corner }
+          payload: { position, strokeCap, offset: strokeOffset }
         }
       },
       "*"
@@ -318,44 +306,28 @@ const MeasurementTool: React.FC = observer(() => {
             active={measurementMode === "distance"}
             onClick={() => setMode("distance")}
           >
-            <span
-              style={{
-                display: "inline-block",
-                fontSize: "16px",
-                lineHeight: "16px",
-                width: "16px",
-                height: "16px",
-                textAlign: "center",
-                verticalAlign: "middle",
-                color: "#fff"
-              }}
-            >
-              📐
-            </span>
-            Medidas
-          </ToolButton>
-          <ToolButton
-            active={measurementMode === "angle"}
-            onClick={() => setMode("angle")}
-          >
             <svg
               width="16"
               height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+              viewBox="0 -960 960 960"
+              fill="currentColor"
+              style={{
+                verticalAlign: "middle"
+              }}
             >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M16.2 7.8l2.1-2.1M7.8 16.2l-2.1 2.1M16.2 16.2l2.1 2.1M7.8 7.8L5.7 5.7" />
+              <path d="m352-522 86-87-56-57-44 44-56-56 43-44-45-45-87 87 159 158Zm328 329 87-87-45-45-44 43-56-56 43-44-57-56-86 86 158 159Zm24-567 57 57-57-57ZM290-120H120v-170l175-175L80-680l200-200 216 216 151-152q12-12 27-18t31-6q16 0 31 6t27 18l53 54q12 12 18 27t6 31q0 16-6 30.5T816-647L665-495l215 215L680-80 465-295 290-120Zm-90-80h56l392-391-57-57-391 392v56Zm420-419-29-29 57 57-28-28Z" />
             </svg>
-            Ângulo
+            Medidas
           </ToolButton>
         </Toolbar>
       </PanelSection>
 
       <PanelSection>
-        <PanelTitle>Medidas Rápidas</PanelTitle>
+        <PanelTitle>
+          {measurementMode === "distance"
+            ? "Inserir medidas"
+            : "Inserir anotações"}
+        </PanelTitle>
         {measurementMode === "distance" && (
           <>
             <PresetGrid>
@@ -384,35 +356,6 @@ const MeasurementTool: React.FC = observer(() => {
             </InstructionText>
           </>
         )}
-        {measurementMode === "angle" && (
-          <>
-            <PresetGrid>
-              <PresetButton onClick={() => createAnglePreset("top-left")}>
-                Top Left
-              </PresetButton>
-              <div />
-              <PresetButton onClick={() => createAnglePreset("top-right")}>
-                Top Right
-              </PresetButton>
-              <div />
-              <PresetButton onClick={() => createAnglePreset("all")}>
-                Total
-              </PresetButton>
-              <div />
-              <PresetButton onClick={() => createAnglePreset("bottom-left")}>
-                Bottom Left
-              </PresetButton>
-              <div />
-              <PresetButton onClick={() => createAnglePreset("bottom-right")}>
-                Bottom Right
-              </PresetButton>
-            </PresetGrid>
-            <InstructionText style={{ marginTop: 8 }}>
-              Selecione um ou mais objetos e escolha um canto para inserir o
-              ângulo, ou "Total" (centro) para inserir em todos os cantos.
-            </InstructionText>
-          </>
-        )}
         {measurementMode === "notes" && (
           <>
             <PresetGrid>
@@ -438,6 +381,18 @@ const MeasurementTool: React.FC = observer(() => {
           </>
         )}
       </PanelSection>
+
+      {measurementMode === "distance" && (
+        <PanelSection>
+          <PanelTitle>Estilo da Linha</PanelTitle>
+          <LineChooser
+            strokeCap={strokeCap}
+            strokeOffset={strokeOffset}
+            onStrokeCapChange={setStrokeCap}
+            onStrokeOffsetChange={setStrokeOffset}
+          />
+        </PanelSection>
+      )}
 
       <PanelSection>
         <PanelTitle>Controles</PanelTitle>
