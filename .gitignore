@@ -36,4 +36,4 @@ coverage/
 .npm
 
 # Optional eslint cache
-.eslintcache 
+.eslintcache code-snippet-editor-plugin/

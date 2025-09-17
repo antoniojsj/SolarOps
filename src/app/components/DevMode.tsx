@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import MeasurementTool from "./MeasurementTool";
+import CodeSnippetSection from "./CodeSnippetSection";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -115,7 +116,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
               cursor: "pointer"
             }}
           >
-            Mensurar
+            Medir
           </button>
         </div>
       </div>
@@ -465,6 +466,16 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Code Snippets Section */}
+                {console.log(
+                  "Renderizando CodeSnippetSection com nó:",
+                  selectedNode?.id
+                )}
+                <CodeSnippetSection
+                  selectedNode={selectedNode}
+                  key={selectedNode?.id}
+                />
 
                 {/* Other Properties Section */}
                 <div
