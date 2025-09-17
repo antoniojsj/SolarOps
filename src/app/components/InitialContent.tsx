@@ -2,12 +2,12 @@ import React, { useState, useCallback } from "react";
 import SettingsPanel from "./SettingsPanel";
 import DocumentationSearch from "./DocumentationSearch";
 import ContrastChecker from "./ContrastChecker";
-import DevMode from "./DevMode";
+import Tools from "./ToolsTab";
 import WCAGContent from "./WCAGContent";
 
 function InitialContent(props) {
   const [settingsPanelVisible, setSettingsPanelVisible] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria', 'acessibilidade' ou 'devmode'
+  const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria', 'acessibilidade' ou 'tools'
   const [accessibilityTab, setAccessibilityTab] = React.useState("contrast"); // 'contrast' ou 'docs'
   const [selectedNode, setSelectedNode] = React.useState<any>(null);
   const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
@@ -127,10 +127,7 @@ function InitialContent(props) {
               activeTab === "auditoria" ? " selected" : ""
             }`}
             style={{
-              background:
-                activeTab === "auditoria"
-                  ? "rgba(255,255,255,0.08)"
-                  : "transparent",
+              background: activeTab === "auditoria" ? "#3b82f6" : "transparent",
               color: "#fff",
               fontWeight: 400,
               fontSize: 14,
@@ -149,9 +146,7 @@ function InitialContent(props) {
             }`}
             style={{
               background:
-                activeTab === "acessibilidade"
-                  ? "rgba(255,255,255,0.08)"
-                  : "transparent",
+                activeTab === "acessibilidade" ? "#3b82f6" : "transparent",
               color: "#fff",
               fontWeight: 400,
               fontSize: 14,
@@ -166,24 +161,24 @@ function InitialContent(props) {
           </div>
           <div
             className={`pill initial-header-tab${
-              activeTab === "devmode" ? " selected" : ""
+              activeTab === "tools" ? " selected" : ""
             }`}
             style={{
               background:
-                activeTab === "devmode"
+                activeTab === "tools"
                   ? "rgba(255,255,255,0.08)"
                   : "transparent",
               color: "#fff",
-              fontWeight: 400,
-              fontSize: 14,
-              borderRadius: 4,
               padding: "6px 12px",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
               lineHeight: "18px",
               cursor: "pointer"
             }}
-            onClick={() => setActiveTab("devmode")}
+            onClick={() => setActiveTab("tools")}
           >
-            DevMode
+            Tools
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -264,9 +259,29 @@ function InitialContent(props) {
         className="initial-content-main"
         style={{ flex: 1, overflow: "auto" }}
       >
+        {activeTab === "tools" && (
+          <div
+            style={{
+              width: "calc(100% - 32px)",
+              height: "100%",
+              padding: "24px 0 0",
+              margin: "0 16px",
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden"
+            }}
+          >
+            <Tools selectedNode={selectedNode} onInspectClick={() => {}} />
+          </div>
+        )}
         {activeTab === "auditoria" && (
           <div
-            style={{ width: "100%", padding: "16px", boxSizing: "border-box" }}
+            style={{
+              width: "calc(100% - 32px)",
+              margin: "0 16px",
+              boxSizing: "border-box"
+            }}
           >
             <div className="scan-hero">
               <div className="scan-icon-container">
@@ -469,12 +484,14 @@ function InitialContent(props) {
                   style={{
                     flex: 1,
                     background:
-                      accessibilityTab === "contrast" ? "#fff" : "transparent",
+                      accessibilityTab === "contrast"
+                        ? "#3b82f6"
+                        : "transparent",
                     border: "none",
                     borderRadius: 4,
                     fontWeight: 500,
                     fontSize: 12,
-                    color: accessibilityTab === "contrast" ? "#222" : "#fff",
+                    color: "#fff",
                     padding: "6px 18px",
                     boxShadow: "none",
                     transition: "background 0.2s, color 0.2s",
@@ -488,12 +505,12 @@ function InitialContent(props) {
                   style={{
                     flex: 1,
                     background:
-                      accessibilityTab === "docs" ? "#fff" : "transparent",
+                      accessibilityTab === "docs" ? "#3b82f6" : "transparent",
                     border: "none",
                     borderRadius: 4,
                     fontWeight: 500,
                     fontSize: 12,
-                    color: accessibilityTab === "docs" ? "#222" : "#fff",
+                    color: "#fff",
                     padding: "6px 18px",
                     boxShadow: "none",
                     transition: "background 0.2s, color 0.2s",
@@ -539,18 +556,6 @@ function InitialContent(props) {
           </div>
         )}
       </div>
-      {activeTab === "devmode" && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            overflow: "hidden"
-          }}
-        >
-          <DevMode selectedNode={selectedNode} onInspectClick={() => {}} />
-        </div>
-      )}
       {activeTab === "auditoria" && (
         <footer
           className="initial-content-footer"

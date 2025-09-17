@@ -777,12 +777,12 @@ function BulkErrorList(props) {
           onClick={() => setTab("Geral")}
           style={{
             flex: 1,
-            background: tab === "Geral" ? "#fff" : "transparent",
+            background: tab === "Geral" ? "#3b82f6" : "transparent",
             border: "none",
             borderRadius: 4,
             fontWeight: 500,
             fontSize: 12,
-            color: tab === "Geral" ? "#222" : "#fff",
+            color: "#fff",
             padding: "6px 18px",
             boxShadow: "none",
             transition: "background 0.2s, color 0.2s",

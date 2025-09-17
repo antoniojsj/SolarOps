@@ -35,7 +35,7 @@ const styleElement = document.createElement("style");
 styleElement.textContent = scrollbarStyles;
 document.head.appendChild(styleElement);
 
-interface DevModeTabProps {
+interface ToolsTabProps {
   selectedNode: any;
   onInspectClick: () => void;
 }
@@ -48,7 +48,7 @@ const TabContent = styled.div`
   color: #e0e0e0;
 `;
 
-const DevModeTab: React.FC<DevModeTabProps> = ({
+const ToolsTab: React.FC<ToolsTabProps> = ({
   selectedNode,
   onInspectClick
 }) => {
@@ -60,13 +60,13 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        overflow: "hidden"
+        width: "100%"
       }}
     >
       {/* Tab Navigation */}
       <div
         style={{
-          padding: "24px 16px 16px 16px",
+          padding: "0 0 16px 0",
           margin: "0",
           width: "100%",
           boxSizing: "border-box"
@@ -127,7 +127,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "0 16px 16px 16px",
+          padding: "0 0 16px 0",
           backgroundColor: "transparent"
         }}
       >
@@ -138,8 +138,7 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  gap: "16px",
-                  paddingTop: "16px"
+                  gap: "16px"
                 }}
               >
                 {/* Element Preview Section */}
@@ -694,4 +693,4 @@ const DevModeTab: React.FC<DevModeTabProps> = ({
   );
 };
 
-export default DevModeTab;
+export default ToolsTab;

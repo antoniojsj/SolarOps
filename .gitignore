@@ -37,3 +37,4 @@ coverage/
 
 # Optional eslint cache
 .eslintcache code-snippet-editor-plugin/
+code-snippet-editor-plugin/

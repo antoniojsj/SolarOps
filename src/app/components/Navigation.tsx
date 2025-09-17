@@ -26,7 +26,6 @@ function Navigation(props) {
   };
 
   // Funções removidas pois as abas correspondentes foram removidas:
-  // - devModeClick
   // - stylesClick
   // - Funções relacionadas a abas que não estão mais sendo usadas
 

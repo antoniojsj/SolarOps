@@ -10,7 +10,7 @@ import Panel from "./Panel";
 import BulkErrorList from "./BulkErrorList";
 import InfoPanel from "./InfoPanel";
 import SettingsPanel from "./SettingsPanel";
-import DevMode from "./DevMode";
+import Tools from "./ToolsTab";
 
 import "../styles/figma.ds.css";
 import "../styles/ui.css";
@@ -819,8 +819,8 @@ const App = ({}) => {
           activeComponentLibraries={activeComponentLibraries}
         />
       )}
-      {activePage === "devmode" ? (
-        <DevMode selectedNode={selectedNode} onInspectClick={() => {}} />
+      {activePage === "tools" ? (
+        <Tools selectedNode={selectedNode} onInspectClick={() => {}} />
       ) : activePage === "styles" ? (
         <StylesPage stylesInUse={stylesInUse} />
       ) : activePage === "layers" ? (
@@ -980,7 +980,7 @@ const App = ({}) => {
         "initial",
         "layers",
         "camadas",
-        "devmode",
+        "tools",
         "page"
       ].includes(activePage) && (
         <div style={{ color: "red", textAlign: "center", marginTop: 32 }}>
