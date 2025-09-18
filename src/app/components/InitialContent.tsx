@@ -180,6 +180,23 @@ function InitialContent(props) {
           >
             Tools
           </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(214, 1, 61, 0.08)",
+              color: "#D6013D",
+              padding: "2px 8px",
+              borderRadius: "4px",
+              fontSize: "10px",
+              fontWeight: 600,
+              lineHeight: "18px",
+              marginLeft: "8px"
+            }}
+          >
+            v.Alpha
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button

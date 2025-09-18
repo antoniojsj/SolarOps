@@ -7,7 +7,7 @@ import CodeSnippetSection from "./CodeSnippetSection";
 const scrollbarStyles = `
   .scrollable-content {
     scrollbar-width: thin;
-    scrollbar-color: #4A4A4A #252526;
+    scrollbar-color: #4A4A4A transparent;
   }
   
   .scrollable-content::-webkit-scrollbar {
@@ -16,7 +16,7 @@ const scrollbarStyles = `
   }
   
   .scrollable-content::-webkit-scrollbar-track {
-    background: #252526;
+    background: transparent;
     border-radius: 4px;
   }
   
@@ -116,7 +116,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
               cursor: "pointer"
             }}
           >
-            Medir
+            Mensurar
           </button>
         </div>
       </div>
