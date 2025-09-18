@@ -17,47 +17,116 @@ const getTooltipFrame = (node): FrameNode => {
   return tooltipFrame;
 };
 
+interface TooltipData extends SetTooltipOptions {
+  vertical?: TooltipPositions;
+  horizontal?: TooltipPositions;
+  backgroundColor: string;
+  fontColor: string;
+  fontSize: number;
+  offset: number;
+}
+
 export const setTooltip = async (
   options: SetTooltipOptions,
-  specificNode = null
-) => {
-  const data = {
-    vertical: undefined,
-    horizontal: undefined,
-    backgroundColor: "#ffffff",
-    fontColor: "#000000",
-    fontSize: 11,
-    ...options
-  };
+  specificNode: SceneNode | null = null
+): Promise<FrameNode | null> => {
+  try {
+    console.log("[setTooltip] Iniciando setTooltip com opções:", options);
+    console.log(
+      "[setTooltip] Nó específico fornecido:",
+      specificNode ? "Sim" : "Não"
+    );
 
-  switch (options.position) {
-    case TooltipPositions.TOP:
-    case TooltipPositions.BOTTOM:
-      data.vertical = options.position;
-      break;
-    case TooltipPositions.LEFT:
-    case TooltipPositions.RIGHT:
-      data.horizontal = options.position;
-      break;
-    default:
-      return;
-  }
-
-  if (figma.currentPage.selection.length === 1 || specificNode) {
-    const node: SceneNode = specificNode || figma.currentPage.selection[0];
-
-    if (node.type === "TEXT" && !node.characters.length) {
-      figma.notify("Could not add tooltip to empty text node", {
-        error: true
-      });
-      return;
+    // Validação inicial das opções
+    if (!options) {
+      console.error("[setTooltip] Nenhuma opção fornecida");
+      return null;
     }
 
-    if (node.type === "BOOLEAN_OPERATION" || node.type === "SLICE") {
-      figma.notify("This type of element is not supported", {
-        error: true
-      });
-      return;
+    // Validar posição
+    if (
+      !options.position ||
+      !Object.values(TooltipPositions).includes(
+        options.position as TooltipPositions
+      )
+    ) {
+      console.error("[setTooltip] Posição inválida:", options.position);
+      return null;
+    }
+
+    // Preparar dados do tooltip com valores padrão
+    const data: TooltipData = {
+      ...options,
+      backgroundColor: options.backgroundColor || "#000000",
+      fontColor: options.fontColor || "#ffffff",
+      fontSize: options.labelFontSize || 11,
+      offset: options.offset || 10,
+      vertical: undefined,
+      horizontal: undefined
+    };
+
+    // Definir direção vertical ou horizontal
+    if (
+      options.position === TooltipPositions.TOP ||
+      options.position === TooltipPositions.BOTTOM
+    ) {
+      data.vertical = options.position;
+    } else {
+      data.horizontal = options.position;
+    }
+
+    console.log("[setTooltip] Dados processados:", data);
+
+    // Verificar se há um nó selecionado
+    if (figma.currentPage.selection.length === 0 && !specificNode) {
+      const msg = "Nenhum nó selecionado";
+      console.warn("[setTooltip]", msg);
+      figma.notify(msg, { error: true });
+      return null;
+    }
+
+    const node: SceneNode =
+      specificNode || (figma.currentPage.selection[0] as SceneNode);
+
+    // Verificar se o nó é válido
+    if (!node || typeof node !== "object") {
+      const msg = "Nó inválido";
+      console.error("[setTooltip]", msg, node);
+      return null;
+    }
+
+    console.log("[setTooltip] Nó selecionado:", {
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      visible: node.visible,
+      parent: node.parent
+        ? { id: node.parent.id, name: node.parent.name }
+        : null
+    });
+
+    // Verificar se o nó está visível e acessível
+    if ("visible" in node && !node.visible) {
+      const msg = "Não é possível adicionar tooltip a um nó invisível";
+      console.warn("[setTooltip]", msg);
+      figma.notify(msg, { error: true });
+      return null;
+    }
+
+    // Verificar tipos de nós não suportados
+    if (node.type === "TEXT" && !(node as TextNode).characters) {
+      const msg = "Não é possível adicionar tooltip a um nó de texto vazio";
+      console.warn("[setTooltip]", msg);
+      figma.notify(msg, { error: true });
+      return null;
+    }
+
+    const unsupportedNodeTypes = ["BOOLEAN_OPERATION", "SLICE", "STICKY"];
+    if (unsupportedNodeTypes.includes(node.type)) {
+      const msg = `Tipo de elemento não suportado: ${node.type}`;
+      console.warn("[setTooltip]", msg);
+      figma.notify(msg, { error: true });
+      return null;
     }
 
     const tooltipFrame = getTooltipFrame(node);
@@ -76,7 +145,8 @@ export const setTooltip = async (
 
     // background
     const bg = hexToRgb(data.backgroundColor);
-    contentFrame.backgrounds = [].concat(solidColor(bg.r, bg.g, bg.b));
+    const bgColor = solidColor(bg.r, bg.g, bg.b);
+    contentFrame.backgrounds = bgColor ? [bgColor] : [];
 
     //-----
 
@@ -100,12 +170,36 @@ export const setTooltip = async (
     }
 
     // ----
+    console.log("[setTooltip] Tamanho do conteúdo do tooltip:", {
+      width: contentFrame.width,
+      height: contentFrame.height
+    });
 
     // Removido: não criamos seta. Apenas o card de conteúdo.
-
     tooltipFrame.resize(contentFrame.width, contentFrame.height);
+
     // ----
     const nodeBounds = (node as any).absoluteBoundingBox;
+
+    if (!nodeBounds) {
+      console.error("[setTooltip] Não foi possível obter os limites do nó:", {
+        nodeId: node.id,
+        nodeType: node.type,
+        hasParent: !!node.parent,
+        parentType: node.parent ? node.parent.type : "none"
+      });
+      figma.notify(
+        "Não foi possível posicionar o balão: nó inválido ou sem limites definidos",
+        {
+          error: true,
+          timeout: 3000
+        }
+      );
+      tooltipFrame.remove();
+      return null;
+    }
+
+    console.log("[setTooltip] Limites do nó:", nodeBounds);
     tooltipFrame.x = nodeBounds.x;
     tooltipFrame.y = nodeBounds.y;
 
@@ -133,28 +227,62 @@ export const setTooltip = async (
       }
     }
 
-    // shadow
-    tooltipFrame.effects = [].concat({
-      offset: {
-        x: 0,
-        y: 2
-      },
-      visible: true,
-      blendMode: "NORMAL",
-      type: "DROP_SHADOW",
-      color: {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: 0.1
-      },
-      radius: 4
-    });
+    // Aplicar sombra e estilos visuais
+    try {
+      const shadowEffect: DropShadowEffect = {
+        type: "DROP_SHADOW",
+        color: { r: 0, g: 0, b: 0, a: 0.3 },
+        offset: { x: 0, y: 2 },
+        radius: 4,
+        spread: 0,
+        visible: true,
+        blendMode: "NORMAL",
+        showShadowBehindNode: false
+      };
+      tooltipFrame.effects = [shadowEffect];
 
-    return tooltipFrame;
-  } else {
-    figma.notify("Please select only one element", {
-      error: true
-    });
+      // Garantir que o tooltip esteja visível e desbloqueado
+      tooltipFrame.locked = false;
+      tooltipFrame.visible = true;
+
+      // Forçar atualização do layout
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      console.log("[setTooltip] Tooltip criado com sucesso:", {
+        id: tooltipFrame.id,
+        name: tooltipFrame.name,
+        bounds: {
+          x: tooltipFrame.x,
+          y: tooltipFrame.y,
+          width: tooltipFrame.width,
+          height: tooltipFrame.height
+        },
+        parent: tooltipFrame.parent
+          ? {
+              id: tooltipFrame.parent.id,
+              name: tooltipFrame.parent.name,
+              type: (tooltipFrame.parent as any).type
+            }
+          : null
+      });
+
+      return tooltipFrame;
+    } catch (error) {
+      console.error("[setTooltip] Erro ao configurar o tooltip:", error);
+      try {
+        tooltipFrame.remove();
+      } catch (e) {
+        console.error("[setTooltip] Erro ao remover tooltip inválido:", e);
+      }
+      return null;
+    }
+  } catch (error) {
+    console.error("[setTooltip] Erro inesperado:", error);
+    try {
+      figma.notify("Ocorreu um erro ao criar o tooltip", { error: true });
+    } catch (e) {
+      console.error("[setTooltip] Erro ao notificar usuário:", e);
+    }
+    return null;
   }
 };

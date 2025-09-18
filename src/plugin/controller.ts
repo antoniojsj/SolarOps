@@ -1,3 +1,5 @@
+/// <reference types="@figma/plugin-typings" />
+
 // Declaração para o require do Node.js
 declare const require: any;
 
@@ -71,16 +73,78 @@ interface SavedTokenFile {
   tokens?: any;
 }
 
+// Tipo para modos de mesclagem
+type BlendMode =
+  | "PASS_THROUGH"
+  | "NORMAL"
+  | "DARKEN"
+  | "MULTIPLY"
+  | "LINEAR_BURN"
+  | "COLOR_BURN"
+  | "LIGHTEN"
+  | "SCREEN"
+  | "LINEAR_DODGE"
+  | "COLOR_DODGE"
+  | "OVERLAY"
+  | "SOFT_LIGHT"
+  | "HARD_LIGHT"
+  | "DIFFERENCE"
+  | "EXCLUSION"
+  | "HUE"
+  | "SATURATION"
+  | "COLOR"
+  | "LUMINOSITY";
+
+// Interface para representar uma cor RGB
+interface RGB {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
+
+// Interface para representar um preenchimento sólido
+interface SolidPaint {
+  type: "SOLID";
+  color: RGB;
+  opacity?: number;
+  visible?: boolean;
+  blendMode?: BlendMode;
+}
+
+type Paint = SolidPaint;
+
+// Interface para mensagens de exportação de relatório
+interface ExportReportMessage {
+  type: "export-report";
+  html?: string;
+  imageData?: string;
+  width: number;
+  height?: number;
+  backgroundColor?: string;
+  borderRadius?: number;
+}
+
+// Tipo para VectorStrokeCap
+type VectorStrokeCap =
+  | "NONE"
+  | "ROUND"
+  | "SQUARE"
+  | "ARROW_LINES"
+  | "ARROW"
+  | "TRIANGLE_FILLED"
+  | "CIRCLE_FILLED"
+  | "DIAMOND_FILLED";
+
 // Interface para mensagens da UI
 interface UIMessage {
   type: string;
   data?: any;
-  [key: string]: any;
   id?: string;
   field?: string;
   nodes?: string[];
   styleId?: string;
-  tokens?: any; // Adicionado para mensagens de tokens
+  tokens?: any;
   success?: boolean;
   message?: string;
   title?: string;
@@ -95,17 +159,32 @@ interface UIMessage {
   };
   libraries?: any[];
   storageArray?: any[];
-  isInspecting?: boolean; // Adicionado para o tipo toggle-inspect-mode
+  isInspecting?: boolean;
+  html?: string;
+  imageData?: string;
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
+  borderRadius?: number;
+  payload?: any;
+  savedTokens?: any[];
 }
 
 // Declaração da constante figma
 declare const figma: {
   currentPage: {
     selection: any[];
+    appendChild: (node: any) => void;
   };
   getNodeById: (id: string) => any;
   viewport: {
     scrollAndZoomIntoView: (nodes: any[]) => void;
+    bounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
   };
   notify: (message: string, options?: any) => void;
   ui: {
@@ -113,17 +192,17 @@ declare const figma: {
     onmessage: (msg: any) => void;
     resize: (width: number, height: number) => void;
   };
-  root: {
-    name: string;
-  };
+  on: (event: string, callback: (event?: any) => void) => void;
   clientStorage: {
     getAsync: (key: string) => Promise<any>;
     setAsync: (key: string, value: any) => Promise<void>;
   };
-  importStyleByKeyAsync: (key: string) => Promise<any>;
-  closePlugin: () => void;
-  showUI: (html: string, options: any) => void;
-  on: (event: string, callback: () => void) => void;
+  root: {
+    name: string;
+  };
+  createRectangle: () => any;
+  createImage: (bytes: Uint8Array) => { hash: string };
+  closePlugin: (message?: string) => void;
 };
 
 const {
@@ -310,9 +389,14 @@ function lintComponentRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries, savedTokens);
-    newCheckEffects(node, errors, libraries, savedTokens);
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    // Prepara os objetos de bibliotecas com as propriedades esperadas
+    const fillLibraries = { fills: new Set(libraries) };
+    const effectLibraries = { effects: new Set(libraries) };
+    const textLibraries = { text: new Set(libraries) };
+
+    newCheckFills(node, errors, fillLibraries, savedTokens);
+    newCheckEffects(node, errors, effectLibraries, savedTokens);
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em component rules:", error);
   }
@@ -326,7 +410,8 @@ function lintLineRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    const fillLibraries = { fills: new Set(libraries) };
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em line rules:", error);
   }
@@ -340,9 +425,12 @@ function lintFrameRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries, savedTokens);
-    newCheckEffects(node, errors, libraries, savedTokens);
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    const fillLibraries = { fills: new Set(libraries) };
+    const effectLibraries = { effects: new Set(libraries) };
+
+    newCheckFills(node, errors, fillLibraries, savedTokens);
+    newCheckEffects(node, errors, effectLibraries, savedTokens);
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em frame rules:", error);
   }
@@ -356,10 +444,14 @@ function lintTextRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    checkType(node, errors, libraries, savedTokens);
-    newCheckFills(node, errors, libraries, savedTokens);
-    newCheckEffects(node, errors, libraries, savedTokens);
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    const fillLibraries = { fills: new Set(libraries) };
+    const effectLibraries = { effects: new Set(libraries) };
+    const textLibraries = { text: new Set(libraries) };
+
+    checkType(node, errors, textLibraries, savedTokens);
+    newCheckFills(node, errors, fillLibraries, savedTokens);
+    newCheckEffects(node, errors, effectLibraries, savedTokens);
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em text rules:", error);
   }
@@ -373,9 +465,12 @@ function lintRectangleRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries, savedTokens);
-    newCheckEffects(node, errors, libraries, savedTokens);
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    const fillLibraries = { fills: new Set(libraries) };
+    const effectLibraries = { effects: new Set(libraries) };
+
+    newCheckFills(node, errors, fillLibraries, savedTokens);
+    newCheckEffects(node, errors, effectLibraries, savedTokens);
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
     checkRadius(node, errors, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em rectangle rules:", error);
@@ -390,9 +485,12 @@ function lintShapeRules(
 ): any[] {
   let errors: any[] = [];
   try {
-    newCheckFills(node, errors, libraries, savedTokens);
-    newCheckEffects(node, errors, libraries, savedTokens);
-    newCheckStrokes(node, errors, libraries, savedTokens);
+    const fillLibraries = { fills: new Set(libraries) };
+    const effectLibraries = { effects: new Set(libraries) };
+
+    newCheckFills(node, errors, fillLibraries, savedTokens);
+    newCheckEffects(node, errors, effectLibraries, savedTokens);
+    newCheckStrokes(node, errors, fillLibraries, savedTokens);
   } catch (error) {
     console.error("[Controller] Erro em shape rules:", error);
   }
@@ -538,15 +636,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   try {
     // ===== Handlers do Medidor (canvas) =====
     if (msg.type === "init-measurement-tool") {
+      const payload = msg as any; // Usar type assertion para acessar propriedades adicionais
       MEASURE_STATE.isMeasuring =
-        msg && msg.payload && typeof msg.payload.isMeasuring === "boolean"
-          ? msg.payload.isMeasuring
+        payload && typeof payload.isMeasuring === "boolean"
+          ? payload.isMeasuring
           : false;
-      MEASURE_STATE.mode =
-        msg && msg.payload && msg.payload.mode ? msg.payload.mode : "distance";
+      MEASURE_STATE.mode = payload && payload.mode ? payload.mode : "distance";
       MEASURE_STATE.showGuides =
-        msg && msg.payload && typeof msg.payload.showGuides === "boolean"
-          ? msg.payload.showGuides
+        payload && typeof payload.showGuides === "boolean"
+          ? payload.showGuides
           : true;
 
       figma.ui.postMessage({
@@ -562,10 +660,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     if (msg.type === "get-selection-count") {
-      var selCount =
-        figma.currentPage.selection && figma.currentPage.selection.length
-          ? figma.currentPage.selection.length
-          : 0;
+      const selCount = figma.currentPage.selection?.length || 0;
       figma.ui.postMessage({
         type: "selection-updated",
         payload: { count: selCount }
@@ -574,52 +669,73 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     if (msg.type === "set-measurement-mode") {
-      var p = msg && msg.payload ? msg.payload : ({} as any);
-      if (typeof p.isMeasuring === "boolean") {
-        MEASURE_STATE.isMeasuring = p.isMeasuring;
+      const payload = msg as any; // Usar type assertion para acessar propriedades adicionais
+      if (typeof payload.isMeasuring === "boolean") {
+        MEASURE_STATE.isMeasuring = payload.isMeasuring;
       }
-      if (p.mode) {
-        MEASURE_STATE.mode = p.mode;
+      if (payload.mode) {
+        MEASURE_STATE.mode = payload.mode;
       }
       return;
     }
 
     if (msg.type === "toggle-guides") {
-      var tgl =
-        msg && msg.payload && typeof msg.payload.showGuides === "boolean"
-          ? msg.payload.showGuides
+      const payload = msg as any; // Usar type assertion para acessar propriedades adicionais
+      const showGuides =
+        typeof payload.showGuides === "boolean"
+          ? payload.showGuides
           : MEASURE_STATE.showGuides;
-      MEASURE_STATE.showGuides = Boolean(tgl);
+      MEASURE_STATE.showGuides = Boolean(showGuides);
       // Mostrar/ocultar medições no canvas conforme estado
       setMeasurementsVisible(MEASURE_STATE.showGuides);
       return;
     }
 
     if (msg.type === "create-preset-measurement") {
-      var payload1 = msg && msg.payload ? msg.payload : ({} as any);
-      const position = payload1.position as
-        | "top"
-        | "bottom"
-        | "left"
-        | "right"
-        | "h-center"
-        | "v-center";
-      const offset = typeof payload1.offset === "number" ? payload1.offset : 10;
-      const strokeCap = (payload1.strokeCap as VectorStrokeCap) || "NONE";
-      const sel = figma.currentPage.selection as SceneNode[];
-      if (!position || !sel || sel.length === 0) {
-        figma.notify("Selecione ao menos um objeto para aplicar a medida.");
-        return;
-      }
-      for (const node of sel) {
-        await createPresetMeasurementForNode(node, position, offset, strokeCap);
+      try {
+        console.log("[DEBUG] Handling create-preset-measurement");
+        console.log("[DEBUG] Full message:", JSON.stringify(msg, null, 2));
+
+        const payload = msg.payload as any;
+        const position = payload.position;
+        const offset = payload.offset;
+        const strokeCap = payload.strokeCap;
+        const sel = figma.currentPage.selection;
+
+        console.log("[DEBUG] Position:", position);
+        console.log("[DEBUG] Selection count:", sel.length);
+        console.log("[DEBUG] Offset:", offset);
+        console.log("[DEBUG] StrokeCap:", strokeCap);
+
+        if (!position || !sel || sel.length === 0) {
+          console.log(
+            "[DEBUG] Validation failed. Position or selection missing."
+          );
+          figma.notify("Selecione ao menos um objeto para aplicar a medida.");
+          return;
+        }
+
+        console.log("[DEBUG] Validation passed. Starting loop.");
+        for (const node of sel) {
+          console.log("[DEBUG] Creating measurement for node:", node.id);
+          await createPresetMeasurementForNode(
+            node as SceneNode,
+            position,
+            offset,
+            strokeCap
+          );
+        }
+        console.log("[DEBUG] Loop finished.");
+      } catch (e) {
+        console.error("[DEBUG] Error in create-preset-measurement handler:", e);
+        figma.notify("Ocorreu um erro ao criar a medida.");
       }
       return;
     }
 
     if (msg.type === "create-angle-preset") {
-      var payload2 = msg && msg.payload ? msg.payload : ({} as any);
-      const corner = payload2.corner as
+      const payload = msg as any; // Usar type assertion para acessar propriedades adicionais
+      const corner = payload.corner as
         | "top-left"
         | "top-right"
         | "bottom-left"
@@ -639,32 +755,37 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     if (msg.type === "create-balloon") {
-      var payload3 = msg && msg.payload ? msg.payload : ({} as any);
-      const position = payload3.position as "left" | "right" | "top" | "bottom";
-      const sel = figma.currentPage.selection as SceneNode[];
-      if (!position || !sel || sel.length === 0) {
-        figma.notify(
-          "Selecione ao menos um objeto para inserir o balão de anotação."
-        );
-        return;
-      }
       try {
-        for (const node of sel) {
-          try {
-            await createBalloonForNode(node, position);
-          } catch (e) {
-            console.error("[Controller] createBalloonForNode error", e);
-            figma.notify(
-              "Falha ao criar balão: " +
-                (e && (e as any).message ? (e as any).message : String(e)),
-              { timeout: 2500 }
-            );
-          }
+        console.log("[DEBUG] Handling create-balloon");
+        console.log("[DEBUG] Full message:", JSON.stringify(msg, null, 2));
+
+        const payload = msg.payload as any;
+        const position = payload.position;
+        const sel = figma.currentPage.selection;
+
+        console.log("[DEBUG] Position:", position);
+        console.log("[DEBUG] Selection count:", sel.length);
+
+        if (!position || !sel || sel.length === 0) {
+          console.log(
+            "[DEBUG] Validation failed for balloon. Position or selection missing."
+          );
+          figma.notify(
+            "Selecione ao menos um objeto para inserir o balão de anotação."
+          );
+          return;
         }
+
+        console.log("[DEBUG] Balloon validation passed. Starting loop.");
+        for (const node of sel) {
+          console.log("[DEBUG] Creating balloon for node:", node.id);
+          await createBalloonForNode(node as SceneNode, position);
+        }
+        console.log("[DEBUG] Balloon loop finished.");
         setMeasurementsVisible(MEASURE_STATE.showGuides);
       } catch (e) {
-        console.error("[Controller] create-balloon handler error", e);
-        figma.notify("Erro ao criar balão de anotação.", { timeout: 2500 });
+        console.error("[DEBUG] Error in create-balloon handler:", e);
+        figma.notify("Ocorreu um erro ao criar a anotação.");
       }
       return;
     }
@@ -1396,6 +1517,166 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         msg.isInspecting ? "ativado" : "desativado"
       );
       // O listener de selectionchange já cuida de enviar os dados do nó selecionado
+      return;
+    }
+
+    // Handler para exportar o relatório como imagem no canvas
+    if (msg.type === "export-report") {
+      try {
+        console.log("[Controller] Recebendo relatório para exportação");
+
+        // Verificar se temos dados de imagem
+        if (!msg.imageData) {
+          throw new Error("Dados de imagem não fornecidos");
+        }
+
+        console.log("[Controller] Iniciando processamento da imagem...");
+
+        // Extrair os dados da imagem (remover o cabeçalho da data URL)
+        let base64Data = msg.imageData.includes(",")
+          ? msg.imageData.split(",")[1]
+          : msg.imageData;
+
+        console.log(
+          "[Controller] Dados base64 extraídos, comprimento:",
+          base64Data.length
+        );
+
+        // Remover caracteres que não são base64
+        base64Data = base64Data.replace(/[^A-Za-z0-9+/=]/g, "");
+
+        console.log(
+          "[Controller] Dados base64 limpos, comprimento:",
+          base64Data.length
+        );
+
+        // Verificar se temos dados suficientes
+        if (base64Data.length < 4) {
+          throw new Error("Dados de imagem inválidos ou muito curtos");
+        }
+
+        // Decodificar a string base64 para bytes
+        let binaryString = "";
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+        let i = 0;
+
+        console.log("[Controller] Iniciando decodificação base64...");
+
+        while (i < base64Data.length) {
+          const enc1 = chars.indexOf(base64Data.charAt(i++));
+          const enc2 = chars.indexOf(base64Data.charAt(i++) || "=");
+          const enc3 = chars.indexOf(base64Data.charAt(i++) || "=");
+          const enc4 = chars.indexOf(base64Data.charAt(i++) || "=");
+
+          const chr1 = (enc1 << 2) | (enc2 >> 4);
+          const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+          const chr3 = ((enc3 & 3) << 6) | enc4;
+
+          binaryString += String.fromCharCode(chr1);
+          if (enc3 !== 64) binaryString += String.fromCharCode(chr2);
+          if (enc4 !== 64) binaryString += String.fromCharCode(chr3);
+        }
+
+        const len = binaryString.length;
+        console.log(
+          "[Controller] Tamanho da string binária decodificada:",
+          len
+        );
+
+        if (len === 0) {
+          throw new Error(
+            "Falha ao decodificar a imagem: string binária vazia"
+          );
+        }
+
+        const bytes = new Uint8Array(len);
+
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        console.log(
+          "[Controller] Bytes da imagem preparados, tamanho:",
+          bytes.length,
+          "bytes"
+        );
+
+        console.log(
+          "[Controller] Dados da imagem processados, criando imagem no Figma..."
+        );
+
+        // Criar um nó de imagem no Figma
+        let image;
+        try {
+          console.log(
+            "[Controller] Chamando figma.createImage com",
+            bytes.length,
+            "bytes"
+          );
+          image = figma.createImage(bytes);
+          console.log(
+            "[Controller] Imagem criada com sucesso, hash:",
+            image.hash
+          );
+        } catch (error) {
+          console.error("[Controller] Erro ao criar imagem no Figma:", error);
+          throw new Error(`Falha ao criar imagem no Figma: ${error.message}`);
+        }
+
+        // Criar um retângulo para conter a imagem
+        const width = msg.width || 800;
+        const height = msg.height || 1000;
+        const rect = figma.createRectangle();
+        rect.name = "Relatório de Acessibilidade";
+        rect.resize(width, height);
+
+        // Aplicar a imagem como preenchimento
+        const fills = [...rect.fills];
+        fills[0] = {
+          type: "IMAGE",
+          imageHash: image.hash,
+          scaleMode: "FILL",
+          scalingFactor: 0.5
+        };
+        rect.fills = fills;
+
+        // Definir o raio da borda
+        rect.cornerRadius = msg.borderRadius || 16;
+
+        // Posicionar o retângulo no centro da viewport
+        const viewport = figma.viewport.bounds;
+        rect.x = viewport.x + (viewport.width - width) / 2;
+        rect.y = viewport.y + (viewport.height - height) / 2;
+
+        // Adicionar o retângulo à página atual
+        figma.currentPage.appendChild(rect);
+
+        // Selecionar o retângulo criado
+        figma.currentPage.selection = [rect];
+        figma.viewport.scrollAndZoomIntoView([rect]);
+
+        // Enviar confirmação de sucesso para a UI
+        figma.ui.postMessage({
+          type: "report-exported",
+          success: true,
+          message: "Relatório exportado com sucesso para o canvas do Figma!"
+        });
+
+        console.log("[Controller] Relatório exportado com sucesso");
+      } catch (error) {
+        console.error("[Controller] Erro ao exportar relatório:", error);
+
+        // Enviar mensagem de erro para a UI
+        figma.ui.postMessage({
+          type: "report-export-error",
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Erro desconhecido ao exportar relatório"
+        });
+      }
       return;
     }
 

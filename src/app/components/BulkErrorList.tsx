@@ -760,7 +760,10 @@ function BulkErrorList(props) {
   }, []);
 
   return (
-    <motion.div className="bulk-errors-list" key="bulk-list">
+    <motion.div
+      className="bulk-errors-list bulk-errors-container report-container"
+      key="bulk-list"
+    >
       {/* Switch de conteúdo */}
       <div
         style={{

@@ -763,6 +763,302 @@ const App = ({}) => {
     );
   }, [activeComponentLibraries]);
 
+  const handleExportReport = async () => {
+    console.log("Export report button clicked");
+
+    try {
+      // Primeiro, tenta encontrar o contêiner do relatório usando uma classe mais específica
+      let reportContainer = document.querySelector(
+        ".bulk-errors-container"
+      ) as HTMLElement;
+
+      // Se não encontrar, tenta encontrar qualquer contêiner que possa conter o relatório
+      if (!reportContainer) {
+        console.log(
+          "Container principal não encontrado, procurando alternativas..."
+        );
+        const possibleContainers = document.querySelectorAll(
+          '.bulk-errors, .bulk-errors-container, [class*="bulk"], [class*="error"], [class*="report"]'
+        );
+
+        // Log dos contêineres disponíveis para depuração
+        console.log(
+          "Contêineres disponíveis:",
+          Array.from(possibleContainers).map(el => ({
+            tag: el.tagName,
+            class: el.className,
+            id: el.id || "no-id",
+            children: el.children.length,
+            textContent: el.textContent?.substring(0, 50) + "..." || "vazio"
+          }))
+        );
+
+        // Tenta encontrar o contêiner mais provável
+        for (const container of Array.from(possibleContainers)) {
+          if (container.children.length > 0) {
+            reportContainer = container as HTMLElement;
+            console.log("Usando contêiner alternativo:", container.className);
+            break;
+          }
+        }
+
+        // Se ainda não encontrou, exibe um erro e sai
+        if (!reportContainer) {
+          console.error("Não foi possível encontrar o contêiner do relatório");
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "report-export-error",
+                error:
+                  "Não foi possível encontrar o conteúdo do relatório para exportação."
+              }
+            },
+            "*"
+          );
+          return;
+        }
+      }
+
+      console.log("Contêiner do relatório encontrado:", {
+        tagName: reportContainer.tagName,
+        className: reportContainer.className,
+        children: reportContainer.children.length
+      });
+
+      // Cria um clone do contêiner para não afetar o original
+      const containerClone = reportContainer.cloneNode(true) as HTMLElement;
+
+      // Remove elementos interativos que não devem estar na exportação
+      containerClone
+        .querySelectorAll(
+          "button, input, select, textarea, .analysis-footer, .initial-content-footer"
+        )
+        .forEach(el => el.remove());
+
+      // Cria um wrapper para a exportação com o estilo correto
+      const exportWrapper = document.createElement("div");
+      exportWrapper.style.padding = "0";
+      exportWrapper.style.backgroundColor = "#000";
+      exportWrapper.style.borderRadius = "16px";
+      exportWrapper.style.width = "100%";
+      exportWrapper.style.maxWidth = "600px";
+      exportWrapper.style.margin = "0 auto";
+      exportWrapper.style.boxSizing = "border-box";
+      exportWrapper.style.fontFamily =
+        'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+      // Cria um container para o cabeçalho do relatório
+      const headerContainer = document.createElement("div");
+      headerContainer.style.display = "flex";
+      headerContainer.style.justifyContent = "space-between";
+      headerContainer.style.alignItems = "center";
+      headerContainer.style.marginBottom = "8px";
+      headerContainer.style.width = "100%";
+      headerContainer.style.padding = "0 8px";
+
+      // Adiciona o título do relatório
+      const title = document.createElement("h1");
+      title.textContent = "Relatório da Auditoria";
+      title.style.color = "#fff";
+      title.style.margin = "0";
+      title.style.fontSize = "18px";
+      title.style.fontWeight = "600";
+      title.style.fontFamily = "inherit";
+
+      // Adiciona a logo da Compass
+      const logoContainer = document.createElement("div");
+      const logo = document.createElement("img");
+      logo.src = "/assets/Compass com fundo preto - horizontal.svg";
+      logo.alt = "Logo Compass";
+      logo.style.height = "20px";
+      logo.style.width = "auto";
+      logoContainer.appendChild(logo);
+
+      // Adiciona os elementos ao cabeçalho
+      headerContainer.appendChild(title);
+      headerContainer.appendChild(logoContainer);
+
+      // Cria um container para o conteúdo do relatório
+      const contentContainer = document.createElement("div");
+      contentContainer.className = "report-content";
+      contentContainer.style.width = "100%";
+      contentContainer.style.maxWidth = "100%";
+      contentContainer.style.margin = "0 auto";
+      contentContainer.style.padding = "0 24px 0";
+
+      // Adiciona o cabeçalho e o conteúdo ao container
+      contentContainer.appendChild(headerContainer);
+      contentContainer.appendChild(containerClone);
+
+      // Adiciona o container ao wrapper de exportação
+      exportWrapper.appendChild(contentContainer);
+
+      // Ajusta o espaçamento do último elemento
+      const lastElement = containerClone.lastElementChild as HTMLElement;
+      if (lastElement) {
+        lastElement.style.marginBottom = "0";
+        lastElement.style.paddingBottom = "0";
+      }
+
+      // Garante que todo o texto seja visível na exportação
+      const allTextElements = exportWrapper.querySelectorAll("*");
+
+      allTextElements.forEach(el => {
+        const element = el as HTMLElement;
+
+        // Garante que a cor do texto seja visível no fundo escuro
+        const textColor = window.getComputedStyle(element).color;
+        if (
+          textColor === "rgba(0, 0, 0, 0)" ||
+          textColor === "transparent" ||
+          textColor === "rgb(0, 0, 0)"
+        ) {
+          element.style.color = "#ffffff";
+        }
+
+        // Garante que as cores de fundo tenham contraste suficiente
+        const bgColor = window.getComputedStyle(element).backgroundColor;
+        if (bgColor === "rgba(0, 0, 0, 0)" || bgColor === "transparent") {
+          element.style.backgroundColor = "#1a1a1a";
+        }
+
+        // Garante que os textos em span tenham cor branca
+        if (element.tagName === "SPAN") {
+          element.style.color = "#ffffff";
+        }
+      });
+
+      // Adiciona o wrapper de exportação ao corpo do documento temporariamente
+      const tempContainer = document.createElement("div");
+      tempContainer.style.position = "absolute";
+      tempContainer.style.left = "-9999px";
+      tempContainer.style.top = "0";
+      tempContainer.style.visibility = "visible"; // Torna visível para captura
+      tempContainer.style.zIndex = "9999";
+      tempContainer.style.width = "800px";
+      tempContainer.style.height = "auto";
+      tempContainer.style.overflow = "visible";
+
+      tempContainer.appendChild(exportWrapper);
+      document.body.appendChild(tempContainer);
+
+      try {
+        console.log("Iniciando exportação do relatório para imagem...");
+
+        // Força um reflow para garantir que todos os estilos sejam aplicados
+        void exportWrapper.offsetHeight;
+
+        // Importa o html2canvas dinamicamente para evitar problemas de SSR
+        const html2canvas = (await import("html2canvas")).default;
+
+        console.log("Convertendo o relatório para canvas...");
+
+        // Converte o wrapper de exportação para canvas
+        const canvas = await html2canvas(exportWrapper, {
+          backgroundColor: "#000000",
+          scale: 1.5, // Aumenta a escala para melhor qualidade
+          logging: true,
+          useCORS: true,
+          allowTaint: true,
+          removeContainer: false,
+          onclone: (clonedDoc, element) => {
+            // Garante que todos os estilos sejam aplicados corretamente no documento clonado
+            const style = clonedDoc.createElement("style");
+            style.textContent = `
+              * {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                box-sizing: border-box;
+              }
+              body { 
+                margin: 0; 
+                padding: 0; 
+                background-color: #000000;
+                color: #ffffff;
+              }
+              .bulk-errors-container, .bulk-errors {
+                background-color: #000000 !important;
+                color: #ffffff !important;
+              }
+              .error-item, .error-card {
+                background-color: #1a1a1a !important;
+                border-color: #333 !important;
+                color: #ffffff !important;
+              }
+              h1, h2, h3, h4, h5, h6, p, span, div {
+                color: #ffffff !important;
+              }
+            `;
+            clonedDoc.head.appendChild(style);
+          }
+        });
+
+        console.log("Canvas criado, convertendo para imagem...");
+
+        // Converte o canvas para imagem base64
+        const imageData = canvas.toDataURL("image/png", 0.9);
+
+        if (!imageData || imageData === "data:,") {
+          throw new Error(
+            "Falha ao gerar os dados da imagem: dados de imagem inválidos"
+          );
+        }
+
+        console.log("Enviando dados da imagem para o Figma...");
+
+        // Envia os dados da imagem para o plugin
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "export-report",
+              imageData: imageData,
+              width: Math.min(canvas.width, 2000), // Limita a largura máxima
+              height: Math.min(canvas.height, 4000), // Limita a altura máxima
+              backgroundColor: "#000000",
+              borderRadius: 16
+            }
+          },
+          "*"
+        );
+
+        console.log("Dados da imagem enviados para o Figma com sucesso");
+      } catch (error) {
+        console.error("Erro ao gerar a imagem do relatório:", error);
+        // Exibe mensagem de erro para o usuário
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "report-export-error",
+              error:
+                error instanceof Error
+                  ? `Erro ao gerar o relatório: ${error.message}`
+                  : "Falha ao gerar a imagem do relatório. Por favor, tente novamente."
+            }
+          },
+          "*"
+        );
+      } finally {
+        // Sempre limpa o contêiner temporário
+        if (document.body.contains(tempContainer)) {
+          document.body.removeChild(tempContainer);
+        }
+      }
+    } catch (error) {
+      console.error("Erro no processo de exportação:", error);
+      // Exibe mensagem de erro genérica para o usuário
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: "report-export-error",
+            error:
+              "Ocorreu um erro inesperado ao exportar o relatório. Por favor, tente novamente."
+          }
+        },
+        "*"
+      );
+    }
+  };
+
   // Adicione logs antes do return, se quiser
   console.log(
     "[App] Passando activeComponentLibraries para SettingsPanel:",
@@ -935,6 +1231,7 @@ const App = ({}) => {
           onHandleRunApp={handleRunAudit}
           disableRefazer={!activeNodeIds.length}
           nodeArray={nodeArray}
+          onExportReport={handleExportReport}
         />
       ) : !auditStarted ? (
         <InitialContent

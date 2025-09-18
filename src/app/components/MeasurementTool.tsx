@@ -44,18 +44,22 @@ const PresetGrid = styled.div`
   gap: 8px;
 `;
 
-const PresetButton = styled.button<{ active?: boolean }>`
-  background: rgba(255, 255, 255, 0.06);
+const PresetButton = styled.button<{ $active?: boolean }>`
+  background: ${props =>
+    props.$active ? "rgba(59, 130, 246, 0.2)" : "rgba(255, 255, 255, 0.06)"};
   color: ${COLORS.text};
-  border: 1px dashed ${COLORS.border};
+  border: 1px ${props => (props.$active ? "solid" : "dashed")}
+    ${props => (props.$active ? COLORS.primary : COLORS.border)};
   border-radius: 6px;
   padding: 10px 8px;
   font-size: 12px;
   cursor: pointer;
   text-align: center;
   transition: all 0.15s ease;
+
   &:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: ${({ $active }) =>
+      $active ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.12)"};
   }
 `;
 
@@ -73,11 +77,11 @@ const Toolbar = styled.div`
   flex-wrap: wrap;
 `;
 
-const ToolButton = styled.button<{ active?: boolean }>`
+const ToolButton = styled.button<{ $active?: boolean }>`
   background: ${props =>
-    props.active ? COLORS.primary : "rgba(30, 30, 30, 0.8)"};
-  color: ${props => (props.active ? "#fff" : COLORS.text)};
-  border: 1px solid ${props => (props.active ? COLORS.primary : COLORS.border)};
+    props.$active ? COLORS.primary : "rgba(30, 30, 30, 0.8)"};
+  color: ${props => (props.$active ? "#fff" : COLORS.text)};
+  border: 1px solid ${props => (props.$active ? COLORS.primary : COLORS.border)};
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 12px;
@@ -89,7 +93,7 @@ const ToolButton = styled.button<{ active?: boolean }>`
 
   &:hover {
     background: ${props =>
-      props.active ? COLORS.primary : "rgba(255, 255, 255, 0.1)"};
+      props.$active ? COLORS.primary : "rgba(255, 255, 255, 0.1)"};
   }
 
   &:active {
@@ -105,10 +109,10 @@ const PanelSection = styled.div`
 `;
 
 const PanelTitle = styled.h3`
-  font-size: 13px;
+  font-size: 14px;
   margin: 0 0 12px 0;
-  color: ${COLORS.text};
   font-weight: 500;
+  color: ${COLORS.text};
 `;
 
 const InstructionText = styled.p`
@@ -134,7 +138,7 @@ const MeasurementTool: React.FC = observer(() => {
   const [showGuides, setShowGuides] = useState(true);
   const [selectionCount, setSelectionCount] = useState(0);
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(
-    "distance"
+    "notes"
   );
   const [strokeCap, setStrokeCap] = useState<StrokeCap>("STANDARD");
   const [strokeOffset, setStrokeOffset] = useState(10);
@@ -287,7 +291,7 @@ const MeasurementTool: React.FC = observer(() => {
         <PanelTitle>Modo de Medição</PanelTitle>
         <Toolbar>
           <ToolButton
-            active={measurementMode === "notes"}
+            $active={measurementMode === "notes"}
             onClick={() => setMode("notes")}
           >
             <svg
@@ -303,7 +307,7 @@ const MeasurementTool: React.FC = observer(() => {
             Anotações
           </ToolButton>
           <ToolButton
-            active={measurementMode === "distance"}
+            $active={measurementMode === "distance"}
             onClick={() => setMode("distance")}
           >
             <svg
@@ -397,7 +401,7 @@ const MeasurementTool: React.FC = observer(() => {
       <PanelSection>
         <PanelTitle>Controles</PanelTitle>
         <Toolbar>
-          <ToolButton onClick={toggleGuides} active={showGuides}>
+          <ToolButton onClick={toggleGuides} $active={showGuides}>
             <svg
               width="16"
               height="16"
