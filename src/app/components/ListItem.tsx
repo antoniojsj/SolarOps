@@ -3,78 +3,83 @@ import classNames from "classnames";
 
 function ListItem(props) {
   const { onClick, onOpenPanel } = props;
-  const node = props.node;
-  let childNodes = null;
-  let errorObject = { errors: [] };
-  let childErrorsCount = 0;
+  const {
+    node,
+    errorArray,
+    ignoredErrorArray,
+    activeNodeIds,
+    selectedListItems
+  } = props;
 
   const [expanded, setExpanded] = React.useState(false);
 
-  // Debug logs
-  console.log(
-    `[ListItem] Renderizando node: ${node.name} (${node.type}) - filhos: ${node
-      .children?.length || 0} - expanded: ${expanded}`
+  const getErrorNodeId = (err: any) =>
+    err.nodeId || (err.node && err.node.id) || err.id;
+
+  // Memoize the calculation of errors for this specific node
+  const nodeErrors = React.useMemo(() => {
+    if (!Array.isArray(errorArray)) return [];
+    return errorArray.filter(e => getErrorNodeId(e) === node.id);
+  }, [errorArray, node.id]);
+
+  const errorCount = nodeErrors.length;
+
+  // Recursive function for finding the amount of errors nested within this node's children.
+  const findNestedErrors = React.useCallback(
+    currentNode => {
+      if (!currentNode.children || !Array.isArray(errorArray)) {
+        return 0;
+      }
+
+      let count = 0;
+      const queue = [...currentNode.children];
+      const visited = new Set();
+
+      while (queue.length > 0) {
+        const child = queue.shift();
+        if (!child || visited.has(child.id)) continue;
+        visited.add(child.id);
+
+        count += errorArray.filter(e => getErrorNodeId(e) === child.id).length;
+
+        if (child.children) {
+          queue.push(...child.children);
+        }
+      }
+      return count;
+    },
+    [errorArray]
   );
 
-  let filteredErrorArray = props.errorArray;
+  const childErrorsCount = React.useMemo(() => findNestedErrors(node), [
+    node,
+    findNestedErrors
+  ]);
 
-  // Check to see if this node has corresponding errors.
-  if (filteredErrorArray.some(e => e.id === node.id)) {
-    errorObject = filteredErrorArray.find(e => e.id === node.id);
-  }
-
-  // The component calls itself if there are children
-  if (node.children && node.children.length) {
-    console.log(
-      `[ListItem] Node ${node.name} tem ${node.children.length} filhos`
-    );
-
-    // Find errors in this node's children.
-    childErrorsCount = findNestedErrors(node);
-
-    childNodes = node.children.map(function(childNode) {
-      return (
-        <ListItem
-          ignoredErrorArray={props.ignoredErrorArray}
-          activeNodeIds={props.activeNodeIds}
-          selectedListItems={props.selectedListItems}
-          errorArray={filteredErrorArray}
-          onClick={onClick}
-          onOpenPanel={onOpenPanel}
-          key={childNode.id}
-          node={childNode}
-        />
-      );
-    });
-  }
-
-  // Recursive function for finding the amount of errors
-  // nested within this nodes children.
-  function findNestedErrors(node) {
-    let errorCount = 0;
-
-    node.children.forEach(childNode => {
-      if (filteredErrorArray.some(e => e.id === childNode.id)) {
-        let childErrorObject = filteredErrorArray.find(
-          e => e.id === childNode.id
-        );
-        errorCount = errorCount + childErrorObject.errors.length;
-      }
-
-      if (childNode.children) {
-        errorCount = errorCount + findNestedErrors(childNode);
-      }
-    });
-
-    return errorCount;
-  }
+  const childNodes =
+    node.children && node.children.length > 0
+      ? node.children.map(function(childNode) {
+          return (
+            <ListItem
+              ignoredErrorArray={ignoredErrorArray}
+              activeNodeIds={activeNodeIds}
+              selectedListItems={selectedListItems}
+              errorArray={errorArray}
+              onClick={onClick}
+              onOpenPanel={onOpenPanel}
+              key={childNode.id}
+              node={childNode}
+            />
+          );
+        })
+      : null;
 
   return (
     <li
       id={node.id}
       className={classNames(`list-item`, {
-        "list-item--active": props.activeNodeIds.includes(node.id),
-        "list-item--selected": props.selectedListItems.includes(node.id)
+        "list-item--active": activeNodeIds.includes(node.id),
+        "list-item--selected": selectedListItems.includes(node.id)
       })}
     >
       <div
@@ -93,11 +98,6 @@ function ListItem(props) {
           className="list-arrow"
           onClick={e => {
             e.stopPropagation();
-            console.log(
-              `[ListItem] Alternando expansão de ${
-                node.name
-              } de ${expanded} para ${!expanded}`
-            );
             setExpanded(exp => !exp);
           }}
         >
@@ -152,10 +152,8 @@ function ListItem(props) {
             zIndex: 2
           }}
         >
-          {errorObject.errors.length >= 1 && (
-            <span className="badge">{errorObject.errors.length}</span>
-          )}
-          {errorObject.errors.length >= 1 && (
+          {errorCount >= 1 && <span className="badge">{errorCount}</span>}
+          {errorCount >= 1 && (
             <button
               className="button--icon"
               style={{ marginLeft: 0 }}
@@ -175,12 +173,7 @@ function ListItem(props) {
         </span>
       </div>
       {childNodes && expanded ? (
-        <ul className="sub-list">
-          {console.log(
-            `[ListItem] Renderizando ${childNodes.length} filhos para ${node.name}`
-          )}
-          {childNodes}
-        </ul>
+        <ul className="sub-list">{childNodes}</ul>
       ) : null}
     </li>
   );

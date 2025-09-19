@@ -9,7 +9,9 @@ import {
   newCheckFills,
   newCheckEffects,
   newCheckStrokes,
-  checkRadius
+  checkRadius,
+  checkGap,
+  getHexString
 } from "./lintingFunctions";
 
 import {
@@ -272,13 +274,88 @@ figma.on("selectionchange", async () => {
   }
 });
 
+// Função para extrair e pré-processar os IDs de estilo das bibliotecas
+function preprocessLibraries(
+  libraries: any[]
+): {
+  fills: Set<string>;
+  text: Set<string>;
+  effects: Set<string>;
+  strokes: Set<string>;
+} {
+  const fillStyleIds = new Set<string>();
+  const textStyleIds = new Set<string>();
+  const effectStyleIds = new Set<string>();
+
+  for (const lib of libraries || []) {
+    if (!lib) continue;
+
+    // Estilos de preenchimento (usados também para bordas)
+    if (lib.fills && Array.isArray(lib.fills)) {
+      for (const style of lib.fills) {
+        if (style && style.id) {
+          fillStyleIds.add(style.id);
+        }
+      }
+    }
+
+    // Estilos de texto
+    if (lib.text && Array.isArray(lib.text)) {
+      for (const style of lib.text) {
+        if (style && style.id) {
+          textStyleIds.add(style.id);
+        }
+      }
+    }
+
+    // Estilos de efeito
+    if (lib.effects && Array.isArray(lib.effects)) {
+      for (const style of lib.effects) {
+        if (style && style.id) {
+          effectStyleIds.add(style.id);
+        }
+      }
+    }
+  }
+
+  return {
+    fills: fillStyleIds,
+    text: textStyleIds,
+    effects: effectStyleIds,
+    strokes: fillStyleIds // Bordas usam os mesmos PaintStyles que os preenchimentos
+  };
+}
+
 // Função principal de linting otimizada
-function lint(
+async function lint(
   nodes: readonly any[],
   libraries: any[],
   parentFrameId: string | null = null,
   savedTokens: any[] = []
-): any[] {
+): Promise<any[]> {
+  // Pré-processa as bibliotecas uma vez para otimizar a busca de IDs de estilo
+  const preprocessedLibs = preprocessLibraries(libraries);
+  return await lintRecursive(
+    nodes,
+    preprocessedLibs,
+    parentFrameId,
+    savedTokens,
+    libraries
+  );
+}
+
+async function lintRecursive(
+  nodes: readonly any[],
+  preprocessedLibs: {
+    fills: Set<string>;
+    text: Set<string>;
+    effects: Set<string>;
+    strokes: Set<string>;
+  },
+  parentFrameId: string | null,
+  savedTokens: any[],
+  libraries: any[]
+): Promise<any[]> {
   let errors: any[] = [];
 
   try {
@@ -301,11 +378,12 @@ function lint(
       }
 
       // Chama a função de lint para o node, passando o parentFrameId e tokens salvos
-      const nodeErrors = determineTypeWithFrame(
+      const nodeErrors = await determineTypeWithFrame(
         node,
-        libraries,
+        preprocessedLibs,
         currentFrameId,
-        savedTokens
+        savedTokens,
+        libraries
       );
 
       if (nodeErrors && Array.isArray(nodeErrors)) {
@@ -318,9 +396,14 @@ function lint(
         Array.isArray(node.children) &&
         node.children.length > 0
       ) {
-        errors = errors.concat(
-          lint(node.children, libraries, currentFrameId, savedTokens)
+        const childErrors = await lintRecursive(
+          node.children,
+          preprocessedLibs,
+          currentFrameId,
+          savedTokens,
+          libraries
         );
+        errors.push(...childErrors);
       }
     }
   } catch (error) {
@@ -332,12 +415,18 @@ function lint(
 }
 
 // Função para determinar o tipo de node e aplicar regras de linting, incluindo o parentFrameId
-function determineTypeWithFrame(
+async function determineTypeWithFrame(
   node: any,
-  libraries: any[],
+  preprocessedLibs: {
+    fills: Set<string>;
+    text: Set<string>;
+    effects: Set<string>;
+    strokes: Set<string>;
+  },
   parentFrameId: string | null,
-  savedTokens: any[] = []
-): any[] {
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
   try {
     let errors: any[] = [];
     switch (node.type) {
@@ -349,23 +438,53 @@ function determineTypeWithFrame(
       case "STAR":
       case "BOOLEAN_OPERATION":
       case "SQUARE":
-        errors = lintShapeRules(node, libraries, savedTokens);
+        errors = await lintShapeRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       case "FRAME":
-        errors = lintFrameRules(node, libraries, savedTokens);
+        errors = await lintFrameRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       case "INSTANCE":
       case "RECTANGLE":
-        errors = lintRectangleRules(node, libraries, savedTokens);
+        errors = await lintRectangleRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       case "COMPONENT":
-        errors = lintComponentRules(node, libraries, savedTokens);
+        errors = await lintComponentRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       case "TEXT":
-        errors = lintTextRules(node, libraries, savedTokens);
+        errors = await lintTextRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       case "LINE":
-        errors = lintLineRules(node, libraries, savedTokens);
+        errors = await lintLineRules(
+          node,
+          preprocessedLibs,
+          savedTokens,
+          libraries
+        );
         break;
       default:
         return [];
@@ -382,115 +501,166 @@ function determineTypeWithFrame(
 }
 
 // Funções de linting para diferentes tipos de componentes
-function lintComponentRules(
+async function lintComponentRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    // Prepara os objetos de bibliotecas com as propriedades esperadas
-    const fillLibraries = { fills: new Set(libraries) };
-    const effectLibraries = { effects: new Set(libraries) };
-    const textLibraries = { text: new Set(libraries) };
-
-    newCheckFills(node, errors, fillLibraries, savedTokens);
-    newCheckEffects(node, errors, effectLibraries, savedTokens);
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
+    // Execute all checks in parallel for better performance
+    await Promise.all([
+      newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckEffects(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckStrokes(node, errors, preprocessedLibs, savedTokens, libraries)
+    ]);
+    checkRadius(node, errors, savedTokens, libraries);
+    checkGap(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em component rules:", error);
   }
   return errors;
 }
 
-function lintLineRules(
+async function lintLineRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    const fillLibraries = { fills: new Set(libraries) };
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
+    await newCheckStrokes(
+      node,
+      errors,
+      preprocessedLibs,
+      savedTokens,
+      libraries
+    );
   } catch (error) {
     console.error("[Controller] Erro em line rules:", error);
   }
   return errors;
 }
 
-function lintFrameRules(
+async function lintFrameRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    const fillLibraries = { fills: new Set(libraries) };
-    const effectLibraries = { effects: new Set(libraries) };
+    // Adiciona verificação para instâncias quebradas (componente principal deletado)
+    if (node.type === "INSTANCE" && node.mainComponent === null) {
+      errors.push({
+        type: "detach",
+        message: "Instância quebrada (componente principal não encontrado)",
+        nodeId: node.id,
+        nodeName: node.name,
+        value: node.name
+      });
+    }
 
-    newCheckFills(node, errors, fillLibraries, savedTokens);
-    newCheckEffects(node, errors, effectLibraries, savedTokens);
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
+    await Promise.all([
+      newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckEffects(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckStrokes(node, errors, preprocessedLibs, savedTokens, libraries)
+    ]);
+    checkRadius(node, errors, savedTokens, libraries);
+    checkGap(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em frame rules:", error);
   }
   return errors;
 }
 
-function lintTextRules(
+async function lintTextRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    const fillLibraries = { fills: new Set(libraries) };
-    const effectLibraries = { effects: new Set(libraries) };
-    const textLibraries = { text: new Set(libraries) };
+    // Executa cada verificação sequencialmente para garantir que os erros sejam coletados corretamente
+    await checkType(node, errors, preprocessedLibs, savedTokens, libraries);
+    await newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries);
+    await newCheckEffects(
+      node,
+      errors,
+      preprocessedLibs,
+      savedTokens,
+      libraries
+    );
+    await newCheckStrokes(
+      node,
+      errors,
+      preprocessedLibs,
+      savedTokens,
+      libraries
+    );
 
-    checkType(node, errors, textLibraries, savedTokens);
-    newCheckFills(node, errors, fillLibraries, savedTokens);
-    newCheckEffects(node, errors, effectLibraries, savedTokens);
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
+    // Adiciona logs para depuração
+    if (errors.length > 0) {
+      console.log(
+        `[lintTextRules] Encontrados ${errors.length} erros para o nó ${node.name} (${node.id})`
+      );
+      console.log("Erros encontrados:", errors);
+    }
   } catch (error) {
     console.error("[Controller] Erro em text rules:", error);
+    // Adiciona o erro à lista de erros para que seja exibido ao usuário
+    errors.push({
+      type: "error",
+      message: `Erro ao verificar estilos: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      nodeId: node.id,
+      nodeName: node.name,
+      value: "Erro na verificação"
+    });
   }
   return errors;
 }
 
-function lintRectangleRules(
+async function lintRectangleRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    const fillLibraries = { fills: new Set(libraries) };
-    const effectLibraries = { effects: new Set(libraries) };
-
-    newCheckFills(node, errors, fillLibraries, savedTokens);
-    newCheckEffects(node, errors, effectLibraries, savedTokens);
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
-    checkRadius(node, errors, savedTokens);
+    await Promise.all([
+      newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckEffects(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckStrokes(node, errors, preprocessedLibs, savedTokens, libraries)
+    ]);
+    checkRadius(node, errors, savedTokens, libraries);
+    checkGap(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em rectangle rules:", error);
   }
   return errors;
 }
 
-function lintShapeRules(
+async function lintShapeRules(
   node: any,
-  libraries: any[],
-  savedTokens: any[] = []
-): any[] {
-  let errors: any[] = [];
+  preprocessedLibs: any,
+  savedTokens: any[] = [],
+  libraries: any[]
+): Promise<any[]> {
+  const errors: any[] = [];
   try {
-    const fillLibraries = { fills: new Set(libraries) };
-    const effectLibraries = { effects: new Set(libraries) };
-
-    newCheckFills(node, errors, fillLibraries, savedTokens);
-    newCheckEffects(node, errors, effectLibraries, savedTokens);
-    newCheckStrokes(node, errors, fillLibraries, savedTokens);
+    await Promise.all([
+      newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckEffects(node, errors, preprocessedLibs, savedTokens, libraries),
+      newCheckStrokes(node, errors, preprocessedLibs, savedTokens, libraries)
+    ]);
+    checkRadius(node, errors, savedTokens, libraries);
+    checkGap(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em shape rules:", error);
   }
@@ -498,53 +668,63 @@ function lintShapeRules(
 }
 
 // Função para serializar nodes
-function serializeNodes(nodes: any[]): any[] {
+function serializeNodes(nodes: readonly SceneNode[]): any[] {
   try {
     console.log("[Controller] Serializando", nodes.length, "nodes");
-    console.log(
-      "[Controller] Tipos dos nodes:",
-      nodes.map(n => ({
-        name: n.name,
-        type: n.type,
-        hasChildren: n.children && n.children.length > 0 ? true : false
-      }))
-    );
 
-    const serializeNode = (node: any): any => {
-      const childCount =
-        node.children && node.children.length ? node.children.length : 0;
-      console.log(
-        `[Controller] Serializando node: ${node.name} (${node.type}) - filhos: ${childCount}`
-      );
+    const serialize = (node: SceneNode): any => {
+      if (!node) return null;
 
+      // Base properties
       const serializedNode: any = {
         id: node.id,
         name: node.name || "Sem nome",
         type: node.type || "UNKNOWN",
-        x: node.x,
-        y: node.y,
-        width: node.width,
-        height: node.height
+        visible: node.visible,
+        width: "width" in node ? node.width : undefined,
+        height: "height" in node ? node.height : undefined
       };
 
-      // Serializar filhos recursivamente se existirem
-      if (
-        node.children &&
-        Array.isArray(node.children) &&
-        node.children.length > 0
-      ) {
-        serializedNode.children = node.children.map((child: any) =>
-          serializeNode(child)
-        );
-      } else {
-        serializedNode.children = [];
+      // Properties for conformity checks
+      const checkProps = [
+        "fillStyleId",
+        "strokeStyleId",
+        "effectStyleId",
+        "textStyleId",
+        "fills",
+        "strokes",
+        "effects",
+        "backgrounds",
+        "backgroundColor",
+        "cornerRadius",
+        "topLeftRadius",
+        "topRightRadius",
+        "bottomLeftRadius",
+        "bottomRightRadius",
+        "characters",
+        "itemSpacing",
+        "layoutMode" // Adicionado para verificação de 'gap'
+      ];
+
+      for (const prop of checkProps) {
+        if (prop in node) {
+          if (typeof node[prop] === "symbol") {
+            serializedNode[prop] = "figma-mixed-symbol";
+          } else {
+            serializedNode[prop] = node[prop];
+          }
+        }
+      }
+
+      // Recursively serialize children
+      if ("children" in node) {
+        serializedNode.children = node.children.map(serialize).filter(Boolean);
       }
 
       return serializedNode;
     };
 
-    const serialized = nodes.map(serializeNode);
-    return serialized;
+    return nodes.map(serialize).filter(Boolean);
   } catch (error) {
     console.error("[Controller] Erro na serialização:", error);
     return [];
@@ -604,6 +784,64 @@ function groupErrorsByNode(errors: any[]): any[] {
   });
 
   return result;
+}
+
+async function getLibrariesWithLocalVariables(
+  baseLibraries: any[] | null | undefined
+): Promise<any[]> {
+  // Cria uma cópia para não modificar o array original que pode vir do estado da UI
+  let effectiveLibraries = Array.isArray(baseLibraries)
+    ? JSON.parse(JSON.stringify(baseLibraries))
+    : [];
+
+  // Injeta uma biblioteca virtual com as variáveis locais do arquivo
+  try {
+    const allVariables = await figma.variables.getLocalVariablesAsync();
+
+    const radiusVariables = allVariables
+      .filter(
+        v =>
+          v.resolvedType === "FLOAT" &&
+          (v.name.toLowerCase().includes("radius") ||
+            v.name.toLowerCase().includes("corner"))
+      )
+      .map(v => ({
+        id: v.id,
+        name: v.name,
+        value: v.valuesByMode[Object.keys(v.valuesByMode)[0]]
+      }));
+
+    const gapVariables = allVariables
+      .filter(
+        v =>
+          v.resolvedType === "FLOAT" &&
+          (v.name.toLowerCase().includes("gap") ||
+            v.name.toLowerCase().includes("spacing"))
+      )
+      .map(v => ({
+        id: v.id,
+        name: v.name,
+        value: v.valuesByMode[Object.keys(v.valuesByMode)[0]]
+      }));
+
+    // Remove a biblioteca virtual antiga se existir para evitar duplicação
+    effectiveLibraries = effectiveLibraries.filter(
+      lib => lib.id !== "local-variables"
+    );
+
+    if (radiusVariables.length > 0 || gapVariables.length > 0) {
+      effectiveLibraries.push({
+        name: "Local Variables",
+        id: "local-variables",
+        radius: radiusVariables,
+        gaps: gapVariables
+      });
+    }
+  } catch (e) {
+    console.error("Erro ao buscar variáveis locais:", e);
+  }
+
+  return effectiveLibraries;
 }
 
 // Função para coletar todos os nodes recursivamente (otimizada)
@@ -820,18 +1058,22 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         const nodes = figma.currentPage.selection;
         if (nodes && nodes.length > 0) {
           const allNodes = collectAllNodes(nodes);
-          const effectiveLibraries = Array.isArray(msg.libraries)
+          const baseLibraries = Array.isArray(msg.libraries)
             ? msg.libraries
             : [];
 
-          const lintResults = lint(
+          const effectiveLibraries = await getLibrariesWithLocalVariables(
+            baseLibraries
+          );
+
+          const lintResults = await lint(
             allNodes,
             effectiveLibraries,
             null,
             msg.savedTokens || []
           );
           const groupedErrors = groupErrorsByNode(lintResults);
-          const serializedNodes = serializeNodes(nodes);
+          const serializedNodes = serializeNodes(allNodes);
 
           figma.ui.postMessage({
             type: "updated errors",
@@ -896,6 +1138,88 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     if (msg.type === "close") {
       console.log("[Controller] Fechando plugin");
       figma.closePlugin();
+    }
+
+    if (msg.type === "apply-styles") {
+      console.log("[Controller] Aplicando estilos");
+      try {
+        const { error, field, index, count } = msg;
+        if (!error || !field || index === undefined) {
+          throw new Error("Dados insuficientes para aplicar o estilo.");
+        }
+
+        const suggestion = error[field][index];
+        if (!suggestion || !suggestion.id) {
+          throw new Error("Sugestão de estilo inválida.");
+        }
+
+        const nodesToApply = error.nodes || [error.nodeId];
+        if (!nodesToApply || nodesToApply.length === 0) {
+          throw new Error("Nenhum nó para aplicar o estilo.");
+        }
+
+        let appliedCount = 0;
+        for (const nodeId of nodesToApply) {
+          if (count && appliedCount >= count) break;
+
+          const node = figma.getNodeById(nodeId);
+          if (!node) continue;
+
+          switch (error.type) {
+            case "text":
+              if (node.type === "TEXT") {
+                node.textStyleId = suggestion.id;
+              }
+              break;
+            case "fill":
+              if ("fillStyleId" in node) {
+                node.fillStyleId = suggestion.id;
+              }
+              break;
+            case "stroke":
+              if ("strokeStyleId" in node) {
+                node.strokeStyleId = suggestion.id;
+              }
+              break;
+            case "effects":
+              if ("effectStyleId" in node) {
+                node.effectStyleId = suggestion.id;
+              }
+              break;
+            case "radius":
+              if (
+                "setBoundVariable" in node &&
+                suggestion.id &&
+                error.property
+              ) {
+                // A suggestion.id é o ID da variável.
+                node.setBoundVariable(error.property, suggestion.id);
+              }
+              break;
+            case "gap":
+              if (
+                "setBoundVariable" in node &&
+                suggestion.id &&
+                error.property === "itemSpacing"
+              ) {
+                node.setBoundVariable("itemSpacing", suggestion.id);
+              }
+              break;
+          }
+          appliedCount++;
+        }
+
+        figma.notify(`${appliedCount} erro(s) corrigido(s).`);
+
+        // Solicita à UI que atualize os erros
+        figma.ui.postMessage({
+          type: "update-errors-after-fix"
+        });
+      } catch (e) {
+        console.error("[Controller] Erro ao aplicar estilo:", e);
+        figma.notify(`Erro ao aplicar estilo: ${e.message}`, { error: true });
+      }
+      return;
     }
 
     if (msg.type === "update-styles-page") {
@@ -1380,20 +1704,24 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           effectiveLibraries = [];
         }
 
+        const effectiveLibrariesWithVariables = await getLibrariesWithLocalVariables(
+          effectiveLibraries
+        );
+
         console.log(
           "[Controller] Executando auditoria com",
-          effectiveLibraries.length,
+          effectiveLibrariesWithVariables.length,
           "bibliotecas:",
-          effectiveLibraries.map((lib: any) => ({
+          effectiveLibrariesWithVariables.map((lib: any) => ({
             name: lib && lib.name ? lib.name : undefined,
             id: lib && lib.id ? lib.id : undefined,
             tokens: lib && lib.tokens ? Object.keys(lib.tokens) : []
           }))
         );
 
-        const lintResults = lint(
+        const lintResults = await lint(
           allNodes,
-          effectiveLibraries,
+          effectiveLibrariesWithVariables,
           null,
           msg.savedTokens || []
         );
@@ -1406,8 +1734,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         }
 
         const groupedErrors = groupErrorsByNode(lintResults);
-        const serializedNodes = serializeNodes(nodes);
-        const activeComponentLibraries = await fetchActiveComponentLibraries();
+        const serializedNodes = serializeNodes(allNodes);
 
         // Salva o resultado da análise no clientStorage
         const inspectorData = {
@@ -1425,7 +1752,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           errors: groupedErrors,
           message: serializedNodes,
           success: true,
-          activeComponentLibraries
+          activeComponentLibraries: effectiveLibrariesWithVariables
         });
       } catch (errLint) {
         console.error("[Controller] Erro no linting:", errLint);
@@ -1879,7 +2206,10 @@ figma.on("selectionchange", () => {
             type: fill.type,
             visible: fill.visible !== false,
             opacity: fill.opacity,
-            color: fill.type === "SOLID" ? fill.color : null,
+            color:
+              fill.type === "SOLID"
+                ? getHexString(fill.color, fill.opacity)
+                : null,
             gradientStops: fill.gradientStops || null
           }));
         }
@@ -1889,8 +2219,11 @@ figma.on("selectionchange", () => {
           nodeData.strokes = node.strokes.map((stroke: any) => ({
             type: stroke.type,
             visible: stroke.visible !== false,
-            color: stroke.type === "SOLID" ? stroke.color : null,
-            strokeWeight: node.strokeWeight || stroke.strokeWeight
+            color:
+              stroke.type === "SOLID"
+                ? getHexString(stroke.color, stroke.opacity)
+                : null,
+            strokeWeight: node.strokeWeight || 1
           }));
         }
 
@@ -1923,7 +2256,10 @@ figma.on("selectionchange", () => {
             node.fills.length > 0 &&
             node.fills[0].type === "SOLID"
           ) {
-            nodeData.textColor = node.fills[0].color;
+            nodeData.textColor = getHexString(
+              node.fills[0].color,
+              node.fills[0].opacity
+            );
           }
         }
 
@@ -2033,28 +2369,30 @@ figma.on("selectionchange", () => {
         }
 
         // Tokens de estilo
-        if (node.fillStyleId) {
-          nodeData.styleTokens = {
-            fillStyle: node.fillStyleId
-          };
+        nodeData.styleTokens = {};
+        if (node.fillStyleId && typeof node.fillStyleId === "string") {
+          const style = figma.getStyleById(node.fillStyleId);
+          nodeData.styleTokens.fillStyle = style
+            ? style.name
+            : node.fillStyleId;
         }
-        if (node.strokeStyleId) {
-          nodeData.styleTokens = {
-            ...nodeData.styleTokens,
-            strokeStyle: node.strokeStyleId
-          };
+        if (node.strokeStyleId && typeof node.strokeStyleId === "string") {
+          const style = figma.getStyleById(node.strokeStyleId);
+          nodeData.styleTokens.strokeStyle = style
+            ? style.name
+            : node.strokeStyleId;
         }
-        if (node.textStyleId) {
-          nodeData.styleTokens = {
-            ...nodeData.styleTokens,
-            textStyle: node.textStyleId
-          };
+        if (node.textStyleId && typeof node.textStyleId === "string") {
+          const style = figma.getStyleById(node.textStyleId);
+          nodeData.styleTokens.textStyle = style
+            ? style.name
+            : node.textStyleId;
         }
-        if (node.effectStyleId) {
-          nodeData.styleTokens = {
-            ...nodeData.styleTokens,
-            effectStyle: node.effectStyleId
-          };
+        if (node.effectStyleId && typeof node.effectStyleId === "string") {
+          const style = figma.getStyleById(node.effectStyleId);
+          nodeData.styleTokens.effectStyle = style
+            ? style.name
+            : node.effectStyleId;
         }
 
         return nodeData;

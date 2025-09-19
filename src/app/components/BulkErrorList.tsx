@@ -70,184 +70,6 @@ function BulkErrorList(props) {
   const getErrorValue = (err: any) => err.value;
   const getErrorType = (err: any) => err.type || err.errorType || err.category;
 
-  // The data is coming flat, so we need to group it by node ID.
-  const errorArray = React.useMemo(() => {
-    const flatErrorsFromProps = Array.isArray(props.errorArray)
-      ? props.errorArray
-      : [];
-    const errorsByNode = new Map<
-      string,
-      { id: string; name: string; errors: any[] }
-    >();
-
-    flatErrorsFromProps.forEach(error => {
-      const nodeId = getErrorNodeId(error);
-      const nodeName = error.nodeName || (error.node && error.node.name);
-
-      if (!nodeId) return;
-
-      let nodeWithErrors = errorsByNode.get(nodeId);
-      if (!nodeWithErrors) {
-        nodeWithErrors = {
-          id: nodeId,
-          name: nodeName || "Unknown Node",
-          errors: []
-        };
-        errorsByNode.set(nodeId, nodeWithErrors);
-      }
-      nodeWithErrors.errors.push(error);
-    });
-
-    return Array.from(errorsByNode.values());
-  }, [props.errorArray]);
-
-  const ignoredErrorArray = Array.isArray(props.ignoredErrorArray)
-    ? props.ignoredErrorArray
-    : [];
-
-  const ignoredErrorsMap = {} as Record<string, Set<any>>;
-  ignoredErrorArray.forEach(ignoredError => {
-    const nodeId = ignoredError.node.id;
-    if (!ignoredErrorsMap[nodeId]) {
-      ignoredErrorsMap[nodeId] = new Set();
-    }
-    ignoredErrorsMap[nodeId].add(ignoredError.value);
-  });
-
-  // Derive a flat list of errors from the node-level structure
-  const flatErrors: any[] = React.useMemo(() => {
-    const list: any[] = [];
-    errorArray.forEach(node => {
-      const nid = node?.id;
-      if (!nid || !Array.isArray(node?.errors)) return;
-      node.errors.forEach((e: any) => {
-        list.push({ ...e, nodeId: e.nodeId || nid, node: node });
-      });
-    });
-    return list;
-  }, [errorArray]);
-
-  // Filter out ignored errors for flat error list
-  const filteredFlatErrors = flatErrors.filter(err => {
-    const nodeId = getErrorNodeId(err);
-    if (!nodeId) return false;
-    const ignoredErrorValues = ignoredErrorsMap[nodeId] || new Set();
-    // Always keep 'unvalidated' errors visible unless the exact value was explicitly ignored
-    const type = getErrorType(err);
-    if (type === "unvalidated") return true;
-    return !ignoredErrorValues.has(getErrorValue(err));
-  });
-
-  // Filter nodes: keep nodes that still have at least one non-ignored error
-  const filteredErrorArray = Array.isArray(errorArray)
-    ? errorArray
-        .map(node => {
-          const id = node.id;
-          const ignoredValues = ignoredErrorsMap[id] || new Set();
-          const nextErrors = Array.isArray(node.errors)
-            ? node.errors.filter(e => {
-                const type = getErrorType(e);
-                if (type === "unvalidated") return true;
-                return !ignoredValues.has(e.value);
-              })
-            : [];
-          return { ...node, errors: nextErrors };
-        })
-        .filter(node => Array.isArray(node.errors) && node.errors.length > 0)
-    : [];
-
-  const createBulkErrorList = (flatErrorArray, ignoredErrorsMap) => {
-    console.log(
-      "[createBulkErrorList] Iniciando com errorArray:",
-      flatErrorArray
-    );
-    console.log("[createBulkErrorList] ignoredErrorsMap:", ignoredErrorsMap);
-
-    if (!Array.isArray(flatErrorArray) || flatErrorArray.length === 0) {
-      console.log(
-        "[createBulkErrorList] errorArray inválido ou vazio, retornando array vazio"
-      );
-      return [];
-    }
-
-    // Cada erro já é um erro individual, só precisa filtrar ignorados
-    return flatErrorArray.filter(error => {
-      const nodeId = getErrorNodeId(error);
-      if (!nodeId) return false;
-      const ignoredErrorValues = ignoredErrorsMap[nodeId] || new Set();
-      const type = getErrorType(error);
-      if (type === "unvalidated") return true;
-      return !ignoredErrorValues.has(getErrorValue(error));
-    });
-  };
-
-  // Create the bulk error list using the createBulkErrorList function
-  const bulkErrorList = createBulkErrorList(
-    filteredFlatErrors as any[],
-    ignoredErrorsMap
-  ) as any[];
-  bulkErrorList.sort((a: any, b: any) => b.count - a.count);
-
-  // ---------------- Conformity calculations by unique nodes ----------------
-  // Traverse nodeArray to collect all scanned node IDs
-  const allScannedNodeIds: Set<string> = React.useMemo(() => {
-    const ids = new Set<string>();
-    const walk = (node: any) => {
-      if (!node || !node.id) return;
-      ids.add(node.id);
-      if (Array.isArray(node.children)) {
-        node.children.forEach(walk);
-      }
-    };
-    if (Array.isArray(props.nodeArray)) {
-      props.nodeArray.forEach(walk);
-    }
-    return ids;
-  }, [props.nodeArray]);
-
-  const nodeById: Record<string, any> = React.useMemo(() => {
-    const map: Record<string, any> = {};
-    const walk = (node: any) => {
-      if (!node || !node.id) return;
-      map[node.id] = node;
-      if (Array.isArray(node.children)) {
-        node.children.forEach(walk);
-      }
-    };
-    if (Array.isArray(props.nodeArray)) {
-      props.nodeArray.forEach(walk);
-    }
-    return map;
-  }, [props.nodeArray]);
-
-  // Map nodeId -> has at least one (filtered) error.
-  // Ensure 'unvalidated' errors ALWAYS count toward conformity, even if ignored in UI lists.
-  const nodesWithErrors: Set<string> = React.useMemo(() => {
-    const s = new Set<string>();
-    // Include all filtered errors
-    filteredFlatErrors.forEach(err => {
-      const nid = getErrorNodeId(err);
-      if (nid) s.add(nid);
-    });
-    // Force-include critical error types regardless of ignore state
-    flatErrors.forEach(err => {
-      const t = getErrorType(err);
-      // Treat any "*-unvalidated" as critical
-      if (typeof t === "string" && t.endsWith("-unvalidated")) {
-        const nid = getErrorNodeId(err);
-        if (nid) s.add(nid);
-      }
-    });
-    return s;
-  }, [filteredFlatErrors, errorArray]);
-
-  const totalElements = allScannedNodeIds.size;
-  const nonConformElements = nodesWithErrors.size;
-  const conformElements = Math.max(totalElements - nonConformElements, 0);
-  const detachCount = bulkErrorList.reduce((acc: number, err: any) => {
-    return acc + (err.type === "detach" ? err.count || 1 : 0);
-  }, 0);
-
   // Helper: collect all descendant ids for a given frame/node
   const getFrameNodeIds = React.useCallback((frame: any): Set<string> => {
     const ids = new Set<string>();
@@ -260,9 +82,190 @@ function BulkErrorList(props) {
     return ids;
   }, []);
 
+  // Tipos para os cards de conformidade por item
+  const itemTypes = [
+    {
+      key: "component",
+      label: "Componentes",
+      icon: require("../assets/component.svg")
+    },
+    { key: "fill", label: "Cores", icon: require("../assets/palette.svg") },
+    { key: "text", label: "Tipografia", icon: require("../assets/text.svg") },
+    {
+      key: "radius",
+      label: "Radius",
+      icon: require("../assets/paragraph-spacing.svg")
+    },
+    { key: "gap", label: "Gap", icon: require("../assets/gap.svg") },
+    { key: "stroke", label: "Border", icon: require("../assets/border.svg") },
+    { key: "effects", label: "Efeitos", icon: require("../assets/effects.svg") }
+  ];
+
+  // --- Memoized Data Processing for Conformity ---
+  const {
+    conformityStats,
+    totalElements,
+    nonConformElements,
+    conformElements,
+    bulkErrorList,
+    filteredFlatErrors,
+    colorBreakdown
+  } = React.useMemo(() => {
+    // Passo 1: Criar um mapa de todos os nós escaneados para buscas rápidas.
+    // Isso nos dá o universo total de elementos para os cálculos de conformidade.
+    const nodeMap = new Map<string, any>();
+    const walk = (node: any) => {
+      if (!node || !node.id) return;
+      nodeMap.set(node.id, node);
+      if (Array.isArray(node.children)) {
+        node.children.forEach(walk);
+      }
+    };
+    if (Array.isArray(props.nodeArray)) {
+      props.nodeArray.forEach(walk);
+    }
+    const totalScannedElements = nodeMap.size;
+
+    // Passo 2: A prop `props.errorArray` agora é uma lista plana de todos os erros.
+    const allErrors: any[] = Array.isArray(props.errorArray)
+      ? props.errorArray
+      : [];
+
+    // Passo 3: Criar um mapa de erros ignorados para uma filtragem eficiente.
+    const ignoredErrorsMap = new Map<string, Set<string>>();
+    if (Array.isArray(props.ignoredErrorArray)) {
+      props.ignoredErrorArray.forEach(ignoredError => {
+        const nodeId = getErrorNodeId(ignoredError);
+        if (!nodeId) return;
+        if (!ignoredErrorsMap.has(nodeId)) {
+          ignoredErrorsMap.set(nodeId, new Set());
+        }
+        ignoredErrorsMap.get(nodeId)!.add(getErrorValue(ignoredError));
+      });
+    }
+
+    // Passo 4: Filtrar os erros ignorados para obter a lista de erros ativos.
+    const activeErrors = allErrors.filter(err => {
+      const nodeId = getErrorNodeId(err);
+      if (!nodeId) return false; // Ignora erros sem um nó associado
+      const ignoredValues = ignoredErrorsMap.get(nodeId);
+      return !ignoredValues || !ignoredValues.has(getErrorValue(err));
+    });
+
+    // Passo 5: Calcular as estatísticas de conformidade para cada tipo de item (Cores, Texto, etc.).
+    const stats: Record<
+      string,
+      { applicable: Set<string>; nonConform: Set<string> }
+    > = {};
+    itemTypes.forEach(type => {
+      stats[type.key] = { applicable: new Set(), nonConform: new Set() };
+    });
+
+    // 5a: Determinar quais nós são "aplicáveis" para cada tipo de verificação.
+    for (const [nodeId, node] of nodeMap.entries()) {
+      for (const type of itemTypes) {
+        if (isNodeApplicable(node, type.key)) {
+          stats[type.key].applicable.add(nodeId);
+        }
+      }
+    }
+
+    // 5b: Determinar quais dos nós aplicáveis estão "não conformes".
+    for (const error of activeErrors) {
+      const nodeId = getErrorNodeId(error);
+      const errorType = getErrorType(error);
+      if (!nodeId || !errorType) continue;
+
+      for (const type of itemTypes) {
+        const isMatch =
+          (type.key === "component" && errorType === "detach") ||
+          type.key === errorType;
+        if (isMatch && stats[type.key].applicable.has(nodeId)) {
+          stats[type.key].nonConform.add(nodeId);
+        }
+      }
+    }
+
+    // Passo 6: Calcular a conformidade geral.
+    const nodesWithActiveErrors = new Set(
+      activeErrors.map(e => getErrorNodeId(e))
+    );
+    const totalNonConformElements = nodesWithActiveErrors.size;
+    const totalConformElements = totalScannedElements - totalNonConformElements;
+
+    // NOVO: Passo 6.5: Calcular detalhamento de conformidade por cor
+    const simpleRgba = (color: any, opacity?: number) => {
+      if (!color) return "rgba(0,0,0,0)";
+      const r = Math.round((color.r || 0) * 255);
+      const g = Math.round((color.g || 0) * 255);
+      const b = Math.round((color.b || 0) * 255);
+      // Usa a opacidade do preenchimento se disponível, senão usa a da cor, e por último 1.
+      const a =
+        opacity !== undefined ? opacity : color.a !== undefined ? color.a : 1;
+      return `rgba(${r}, ${g}, ${b}, ${a.toFixed(2)})`;
+    };
+
+    const nonConformingColors = activeErrors
+      .filter(err => getErrorType(err) === "fill")
+      .reduce((acc, err) => {
+        const color = getErrorValue(err);
+        if (typeof color === "string") {
+          if (!acc[color]) {
+            acc[color] = 0;
+          }
+          acc[color]++;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+    const allColorUsages = new Map<string, number>();
+    for (const node of nodeMap.values()) {
+      if (node.fills && Array.isArray(node.fills)) {
+        for (const fill of node.fills) {
+          if (fill.type === "SOLID" && fill.visible !== false) {
+            // Passa a cor e a opacidade do preenchimento para gerar a string RGBA correta.
+            const colorString = simpleRgba(fill.color, fill.opacity);
+            allColorUsages.set(
+              colorString,
+              (allColorUsages.get(colorString) || 0) + 1
+            );
+          }
+        }
+      }
+    }
+
+    const colorBreakdown = Array.from(allColorUsages.entries())
+      .map(([color, totalCount]) => {
+        const nonConformCount = nonConformingColors[color] || 0;
+        const conformCount = totalCount - nonConformCount;
+        return {
+          color,
+          conform: conformCount,
+          nonConform: nonConformCount,
+          total: totalCount
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    // Passo 7: Preparar a lista final de erros para exibição.
+    const displayableErrorList = [...activeErrors].sort(
+      (a, b) => (b.count || 1) - (a.count || 1)
+    );
+
+    return {
+      conformityStats: stats,
+      totalElements: totalScannedElements,
+      nonConformElements: totalNonConformElements,
+      conformElements: totalConformElements,
+      bulkErrorList: displayableErrorList,
+      filteredFlatErrors: activeErrors,
+      colorBreakdown
+    };
+  }, [props.nodeArray, props.errorArray, props.ignoredErrorArray]);
+
   const getFrameErrors = React.useCallback(
     (frameId: string) => {
-      if (!frameId || !Array.isArray(props.errorArray)) return [];
+      if (!frameId) return [];
 
       const nodeArray = Array.isArray(props.nodeArray) ? props.nodeArray : [];
       const frameNode = nodeArray.find(node => node.id === frameId) || null;
@@ -278,26 +281,17 @@ function BulkErrorList(props) {
       };
       collectNodeIds(frameNode);
 
-      return props.errorArray.filter((error: any) => {
-        const errorNodeId = error.nodeId || error.id;
+      return filteredFlatErrors.filter((error: any) => {
+        const errorNodeId = getErrorNodeId(error);
         return errorNodeId && frameNodeIds.has(errorNodeId);
       });
     },
-    [props.errorArray, props.nodeArray]
+    [filteredFlatErrors, props.nodeArray, getErrorNodeId]
   );
 
-  // Create an array of errors that have matches
-  const errorsWithMatches = bulkErrorList.filter((error: any) => {
-    return error.matches && error.matches.length > 0;
-  });
-
-  // Calculate the total number of errors with matches
-  const totalErrorsWithMatches = errorsWithMatches.reduce(
-    (total: number, error: any) => {
-      return total + error.count;
-    },
-    0
-  );
+  const detachCount = bulkErrorList.reduce((acc: number, err: any) => {
+    return acc + (getErrorType(err) === "detach" ? err.count || 1 : 0);
+  }, 0);
 
   const handleFixAllFromBanner = () => {
     errorsWithMatches.forEach(error => {
@@ -388,21 +382,21 @@ function BulkErrorList(props) {
   }
 
   function handleIgnoreAll(error) {
-    const errorsToBeIgnored: any[] = [];
-
-    filteredErrorArray.forEach(node => {
-      if (node && node.errors && Array.isArray(node.errors)) {
-        node.errors.forEach(item => {
-          if (item && item.value === error.value) {
-            if (item.type === error.type) {
-              errorsToBeIgnored.push(item);
-            }
-          }
-        });
+    const errorsToBeIgnored = (props.errorArray || []).filter(item => {
+      if (
+        item &&
+        item.value === error.value &&
+        getErrorType(item) === getErrorType(error)
+      ) {
+        return true;
       }
+      return false;
     });
 
-    if (errorsToBeIgnored.length && typeof props.onIgnoreAll === "function") {
+    if (
+      errorsToBeIgnored.length > 0 &&
+      typeof props.onIgnoreAll === "function"
+    ) {
       props.onIgnoreAll(errorsToBeIgnored as any);
     }
   }
@@ -510,13 +504,6 @@ function BulkErrorList(props) {
   }, []);
 
   // Debug: log da estrutura dos erros
-  console.log("BulkErrorList - errors:", errorArray);
-  console.log("BulkErrorList - errors length:", errorArray.length);
-  console.log("BulkErrorList - filteredErrorArray:", filteredErrorArray);
-  console.log(
-    "BulkErrorList - filteredErrorArray length:",
-    filteredErrorArray.length
-  );
   console.log("BulkErrorList - bulkErrorList:", bulkErrorList);
   console.log("BulkErrorList - bulkErrorList length:", bulkErrorList.length);
   console.log("BulkErrorList - errorListItems length:", errorListItems.length);
@@ -557,163 +544,164 @@ function BulkErrorList(props) {
   // Debug: verificar dados recebidos
   console.log("[BulkErrorList] Props recebidas:", {
     libraries: props.libraries,
-    errorArray: props.errorArray,
-    ignoredErrorArray: props.ignoredErrorArray,
     nodeArray: props.nodeArray,
-    allScannedNodeIds: Array.from(allScannedNodeIds || []),
-    nodesWithErrors: Array.from(nodesWithErrors || [])
+    totalElements,
+    nonConformElements
   });
-
-  // Tipos para os cards de conformidade por item
-  const itemTypes = [
-    {
-      key: "component",
-      label: "Componentes",
-      icon: require("../assets/component.svg")
-    },
-    { key: "fill", label: "Cores", icon: require("../assets/palette.svg") },
-    { key: "text", label: "Tipografia", icon: require("../assets/text.svg") },
-    {
-      key: "radius",
-      label: "Radius",
-      icon: require("../assets/paragraph-spacing.svg")
-    },
-    { key: "gap", label: "Gap", icon: require("../assets/gap.svg") },
-    { key: "stroke", label: "Border", icon: require("../assets/border.svg") },
-    { key: "effects", label: "Efeitos", icon: require("../assets/effects.svg") }
-  ];
 
   // Função para verificar se um nó é aplicável a um determinado tipo
   function isNodeApplicable(node: any, typeKey: string): boolean {
-    if (!node) {
-      console.log(`[isNodeApplicable] Nó inválido para tipo ${typeKey}`);
-      return false;
+    if (!node) return false;
+
+    // Um nó de texto é aplicável para múltiplas verificações.
+    if (node.type === "TEXT") {
+      switch (typeKey) {
+        case "text":
+          return node.characters && node.characters.length > 0;
+        case "fill":
+          return (
+            Array.isArray(node.fills) &&
+            node.fills.some(f => f.visible !== false)
+          );
+        case "stroke":
+          return (
+            Array.isArray(node.strokes) &&
+            node.strokes.some(s => s.visible !== false)
+          );
+        case "effects":
+          return (
+            Array.isArray(node.effects) &&
+            node.effects.some(e => e.visible !== false)
+          );
+        default:
+          return false; // Nós de texto não são aplicáveis para gap, radius, etc. diretamente.
+      }
     }
 
+    // Lógica para outros tipos de nós.
     switch (typeKey) {
       case "fill":
         return !!(
           node.fillStyleId ||
-          (Array.isArray(node.fills) && node.fills.length > 0) ||
-          node.backgrounds ||
-          node.backgroundColor
+          node.fills === "figma-mixed-symbol" ||
+          (Array.isArray(node.fills) &&
+            node.fills.some(f => f.visible !== false))
         );
-
-      case "text":
-        return (
-          node.type === "TEXT" ||
-          !!node.textStyleId ||
-          (node.characters && node.characters.length > 0)
-        );
-
       case "stroke":
         return !!(
           node.strokeStyleId ||
-          (Array.isArray(node.strokes) && node.strokes.length > 0)
+          node.strokes === "figma-mixed-symbol" ||
+          (Array.isArray(node.strokes) &&
+            node.strokes.some(s => s.visible !== false))
         );
-
       case "effects":
         return !!(
           node.effectStyleId ||
-          (Array.isArray(node.effects) && node.effects.length > 0)
+          node.effects === "figma-mixed-symbol" ||
+          (Array.isArray(node.effects) &&
+            node.effects.some(e => e.visible !== false))
         );
-
       case "gap":
-        return ["FRAME", "GROUP", "INSTANCE", "COMPONENT"].includes(node.type);
-
-      case "radius":
         return (
-          node.cornerRadius !== undefined ||
-          node.topLeftRadius !== undefined ||
-          node.topRightRadius !== undefined ||
-          node.bottomLeftRadius !== undefined ||
-          node.bottomRightRadius !== undefined
+          (node.layoutMode === "HORIZONTAL" ||
+            node.layoutMode === "VERTICAL") &&
+          node.itemSpacing > 0
         );
-
+      case "radius":
+        if (node.cornerRadius === "figma-mixed-symbol") return true;
+        if (typeof node.cornerRadius === "number" && node.cornerRadius > 0)
+          return true;
+        return (
+          node.topLeftRadius > 0 ||
+          node.topRightRadius > 0 ||
+          node.bottomLeftRadius > 0 ||
+          node.bottomRightRadius > 0
+        );
       case "component":
-        return node.type === "COMPONENT" || node.type === "INSTANCE";
-
+        return node.type === "INSTANCE";
       default:
-        console.warn(`[isNodeApplicable] Tipo não suportado: ${typeKey}`);
         return false;
     }
   }
 
-  /**
-   * Calculates conformity statistics for a specific token type
-   * @param typeKey The type of token to check (e.g., 'fill', 'text', 'stroke')
-   * @returns Object containing conform/non-conform counts and percentage
-   */
-  function getConformityByType(
-    typeKey: string
-  ): {
-    conform: number;
-    nonConform: number;
-    percent: number;
-  } {
-    const applicableNodeIds = new Set<string>();
-    const nonConformantNodeIds = new Set<string>();
+  // Função para verificar se um nó é aplicável a um determinado tipo
+  function isNodeApplicable_OLD(node: any, typeKey: string): boolean {
+    if (!node) return false;
 
-    // Helper para percorrer recursivamente a árvore de nós
-    const walk = (node: any) => {
-      if (!node || !node.id) return;
+    switch (typeKey) {
+      case "fill":
+        // Aplicável se tiver um estilo de preenchimento, valores mistos, ou pelo menos um preenchimento visível.
+        return !!(
+          node.fillStyleId ||
+          node.fills === "figma-mixed-symbol" || // Handle mixed values
+          (Array.isArray(node.fills) &&
+            node.fills.some(f => f.visible !== false))
+        );
 
-      if (isNodeApplicable(node, typeKey)) {
-        applicableNodeIds.add(node.id);
-      }
+      case "text":
+        // Aplicável se for um nó de texto com caracteres.
+        return (
+          node.type === "TEXT" && node.characters && node.characters.length > 0
+        );
 
-      if (Array.isArray(node.children)) {
-        node.children.forEach(walk);
-      }
-    };
+      case "stroke":
+        // Aplicável se tiver um estilo de borda, valores mistos, ou pelo menos uma borda visível.
+        return !!(
+          node.strokeStyleId ||
+          node.strokes === "figma-mixed-symbol" || // Handle mixed values
+          (Array.isArray(node.strokes) &&
+            node.strokes.some(s => s.visible !== false))
+        );
 
-    // 1. Encontra todos os nós aplicáveis para este tipo a partir do nodeArray completo
-    if (Array.isArray(props.nodeArray)) {
-      props.nodeArray.forEach(walk);
-    }
+      case "effects":
+        // Aplicável se tiver um estilo de efeito, valores mistos, ou pelo menos um efeito visível.
+        return !!(
+          node.effectStyleId ||
+          node.effects === "figma-mixed-symbol" || // Handle mixed values
+          (Array.isArray(node.effects) &&
+            node.effects.some(e => e.visible !== false))
+        );
 
-    // 2. Encontra nós não conformes a partir do errorArray
-    // O errorArray já está filtrado para não incluir erros ignorados.
-    filteredErrorArray.forEach(nodeWithErrors => {
-      if (
-        !nodeWithErrors ||
-        !nodeWithErrors.id ||
-        !Array.isArray(nodeWithErrors.errors)
-      )
-        return;
+      case "gap":
+        // Aplicável se tiver auto-layout com um espaçamento (gap) > 0.
+        return (
+          (node.layoutMode === "HORIZONTAL" ||
+            node.layoutMode === "VERTICAL") &&
+          node.itemSpacing > 0
+        );
 
-      // Verifica se este nó é aplicável para o tipo que estamos calculando
-      if (applicableNodeIds.has(nodeWithErrors.id)) {
-        // Verifica se algum de seus erros corresponde ao typeKey
-        const hasErrorForType = nodeWithErrors.errors.some(error => {
-          const errorType = getErrorType(error);
-          // Mapeia tipos de erro para tipos de gráfico, se forem diferentes
-          if (typeKey === "component" && errorType === "detach") return true;
-          // Verifica se o errorType começa com o typeKey para abranger sub-tipos como 'fill-style-library'
-          if (typeof errorType === "string" && typeof typeKey === "string") {
-            return errorType.startsWith(typeKey);
-          }
-          return errorType === typeKey;
-        });
-
-        if (hasErrorForType) {
-          nonConformantNodeIds.add(nodeWithErrors.id);
+      case "radius":
+        // Aplicável se qualquer raio de canto for um número e > 0, ou se for misto.
+        if (node.cornerRadius === "figma-mixed-symbol") {
+          return true;
         }
-      }
-    });
+        if (typeof node.cornerRadius === "number" && node.cornerRadius > 0) {
+          return true;
+        }
+        return (
+          (node.topLeftRadius && node.topLeftRadius > 0) ||
+          (node.topRightRadius && node.topRightRadius > 0) ||
+          (node.bottomLeftRadius && node.bottomLeftRadius > 0) ||
+          (node.bottomRightRadius && node.bottomRightRadius > 0)
+        );
 
-    const totalApplicable = applicableNodeIds.size;
-    const nonConform = nonConformantNodeIds.size;
-    const conform = totalApplicable - nonConform;
-    const percent =
-      totalApplicable > 0 ? Math.round((conform / totalApplicable) * 100) : 100;
+      case "component":
+        // Aplicável se for uma instância (para verificar erros de 'detach').
+        return node.type === "INSTANCE";
 
-    return {
-      conform,
-      nonConform,
-      percent
-    };
+      default:
+        return false;
+    }
   }
+
+  // Create an array of errors that have matches for the banner
+  const errorsWithMatches = bulkErrorList.filter(
+    (error: any) => error.matches && error.matches.length > 0
+  );
+  const totalErrorsWithMatches = errorsWithMatches.reduce(
+    (total: number, error: any) => total + (error.count || 1),
+    0
+  );
 
   function handleVerificarErros(frame) {
     const frameErrors = getFrameErrors(frame.id);
@@ -1107,23 +1095,149 @@ function BulkErrorList(props) {
                   }}
                 >
                   {itemTypes.map(type => {
-                    const {
-                      conform,
-                      nonConform,
-                      percent
-                    } = getConformityByType(type.key);
+                    const stat = conformityStats[type.key];
+                    const nonConform = stat.nonConform.size;
+                    const conform = stat.applicable.size - nonConform;
                     return (
                       <ConformityItemChart
                         key={type.key}
                         type={type}
                         conform={conform}
                         nonConform={nonConform}
-                        percent={percent}
                       />
                     );
                   })}
                 </div>
               </li>
+              {/* Seção de Detalhamento de Cores */}
+              {colorBreakdown && colorBreakdown.length > 0 && (
+                <li style={{ listStyle: "none", marginTop: 24 }}>
+                  <div
+                    style={{
+                      color: "#fff",
+                      fontWeight: 400,
+                      fontSize: 14,
+                      margin: "0 0 8px 0"
+                    }}
+                  >
+                    Detalhamento de Cores (Top 5)
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      margin: 0,
+                      padding: 0
+                    }}
+                  >
+                    {colorBreakdown
+                      .slice(0, 5)
+                      .map(({ color, conform, nonConform }) => {
+                        const total = conform + nonConform;
+                        const conformPercentage =
+                          total > 0 ? Math.round((conform / total) * 100) : 0;
+                        const statusColor =
+                          conformPercentage >= 80
+                            ? "#27AE60"
+                            : conformPercentage >= 50
+                            ? "#F2C94C"
+                            : "#EB5757";
+
+                        return (
+                          <div
+                            key={color}
+                            className="system-card"
+                            style={{
+                              padding: "12px 16px",
+                              border: `1px solid ${statusColor}33`,
+                              background: `${statusColor}0D`
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginBottom: "8px"
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px"
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    borderRadius: "50%",
+                                    backgroundColor: color,
+                                    border: "1px solid rgba(255,255,255,0.2)"
+                                  }}
+                                ></div>
+                                <span
+                                  style={{
+                                    fontFamily: "monospace",
+                                    fontSize: "12px",
+                                    color: "#FFFFFF"
+                                  }}
+                                >
+                                  {color}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  backgroundColor: `${statusColor}33`,
+                                  color: statusColor,
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "12px",
+                                  fontWeight: 600
+                                }}
+                              >
+                                {conformPercentage}%
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                width: "100%",
+                                height: "6px",
+                                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                borderRadius: "3px",
+                                overflow: "hidden"
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${conformPercentage}%`,
+                                  height: "100%",
+                                  backgroundColor: statusColor,
+                                  borderRadius: "3px",
+                                  transition: "width 0.5s ease-in-out"
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                marginTop: "8px",
+                                fontSize: "10px",
+                                color: "#B3B3B3"
+                              }}
+                            >
+                              <span>{conform} conforme</span>
+                              <span>{nonConform} não conforme</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </li>
+              )}
             </motion.ul>
             {/* Banner - mostrar sempre quando há análise completa */}
             {props.initialLoadComplete && totalErrorsWithMatches > 0 && (
@@ -1147,24 +1261,23 @@ function BulkErrorList(props) {
           >
             {Array.isArray(props.nodeArray) && props.nodeArray.length > 0 ? (
               props.nodeArray.map((frame, idx) => {
-                // Log para depuração da estrutura dos dados
-                console.log("Frame:", frame);
-                console.log("ErrorArray:", errorArray);
                 // Calcular elementos do frame por varredura de descendentes
                 const frameIds = getFrameNodeIds(frame);
                 const totalElements = frameIds.size;
-                const nonConformElements = Array.from(frameIds).filter(id =>
-                  nodesWithErrors.has(id)
-                ).length;
-                const conformElements = Math.max(
-                  totalElements - nonConformElements,
+                const frameErrors = filteredFlatErrors.filter(e =>
+                  frameIds.has(getErrorNodeId(e))
+                );
+                const frameNonConformNodeIds = new Set(
+                  frameErrors.map(e => getErrorNodeId(e))
+                );
+                const frameNonConformElements = frameNonConformNodeIds.size;
+                const frameConformElements = Math.max(
+                  totalElements - frameNonConformElements,
                   0
                 );
-                const detachCount = filteredFlatErrors.filter(
-                  e => e.type === "detach" && frameIds.has(getErrorNodeId(e))
+                const frameDetachCount = frameErrors.filter(
+                  e => getErrorType(e) === "detach"
                 ).length;
-                // Score de conformidade
-                const correct = conformElements;
                 return (
                   <div key={frame.id} style={{ marginBottom: 48 }}>
                     <h2
@@ -1179,7 +1292,7 @@ function BulkErrorList(props) {
                     >
                       <ConformityScoreBar
                         total={totalElements}
-                        errors={nonConformElements}
+                        errors={frameNonConformElements}
                       />
                     </div>
                     <div style={{ height: 24 }} />
@@ -1217,7 +1330,7 @@ function BulkErrorList(props) {
                             marginBottom: 8
                           }}
                         >
-                          {conformElements}
+                          {frameConformElements}
                         </span>
                         <span
                           style={{
@@ -1254,7 +1367,7 @@ function BulkErrorList(props) {
                             marginBottom: 8
                           }}
                         >
-                          {nonConformElements}
+                          {frameNonConformElements}
                         </span>
                         <span
                           style={{
@@ -1291,7 +1404,7 @@ function BulkErrorList(props) {
                             marginBottom: 8
                           }}
                         >
-                          {detachCount}
+                          {frameDetachCount}
                         </span>
                         <span
                           style={{

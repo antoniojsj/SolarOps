@@ -8,27 +8,25 @@ interface ConformityItemChartProps {
   };
   conform: number;
   nonConform: number;
-  percent: number;
 }
 
 const ConformityItemChart: React.FC<ConformityItemChartProps> = ({
   type,
   conform,
-  nonConform,
-  percent
+  nonConform
 }) => {
   const total = conform + nonConform;
   const conformPercentage = total > 0 ? Math.round((conform / total) * 100) : 0;
   const nonConformPercentage = 100 - conformPercentage;
 
   // Cores baseadas no percentual de conformidade
-  const getStatusColor = (percent: number) => {
-    if (percent >= 80) return "#27AE60"; // Verde
-    if (percent >= 50) return "#F2C94C"; // Amarelo
+  const getStatusColor = (conformPercentage: number) => {
+    if (conformPercentage >= 80) return "#27AE60"; // Verde
+    if (conformPercentage >= 50) return "#F2C94C"; // Amarelo
     return "#EB5757"; // Vermelho
   };
 
-  const statusColor = getStatusColor(percent);
+  const statusColor = getStatusColor(conformPercentage);
 
   return (
     <div
@@ -87,7 +85,7 @@ const ConformityItemChart: React.FC<ConformityItemChartProps> = ({
               textAlign: "center"
             }}
           >
-            {percent}%
+            {conformPercentage}%
           </div>
         </div>
       </div>
@@ -105,7 +103,7 @@ const ConformityItemChart: React.FC<ConformityItemChartProps> = ({
       >
         <div
           style={{
-            width: `${percent}%`,
+            width: `${conformPercentage}%`,
             height: "100%",
             backgroundColor: statusColor,
             borderRadius: "3px",

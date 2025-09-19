@@ -10,53 +10,6 @@ const StyleContent = ({ style, type, error }) => {
     return null;
   }
 
-  const renderStylePreview = () => {
-    switch (type) {
-      case "fill":
-        return (
-          <div
-            className="style-preview fill-preview"
-            style={{ background: error.fillColor }}
-          ></div>
-        );
-      case "stroke":
-        return (
-          <div
-            className="style-preview fill-preview"
-            style={{ background: error.fillColor }}
-          ></div>
-        );
-      case "text":
-        return (
-          <div className="style-preview text-preview">
-            <span style={{ fontWeight: style.fontWeight }}>Ag</span>
-          </div>
-        );
-      case "effects":
-        return (
-          <div className="style-preview effect-preview">
-            <img
-              className="effect-icon"
-              src={getEffectIcon(style.effects[0].type)}
-              alt={style.effectType}
-            />
-          </div>
-        );
-      case "effect":
-        return (
-          <div className="style-preview effect-preview">
-            <img
-              className="effect-icon"
-              src={getEffectIcon(style.effects[0].type)}
-              alt={style.effectType}
-            />
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
   const getEffectIcon = effectType => {
     switch (effectType) {
       case "DROP_SHADOW":
@@ -69,6 +22,126 @@ const StyleContent = ({ style, type, error }) => {
         return require("../assets/background-blur.svg");
       default:
         return "";
+    }
+  };
+
+  const renderStylePreview = () => {
+    // This function needs to be very defensive, as `style` can be anything.
+    switch (type) {
+      case "fill":
+      case "stroke": {
+        const paint =
+          style.paint || (Array.isArray(style.paints) && style.paints[0]);
+        if (paint && paint.type === "SOLID" && paint.color) {
+          const { r, g, b, a } = paint.color;
+          const bgColor = `rgba(${Math.round(r * 255)}, ${Math.round(
+            g * 255
+          )}, ${Math.round(b * 255)}, ${a !== undefined ? a : 1})`;
+          return (
+            <div
+              className="style-preview fill-preview"
+              style={{ background: bgColor }}
+            ></div>
+          );
+        }
+        // Fallback for gradients, images, or missing color data
+        return (
+          <div className="style-preview generic-preview">
+            <img
+              className="style-icon"
+              src={require("../assets/palette.svg")}
+              alt="color"
+            />
+          </div>
+        );
+      }
+      case "text": {
+        // A text style object from Figma has `fontName.style` (e.g., "Bold", "Regular").
+        // We need to convert this to a `fontWeight` number.
+        const styleString =
+          style.fontName?.style || style.style?.fontStyle || "Normal";
+        const weightMap = {
+          thin: 100,
+          extralight: 200,
+          light: 300,
+          regular: 400,
+          normal: 400,
+          medium: 500,
+          semibold: 600,
+          demibold: 600,
+          bold: 700,
+          extrabold: 800,
+          black: 900,
+          heavy: 900
+        };
+        const fontWeight =
+          weightMap[styleString.toLowerCase().replace(/[\s-]/g, "")] || 400;
+
+        return (
+          <div className="style-preview text-preview">
+            <span style={{ fontWeight: fontWeight }}>Ag</span>
+          </div>
+        );
+      }
+      case "effects": {
+        const effectType =
+          style.effects &&
+          Array.isArray(style.effects) &&
+          style.effects.length > 0
+            ? style.effects[0].type
+            : null;
+        if (effectType) {
+          return (
+            <div className="style-preview effect-preview">
+              <img
+                className="effect-icon"
+                src={getEffectIcon(effectType)}
+                alt={effectType}
+              />
+            </div>
+          );
+        }
+        return null;
+      }
+      case "radius":
+        return (
+          <div
+            className="style-preview generic-preview"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            <img
+              className="style-icon"
+              src={require("../assets/paragraph-spacing.svg")}
+              alt="radius"
+              style={{ opacity: 0.6, width: 12, height: 12 }}
+            />
+          </div>
+        );
+      case "gap":
+        return (
+          <div
+            className="style-preview generic-preview"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            <img
+              className="style-icon"
+              src={require("../assets/gap.svg")}
+              alt="gap"
+              style={{ opacity: 0.6, width: 12, height: 12 }}
+            />
+          </div>
+        );
+      default:
+        // For any other type, or if the data is malformed, don't show a preview.
+        return null;
     }
   };
 

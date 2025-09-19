@@ -2,34 +2,43 @@
 
 O SolarOps é uma iniciativa do Studio de Design da Compass UOL, que oferece aos clientes parceiros diversas ações para aprimorar seus processos e potencializar os ganhos operacionais em design.
 
-Este plugin tem o objetivo de facilitar o trabalho de qualidade nos projetos de design, permitindo realizar uma auditoria de conformidade visual ao comparar o uso dos tokens e componentes do design system da companhia com o projeto analisado.
-
-Além da auditoria de conformidade, o plugin possibilita identificar falhas e corrigi-las rapidamente ainda na fase de projeto. Ele disponibiliza uma ferramenta de análise de contraste para verificar a aplicação de acessibilidade por meio da checagem de contrastes. Também oferece consulta simplificada às documentações de acessibilidade da WCAG, facilitando sua aplicabilidade nos projetos. Além disso, conta com um recurso de inspeção de elementos, que auxilia os desenvolvedores ao fornecer as propriedades necessárias para implementação.
+Este plugin tem o objetivo de facilitar e escalar o trabalho de qualidade em projetos de design. Ele funciona como um assistente multifuncional, permitindo realizar auditorias de conformidade, verificar a acessibilidade e fornecer ferramentas que agilizam o handoff para o desenvolvimento.
 
 ## ✨ Funcionalidades
 
-- **Medição no Canvas (Novo)**:
-  - Distância: linha dividida em 2 com gap central e rótulo centralizado (texto acima do fundo)
-  - Área: label "L × A = X px²" centralizada no objeto
-  - Ângulo: arcos nos cantos (fora do objeto, offset 8px, raio 24, stroke 2) com rótulo do corner radius em px
-- **Presets de Medida Rápida**:
-  - Distância: Topo, Base, Esquerda, Direita, Centro Horizontal, Centro Vertical
-  - Ângulo: Top Left, Top Right, Bottom Left, Bottom Right e Total (insere os 4 cantos)
-- **Mostrar/Ocultar Guias**: Alterna a visibilidade de todas as medições do canvas sem removê-las
-- **Limpar**: Remove todas as medições criadas
-- **Verificador de Contraste**: Analise e valide o contraste entre cores de acordo com as diretrizes WCAG
-- **Guia WCAG**: Consulte critérios de acessibilidade WCAG com descrições detalhadas em português
-- **Filtragem por Categorias**: Navegue pelos critérios WCAG usando filtros por categorias
-- **Documentação Integrada**: Acesse documentação completa sobre acessibilidade e boas práticas
+O plugin é organizado em três abas principais: Auditoria, Acessibilidade e Ferramentas.
 
+### 1. Auditoria de Conformidade
+
+A principal funcionalidade do SolarOps. Realize uma varredura completa em seus frames para garantir a consistência com o Design System.
+
+- **Verificação de Tokens**: Audita o uso de estilos de cores, tipografia, efeitos, bordas e espaçamentos, comparando-os com as bibliotecas de tokens configuradas.
+- **Relatórios Detalhados**: Gera um relatório visual com um score de conformidade, gráficos detalhados por categoria (cores, texto, etc.) e uma lista de todos os elementos não conformes.
+- **Correções Inteligentes**: Oferece sugestões e, em muitos casos, correções automáticas para os erros encontrados, agilizando o processo de ajuste.
+- **Gerenciamento de Bibliotecas**: Permite importar e gerenciar as bibliotecas de tokens que servem como base para a auditoria.
+
+### 2. Ferramentas de Acessibilidade
+
+Um conjunto de recursos para ajudar a criar projetos mais inclusivos.
+
+- **Verificador de Contraste**: Uma ferramenta manual para analisar e validar o contraste entre duas cores, garantindo a conformidade com os níveis AA e AAA da WCAG.
+- **Guia WCAG 2.2**: Uma documentação completa e integrada dos critérios da WCAG, traduzida para o português. Permite busca e filtragem por categoria (Perceptível, Operável, Compreensível, Robusto) para facilitar a consulta.
+
+### 3. Ferramentas para Desenvolvedores e Designers
+
+Recursos para acelerar o fluxo de trabalho e a comunicação entre design e desenvolvimento.
+
+- **Inspeção de Elementos**: Selecione qualquer elemento no canvas para gerar automaticamente snippets de código em **HTML**, **CSS**, **TypeScript (tipos)** e **JSON (dados do nó)**.
+- **Ferramenta de Medição**: Adicione anotações visuais diretamente no canvas.
+  - **Anotações**: Crie balões de texto para deixar comentários e especificações.
+  - **Medidas de Distância**: Adicione linhas de cota para indicar espaçamentos e dimensões.
 
 ## 🛠 Tecnologias Utilizadas
 
 - **Frontend**: React 17, TypeScript
 - **Ferramentas de Build**: Webpack 4, Babel
-- **Estilização**: CSS Modules
+- **Estilização**: CSS
 - **Animações**: Framer Motion
-- **Formatação**: Prettier, TSLint
 
 ## 🚀 Começando
 
@@ -76,31 +85,28 @@ npm run build
 
 Os arquivos de build serão armazenados no diretório `dist/`.
 
-## 🧭 Como usar (Medições)
+## 🧭 Como Usar
 
-### 1) Presets de Distância
-- Selecione um ou mais objetos no canvas
-- Na UI do plugin, selecione o modo "Distância" e clique em um preset (Topo, Base, Esquerda, Direita, Centro H/V)
-- Uma linha azul é inserida junto ao objeto, dividida em duas com gap central e a label centralizada acima do fundo
+1.  **Auditoria**:
+    - Selecione um ou mais frames no canvas.
+    - Na aba **Auditoria**, clique em "Iniciar auditoria".
+    - Navegue pelo relatório gerado para visualizar os erros e aplicar correções.
 
-### 2) Presets de Ângulo
-- Selecione um ou mais objetos
-- Selecione o modo "Ângulo" e clique em um canto (Top Left/Right, Bottom Left/Right) ou em "Total" para inserir os 4 cantos
-- O arco fica FORA do objeto, a 8px do canto, com raio 24 e stroke 2. A label mostra o valor do corner radius (0px quando não houver)
+2.  **Acessibilidade**:
+    - Abra a aba **Acessibilidade**.
+    - Use a sub-aba **Contraste** para verificar manualmente a relação de contraste entre cores.
+    - Use a sub-aba **Documentações** para pesquisar e consultar os critérios da WCAG.
 
-### 3) Área
-- Selecione objetos no modo "Área" para inserir automaticamente a label "L × A = X px²" centralizada
-
-### 4) Mostrar/Ocultar Guias e Limpar
-- "Mostrar/Ocultar Guias": alterna a visibilidade de todas as medições sem apagar
-- "Limpar": remove todas as medições criadas no canvas
+3.  **Ferramentas**:
+    - Abra a aba **Tools**.
+    - **Inspecionar**: Selecione um elemento no canvas para ver seus snippets de código gerados automaticamente.
+    - **Mensurar**: Use os controles para adicionar anotações e medidas de distância no seu design.
 
 ## 📦 Instalação no Figma
 
 1. Abra o aplicativo Figma Desktop
 2. Vá em `Plugins` > `Development` > `Import plugin from manifest...`
 3. Selecione o arquivo `manifest.json` na raiz do projeto
-
 
 ## 📄 Licença
 
@@ -113,5 +119,3 @@ Sinta-se à vontade para abrir issues e PRs. Para contribuições:
 1. Crie um branch a partir de `main`: `git checkout -b feature/nome-da-feature`
 2. Faça seus commits seguindo boas mensagens: `docs:`, `feat:`, `fix:`, etc.
 3. Abra um Pull Request descrevendo claramente as mudanças e passos de teste
-
-

@@ -100,32 +100,14 @@ interface NodeItem {
 const App = ({}) => {
   // Interface ErrorItem movida para o escopo global para ser reutilizada
 
-  interface NodeError {
-    id: string;
-    errors: Array<{
-      type: string;
-      value?: string;
-      message: string;
-      [key: string]: any;
-    }>;
-    [key: string]: any;
-  }
-
-  const [errorArray, setErrorArray] = useState<NodeError[]>([]);
+  const [errorArray, setErrorArray] = useState<ErrorItem[]>([]);
   const [activePage, setActivePage] = useState("page");
   const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
   const [activeError, setActiveError] = React.useState<any>({});
   const [selectedNode, setSelectedNode] = React.useState<any>({});
   const [isVisible, setIsVisible] = React.useState(false);
-  // Tipagem para o estado do nodeArray
-  interface NodeArrayItem {
-    id: string;
-    name: string;
-    type: string;
-    children?: NodeArrayItem[];
-  }
-
-  const [nodeArray, setNodeArray] = useState<NodeArrayItem[] | null>(null);
+  // Usa a interface NodeItem que é mais completa e permite todas as propriedades necessárias.
+  const [nodeArray, setNodeArray] = useState<NodeItem[] | null>(null);
   const [selectedListItems, setSelectedListItem] = React.useState<string[]>([]);
   const [activeNodeIds, setActiveNodeIds] = React.useState<string[]>([]);
   const [designTokens, setDesignTokens] = React.useState<any>(null);
@@ -237,7 +219,7 @@ const App = ({}) => {
     setActiveError(error);
   };
 
-  const updateNodeArray = (nodeArray: NodeArrayItem[]) => {
+  const updateNodeArray = (nodeArray: NodeItem[]) => {
     setNodeArray(nodeArray);
   };
 
@@ -284,31 +266,10 @@ const App = ({}) => {
     );
   };
 
-  const updateErrorArray = (errors: any[]) => {
-    console.log("[App] updateErrorArray chamado com:", errors);
-    console.log("[App] errors é array?", Array.isArray(errors));
-    console.log("[App] errors length:", errors ? errors.length : "undefined");
-    if (errors && errors.length > 0) {
-      console.log("[App] Primeiro erro:", errors[0]);
-
-      // Converter os erros para o formato NodeError esperado
-      const nodeErrors = errors.map(error => ({
-        id: error.id || error.node?.id || "",
-        errors: [
-          {
-            type: error.type || "unknown",
-            value: error.value,
-            message: error.message || "Erro desconhecido",
-            ...error
-          }
-        ],
-        ...error
-      }));
-
-      setErrorArray(nodeErrors);
-    } else {
-      setErrorArray([]);
-    }
+  const updateErrorArray = (errors: ErrorItem[]) => {
+    console.log("[App] updateErrorArray (flat) chamado com:", errors);
+    // O controller já envia um array plano de erros. Apenas o definimos no estado.
+    setErrorArray(errors && Array.isArray(errors) ? errors : []);
   };
 
   const updateVisible = (val: boolean) => {
@@ -431,6 +392,10 @@ const App = ({}) => {
     window.onmessage = event => {
       const t0 = performance.now();
       console.log("[LOG] Mensagem recebida da UI:", event.data);
+      const pluginMessage = event.data.pluginMessage || event.data;
+      if (!pluginMessage || !pluginMessage.type) {
+        return;
+      }
       const {
         type,
         message,
@@ -440,9 +405,10 @@ const App = ({}) => {
         success,
         selectedNodeIds,
         projectName,
-        activeComponentLibraries: detectedComponentLibs
-      } = event.data.pluginMessage;
-      console.log("[UI] Mensagem recebida:", type, event.data.pluginMessage);
+        activeComponentLibraries: detectedComponentLibs,
+        libs
+      } = pluginMessage;
+      console.log("[UI] Mensagem recebida:", type, pluginMessage);
 
       if (type === "show-preloader") {
         console.log("[LOG] show-preloader", { t: performance.now() - t0 });
@@ -500,44 +466,20 @@ const App = ({}) => {
         } else {
           // Processar os dados recebidos
           if (message && Array.isArray(message)) {
+            // 'message' é o nodeArray
             console.log(
               "[UI] Atualizando nodeArray com",
               message.length,
               "nodes"
             );
-
-            // Garante que a mensagem está no formato correto antes de atualizar o estado
-            const formattedNodes = message
-              .map(node => {
-                if (!node || typeof node !== "object" || !node.id) {
-                  console.warn("[UI] Nó inválido encontrado:", node);
-                  return null;
-                }
-                return {
-                  id: node.id,
-                  name: node.name || "Sem nome",
-                  type: node.type || "unknown",
-                  // Garantir que as propriedades de estilo existam
-                  fills: Array.isArray(node.fills) ? node.fills : [],
-                  strokes: Array.isArray(node.strokes) ? node.strokes : [],
-                  effects: Array.isArray(node.effects) ? node.effects : [],
-                  cornerRadius: node.cornerRadius,
-                  gap: node.gap,
-                  // Preservar filhos se existirem
-                  ...(node.children && {
-                    children: node.children.filter(Boolean)
-                  })
-                };
-              })
-              .filter(Boolean); // Remove nós inválidos
-
-            console.log("[UI] Nós formatados:", formattedNodes);
-            setNodeArray(formattedNodes);
+            // Usar a mensagem diretamente, pois já foi serializada pelo controller.
+            // A formatação anterior removia propriedades essenciais para as verificações de conformidade.
+            setNodeArray(message);
 
             // Selecionar o primeiro node por padrão
-            if (formattedNodes.length > 0) {
-              setSelectedListItem([formattedNodes[0].id]);
-              setActiveNodeIds([formattedNodes[0].id]);
+            if (message.length > 0) {
+              setSelectedListItem([message[0].id]);
+              setActiveNodeIds([message[0].id]);
             }
           }
 
@@ -701,13 +643,13 @@ const App = ({}) => {
       } else if (type === "user-libs-loaded") {
         console.log(
           "[App] user-libs-loaded recebido. Bibliotecas carregadas:",
-          message.libs
+          libs
         );
-        if (message.libs && message.libs.length > 0) {
+        if (libs && libs.length > 0) {
           console.log(
             "[App] Definindo bibliotecas ativas a partir do armazenamento"
           );
-          setActiveComponentLibraries(message.libs);
+          setActiveComponentLibraries(libs);
         }
       } else if (type === "local-styles-imported") {
         console.log("[LOG] local-styles-imported", {
@@ -723,6 +665,9 @@ const App = ({}) => {
         console.log("[LOG] selection-update", { t: performance.now() - t0 });
         setActiveNodeIds(selectedNodeIds || []);
         // Não volta para tela inicial automaticamente
+      } else if (type === "update-errors-after-fix") {
+        console.log("[App] Atualizando erros após correção.");
+        onRunApp();
       }
     };
   }, []);
@@ -1182,13 +1127,10 @@ const App = ({}) => {
               selectedListItems={selectedListItems}
               activeNodeIds={activeNodeIds}
               onOpenPanel={node => {
-                // Busca o erro referente ao node clicado
-                const erro = errorArray.find(e => e.id === node.id);
-                if (erro) {
-                  setActiveError(erro);
-                  setSelectedNode(node);
-                  setIsVisible(true);
-                }
+                // Apenas define o nó selecionado e torna o painel visível.
+                // O painel irá filtrar os erros com base no nó.
+                setSelectedNode(node);
+                setIsVisible(true);
               }}
             />
           );
@@ -1235,7 +1177,7 @@ const App = ({}) => {
         />
       ) : !auditStarted ? (
         <InitialContent
-          isFrameSelected={activeNodeIds.length > 0}
+          isFrameSelected={activeNodeIds && activeNodeIds.length > 0}
           onHandleRunApp={handleRunAudit}
           onShowInfoPanel={() => setInfoPanelVisible(true)}
           libraries={activeComponentLibraries}
@@ -1244,7 +1186,7 @@ const App = ({}) => {
         />
       ) : null}
 
-      {Object.keys(activeError).length !== 0 && errorArray.length ? (
+      {isVisible && selectedNode ? (
         <Panel
           visibility={isVisible}
           node={selectedNode}
@@ -1254,10 +1196,7 @@ const App = ({}) => {
           ignoredErrors={ignoredErrorArray}
           onClick={updateVisibility}
           onSelectedListUpdate={updateSelectedList}
-          onOpenPanel={erro => {
-            setActiveError(erro);
-            setIsVisible(true);
-          }}
+          onOpenPanel={() => {}} // onOpenPanel dentro do painel não é mais necessário
         />
       ) : null}
 
