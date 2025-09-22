@@ -104,39 +104,29 @@ const StyleContent = ({ style, type, error }) => {
         return null;
       }
       case "radius":
-        return (
-          <div
-            className="style-preview generic-preview"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <img
-              className="style-icon"
-              src={require("../assets/paragraph-spacing.svg")}
-              alt="radius"
-              style={{ opacity: 0.6, width: 12, height: 12 }}
-            />
-          </div>
-        );
       case "gap":
+        // Para radius e gap, mostramos o valor do token no preview
         return (
           <div
             className="style-preview generic-preview"
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              padding: "0 8px"
             }}
           >
-            <img
-              className="style-icon"
-              src={require("../assets/gap.svg")}
-              alt="gap"
-              style={{ opacity: 0.6, width: 12, height: 12 }}
-            />
+            <span
+              style={{
+                color: "white",
+                fontSize: "12px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}
+            >
+              {style.value || style.name || "Token"}
+            </span>
           </div>
         );
       default:

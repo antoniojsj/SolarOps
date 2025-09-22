@@ -389,15 +389,24 @@ function BulkErrorList(props) {
   }
 
   function handleSuggestion(error, index) {
+    const message: any = {
+      type: "apply-styles",
+      error: { ...error },
+      field: "suggestions",
+      index: index,
+      count: error.count
+    };
+
+    // Adiciona a propriedade específica para erros de radius e gap
+    if (error.type === "radius" && error.property) {
+      message.error.property = error.property;
+    } else if (error.type === "gap") {
+      message.error.property = "itemSpacing"; // Propriedade padrão para gap
+    }
+
     parent.postMessage(
       {
-        pluginMessage: {
-          type: "apply-styles",
-          error: error,
-          field: "suggestions",
-          index: index,
-          count: error.count
-        }
+        pluginMessage: message
       },
       "*"
     );
@@ -446,8 +455,63 @@ function BulkErrorList(props) {
 
   // Filter the bulkErrorList based on the selected filter
   const filteredErrorList = bulkErrorList.filter(error => {
-    return selectedFilter === "Geral" || selectedFilter === error.type;
+    const shouldInclude =
+      selectedFilter === "Geral" || selectedFilter === error.type;
+
+    // Log para depuração
+    if (shouldInclude && error.suggestions) {
+      console.log(`[BulkErrorList] Erro incluído - Tipo: ${error.type}`, {
+        hasSuggestions: !!error.suggestions,
+        suggestionsCount: error.suggestions.length,
+        suggestions: error.suggestions.map(s => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          hasPaint: !!s.paint,
+          paintType: s.paint ? s.paint.type : "no-paint",
+          keys: Object.keys(s)
+        }))
+      });
+    }
+
+    return shouldInclude;
   });
+
+  // Debug: Log das sugestões em cada erro
+  console.log("=== DEBUG SUGGESTIONS ===");
+  filteredErrorList.forEach((error, idx) => {
+    console.log(`Erro ${idx} - Tipo: ${error.type}`, {
+      hasSuggestions: !!error.suggestions,
+      suggestionsCount: error.suggestions ? error.suggestions.length : 0,
+      suggestions: error.suggestions
+        ? error.suggestions.map(s => ({
+            id: s.id,
+            name: s.name,
+            value: s.value,
+            type: s.type
+          }))
+        : "none"
+    });
+  });
+  console.log("=========================");
+
+  // Log para verificar as sugestões antes de renderizar os itens
+  console.log("=== DEBUG ANTES DE RENDERIZAR ITENS ===");
+  filteredErrorList.forEach((err, idx) => {
+    console.log(`Item ${idx} - Tipo: ${err.type}`, {
+      hasSuggestions: !!(err.suggestions && err.suggestions.length > 0),
+      suggestions: err.suggestions
+        ? err.suggestions.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            hasPaint: !!s.paint,
+            paintType: s.paint ? s.paint.type : "no-paint"
+          }))
+        : "no-suggestions"
+    });
+  });
+  console.log("======================================");
 
   // Map the filtered error list to BulkErrorListItem components
   const errorListItems = filteredErrorList.map((error: any, index: number) => {

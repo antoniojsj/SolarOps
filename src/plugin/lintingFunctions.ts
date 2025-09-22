@@ -31,8 +31,8 @@ function getRgbaString(color: RGB | RGBA, opacity?: number): string {
   const r = Math.round((color.r || 0) * 255);
   const g = Math.round((color.g || 0) * 255);
   const b = Math.round((color.b || 0) * 255);
-  const a =
-    opacity !== undefined ? opacity : color.a !== undefined ? color.a : 1;
+  // Verifica se 'a' existe no tipo, já que RGB não tem 'a'
+  const a = opacity !== undefined ? opacity : "a" in color ? color.a : 1;
   return `rgba(${r}, ${g}, ${b}, ${a.toFixed(2)})`;
 }
 
@@ -41,8 +41,8 @@ export function getHexString(color: RGB | RGBA, opacity?: number): string {
   const r = Math.round((color.r || 0) * 255);
   const g = Math.round((color.g || 0) * 255);
   const b = Math.round((color.b || 0) * 255);
-  const a =
-    opacity !== undefined ? opacity : color.a !== undefined ? color.a : 1;
+  // Verifica se 'a' existe no tipo, já que RGB não tem 'a'
+  const a = opacity !== undefined ? opacity : "a" in color ? color.a : 1;
   const alpha = Math.round(a * 255);
 
   const toHex = (c: number) =>
@@ -1180,12 +1180,23 @@ export function checkRadius(
         ?.flatMap(lib => lib.radius || [])
         .filter(Boolean)
         .map(v => ({
-          id: v.id,
+          id: v.id, // ID da variável do Figma
           name: v.name,
           value: v.value,
-          // Adiciona uma propriedade 'paint' mínima para que a UI reconheça a sugestão
-          // e exiba o dropdown. O tipo 'VARIABLE' é um marcador customizado.
-          paint: { type: "VARIABLE" }
+          // Propriedades necessárias para a UI
+          type: "VARIABLE",
+          description: v.description || `Raio de ${v.value}px`,
+          paint: { type: "VARIABLE" },
+          // Adicionando propriedades adicionais para compatibilidade
+          key: v.id, // Garantir que a chave única esteja disponível
+          style: {
+            // Estrutura esperada pelo componente de sugestões
+            type: "VARIABLE",
+            name: v.name,
+            value: v.value,
+            description: v.description || `Raio de ${v.value}px`,
+            id: v.id
+          }
         })) || [];
 
     // Helper para verificar uma propriedade de raio.
@@ -1209,7 +1220,11 @@ export function checkRadius(
           nodeName: node.name,
           value: `${radiusValue}px`,
           suggestions: radiusSuggestions,
-          property: propertyName
+          property: propertyName,
+          // Garantir que os nós estejam disponíveis para a função apply-styles
+          nodes: [node.id],
+          // Adicionar referência à propriedade específica
+          styleKey: propertyName
         });
       }
       // Opcional: se estiver vinculado, poderíamos validar se a variável pertence
@@ -1257,6 +1272,95 @@ export function checkRadius(
   }
 }
 
+/**
+ * Verifica se os valores de padding estão usando tokens de variáveis
+ */
+export function checkPadding(
+  node: any,
+  errors: any[],
+  savedTokens: any[] = [],
+  libraries: any[] = []
+) {
+  try {
+    if (!node || node.visible === false || !("paddingTop" in node)) return;
+
+    // Verifica se há algum valor de padding definido
+    const hasPadding =
+      (node.paddingTop !== undefined && node.paddingTop > 0) ||
+      (node.paddingRight !== undefined && node.paddingRight > 0) ||
+      (node.paddingBottom !== undefined && node.paddingBottom > 0) ||
+      (node.paddingLeft !== undefined && node.paddingLeft > 0);
+
+    if (!hasPadding) return;
+
+    // Verifica se há variáveis vinculadas para cada lado do padding
+    const boundVariables = node.boundVariables || {};
+    const paddingSides = [
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft"
+    ];
+    const missingVariables = [];
+
+    // Verifica cada lado do padding
+    for (const side of paddingSides) {
+      if (node[side] > 0 && !boundVariables[side]) {
+        missingVariables.push({
+          side,
+          value: node[side]
+        });
+      }
+    }
+
+    if (missingVariables.length > 0) {
+      // Busca sugestões de tokens de espaçamento
+      const paddingSuggestions =
+        libraries
+          ?.flatMap(lib => lib.spacing || [])
+          .filter(Boolean)
+          .map(v => ({
+            id: v.id,
+            name: v.name,
+            value: v.value,
+            type: "VARIABLE",
+            description: v.description || `Espaçamento de ${v.value}px`,
+            paint: { type: "VARIABLE" },
+            key: v.id,
+            style: {
+              type: "VARIABLE",
+              name: v.name,
+              value: v.value,
+              description: v.description || `Espaçamento de ${v.value}px`,
+              id: v.id
+            }
+          })) || [];
+
+      // Cria uma mensagem de erro para cada lado sem variável
+      for (const { side, value } of missingVariables) {
+        const sideName = side.replace("padding", "").toLowerCase();
+        const sideDisplayName =
+          sideName.charAt(0).toUpperCase() + sideName.slice(1);
+
+        errors.push({
+          type: "padding",
+          message: `Padding ${sideDisplayName} (${value}px) não utiliza um token (variável)`,
+          nodeId: node.id,
+          nodeName: node.name,
+          value: `${value}px`,
+          suggestions: paddingSuggestions,
+          property: side,
+          nodes: [node.id],
+          styleKey: side,
+          side: sideName // Adiciona a propriedade side para referência
+        });
+      }
+    }
+  } catch (error) {
+    console.error("[checkPadding] Erro:", error);
+  }
+}
+
 export function checkGap(
   node: any,
   errors: any[],
@@ -1278,12 +1382,23 @@ export function checkGap(
           ?.flatMap(lib => lib.gaps || [])
           .filter(Boolean)
           .map(v => ({
-            id: v.id,
+            id: v.id, // ID da variável do Figma
             name: v.name,
             value: v.value,
-            // Adiciona uma propriedade 'paint' mínima para que a UI reconheça a sugestão
-            // e exiba o dropdown. O tipo 'VARIABLE' é um marcador customizado.
-            paint: { type: "VARIABLE" }
+            // Propriedades necessárias para a UI
+            type: "VARIABLE",
+            description: v.description || `Espaçamento de ${v.value}px`,
+            paint: { type: "VARIABLE" },
+            // Adicionando propriedades adicionais para compatibilidade
+            key: v.id, // Garantir que a chave única esteja disponível
+            style: {
+              // Estrutura esperada pelo componente de sugestões
+              type: "VARIABLE",
+              name: v.name,
+              value: v.value,
+              description: v.description || `Espaçamento de ${v.value}px`,
+              id: v.id
+            }
           })) || [];
 
       errors.push({
@@ -1293,7 +1408,11 @@ export function checkGap(
         nodeName: node.name,
         value: `${node.itemSpacing}px`,
         suggestions: gapSuggestions,
-        property: "itemSpacing" // Propriedade para vincular
+        property: "itemSpacing", // Propriedade para vincular
+        // Garantir que os nós estejam disponíveis para a função apply-styles
+        nodes: [node.id],
+        // Adicionar referência à propriedade específica
+        styleKey: "itemSpacing"
       });
     }
   } catch (error) {

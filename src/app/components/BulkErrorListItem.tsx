@@ -59,11 +59,55 @@ function BulkErrorListItem(props) {
   const nodeId =
     error.nodeId || (error.node && error.node.id) || `error-${props.index}`;
   const clipPathId = `clip_bulk_select_all_${props.index}`;
-  const hasSuggestions = error.suggestions && error.suggestions.length > 0;
+  // Verifica se há sugestões disponíveis para o erro atual
+  const hasSuggestions =
+    (error.suggestions && error.suggestions.length > 0) || // Verifica sugestões diretas
+    (error.type && ["radius", "gap"].includes(error.type) && error.property); // Verifica se é um erro de radius ou gap com propriedade definida
   const selectedSuggestion =
-    selectedSuggestionIndex !== null
+    selectedSuggestionIndex !== null &&
+    error.suggestions &&
+    error.suggestions[selectedSuggestionIndex]
       ? error.suggestions[selectedSuggestionIndex]
       : null;
+
+  // Debug: Log para verificar as sugestões e o estado do dropdown
+  console.log(`[BulkErrorListItem] Erro tipo: ${error.type}`, {
+    hasSuggestions,
+    suggestionsCount: error.suggestions ? error.suggestions.length : 0,
+    suggestions: error.suggestions
+      ? error.suggestions.map((s, i) => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          hasPaint: !!s.paint,
+          paintType: s.paint ? s.paint.type : "no-paint",
+          keys: Object.keys(s),
+          index: i
+        }))
+      : "no-suggestions",
+    isDropdownOpen,
+    errorKeys: Object.keys(error),
+    errorType: typeof error,
+    errorString: JSON.stringify(error, null, 2)
+  });
+
+  if (hasSuggestions) {
+    console.log(
+      `[BulkErrorListItem] Detalhes das sugestões para ${error.type}:`,
+      {
+        firstSuggestion: error.suggestions[0],
+        firstSuggestionKeys: error.suggestions[0]
+          ? Object.keys(error.suggestions[0])
+          : "no-first-suggestion",
+        firstSuggestionType: error.suggestions[0]
+          ? typeof error.suggestions[0]
+          : "no-type",
+        firstSuggestionString: error.suggestions[0]
+          ? JSON.stringify(error.suggestions[0], null, 2)
+          : "no-suggestion-string"
+      }
+    );
+  }
 
   return (
     <motion.li
@@ -145,7 +189,73 @@ function BulkErrorListItem(props) {
         <div ref={dropdownRef} style={{ position: "relative", width: "100%" }}>
           <div
             className="custom-select__trigger"
-            onClick={() => hasSuggestions && setIsDropdownOpen(!isDropdownOpen)}
+            onClick={e => {
+              // Para erros do tipo 'radius' ou 'gap', verifica se há sugestões disponíveis ou se há uma propriedade definida
+              const hasValidSuggestions =
+                (error.suggestions && error.suggestions.length > 0) ||
+                (error.type &&
+                  ["radius", "gap"].includes(error.type) &&
+                  error.property);
+
+              console.log(
+                `[BulkErrorListItem] Dropdown clicado - Tipo: ${error.type}`,
+                {
+                  hasValidSuggestions,
+                  hasSuggestions,
+                  suggestionsCount: error.suggestions
+                    ? error.suggestions.length
+                    : 0,
+                  isDropdownOpen: !isDropdownOpen,
+                  errorType: error.type,
+                  errorProperty: error.property,
+                  errorKeys: Object.keys(error),
+                  errorValue: error.value,
+                  errorNodeId: error.nodeId,
+                  errorNodeName: error.nodeName
+                }
+              );
+
+              // Permite abrir o dropdown para erros de radius e gap mesmo sem sugestões diretas
+              // pois as sugestões serão carregadas do contexto
+              if (hasValidSuggestions) {
+                console.log(
+                  `[BulkErrorListItem] Abrindo dropdown para tipo: ${error.type}`,
+                  {
+                    suggestions: error.suggestions
+                      ? error.suggestions.map(s => ({
+                          id: s.id,
+                          name: s.name,
+                          type: s.type,
+                          value: s.value,
+                          hasPaint: !!s.paint,
+                          paintType: s.paint ? s.paint.type : "no-paint",
+                          keys: s ? Object.keys(s) : []
+                        }))
+                      : "no-suggestions",
+                    error: {
+                      type: error.type,
+                      property: error.property,
+                      nodeId: error.nodeId,
+                      nodeName: error.nodeName,
+                      value: error.value
+                    }
+                  }
+                );
+                setIsDropdownOpen(!isDropdownOpen);
+              } else {
+                console.warn(
+                  `[BulkErrorListItem] Nenhuma sugestão disponível para tipo: ${error.type}`,
+                  {
+                    errorType: error.type,
+                    hasSuggestions,
+                    errorKeys: Object.keys(error),
+                    errorValue: error.value,
+                    errorNodeId: error.nodeId,
+                    errorNodeName: error.nodeName
+                  }
+                );
+              }
+            }}
             style={{
               display: "flex",
               justifyContent: "space-between",

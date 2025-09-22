@@ -11,6 +11,7 @@ import {
   newCheckStrokes,
   checkRadius,
   checkGap,
+  checkPadding,
   getHexString
 } from "./lintingFunctions";
 
@@ -696,6 +697,7 @@ async function lintComponentRules(
     ]);
     checkRadius(node, errors, savedTokens, libraries);
     checkGap(node, errors, savedTokens, libraries);
+    checkPadding(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em component rules:", error);
   }
@@ -738,6 +740,7 @@ async function lintFrameRules(
     ]);
     checkRadius(node, errors, savedTokens, libraries);
     checkGap(node, errors, savedTokens, libraries);
+    checkPadding(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em frame rules:", error);
   }
@@ -808,6 +811,7 @@ async function lintRectangleRules(
     ]);
     checkRadius(node, errors, savedTokens, libraries);
     checkGap(node, errors, savedTokens, libraries);
+    checkPadding(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em rectangle rules:", error);
   }
@@ -829,6 +833,7 @@ async function lintShapeRules(
     ]);
     checkRadius(node, errors, savedTokens, libraries);
     checkGap(node, errors, savedTokens, libraries);
+    checkPadding(node, errors, savedTokens, libraries);
   } catch (error) {
     console.error("[Controller] Erro em shape rules:", error);
   }
@@ -1468,6 +1473,19 @@ figma.ui.onmessage = async (msg: UIMessage) => {
                 error.property === "itemSpacing"
               ) {
                 node.setBoundVariable("itemSpacing", suggestion.id);
+              }
+              break;
+
+            case "padding":
+              if (
+                "setBoundVariable" in node &&
+                suggestion.id &&
+                error.property &&
+                typeof error.property === "string" &&
+                error.property.startsWith("padding")
+              ) {
+                // Aplica a variável ao lado específico do padding (top, right, bottom, left)
+                node.setBoundVariable(error.property, suggestion.id);
               }
               break;
           }
