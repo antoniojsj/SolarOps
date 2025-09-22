@@ -970,6 +970,7 @@ function BulkErrorList(props) {
             <AnalysisResultsCard
               projectName={projectName}
               analysisDate={formattedDate}
+              isAuditReport={true}
             />
           </div>
           {/* Espaço de 16px entre o card de identificação e o score */}
@@ -1210,142 +1211,7 @@ function BulkErrorList(props) {
                   })}
                 </div>
 
-                {/* Card de Restore Component */}
-                {detachCount > 0 && (
-                  <div style={{ marginTop: 24 }}>
-                    <div
-                      style={{
-                        color: "#fff",
-                        fontWeight: 400,
-                        fontSize: 14,
-                        margin: "24px 0 8px 0"
-                      }}
-                    >
-                      Componentes para Restauração
-                    </div>
-                    <div
-                      className="summary-report-card"
-                      style={{
-                        background: "rgba(251, 191, 36, 0.08)",
-                        border: "1.5px solid rgba(251, 191, 36, 0.4)",
-                        borderRadius: 8,
-                        padding: 16,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start"
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          marginBottom: 8
-                        }}
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M12 15L12 18M12 9V12M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 13.9121 3.609 14.746 4.06485 15.1925C4.26256 15.3839 4.53744 15.3839 4.73515 15.1925C5.191 14.746 5.8 13.9121 5.8 12C5.8 9.34903 7.34903 7.8 10 7.8C12.651 7.8 14.2 9.34903 14.2 12C14.2 14.651 15.749 16.2 18.4 16.2C19.2826 16.2 20 16.9174 20 17.8V18"
-                            stroke="#FBBF24"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                        <span
-                          style={{
-                            fontSize: 14,
-                            color: "#FBBF24",
-                            fontWeight: 600
-                          }}
-                        >
-                          Atenção
-                        </span>
-                      </div>
-                      <p
-                        style={{
-                          color: "#E5E7EB",
-                          fontSize: 14,
-                          margin: "8px 0"
-                        }}
-                      >
-                        {detachCount}{" "}
-                        {detachCount === 1
-                          ? "componente necessita"
-                          : "componentes necessitam"}{" "}
-                        de restauração
-                      </p>
-                      <button
-                        onClick={() => {
-                          // Find the first error of type "restore-component"
-                          const restoreError = bulkErrorList.find(
-                            err => getErrorType(err) === "restore-component"
-                          );
-                          if (restoreError) {
-                            const nodeId = getErrorNodeId(restoreError);
-                            if (nodeId) {
-                              parent.postMessage(
-                                {
-                                  pluginMessage: {
-                                    type: "restore-component",
-                                    nodeId: nodeId
-                                  }
-                                },
-                                "*"
-                              );
-                            }
-                          }
-                        }}
-                        style={{
-                          background: "rgba(251, 191, 36, 0.1)",
-                          border: "1px solid rgba(251, 191, 36, 0.4)",
-                          color: "#FBBF24",
-                          borderRadius: 6,
-                          padding: "8px 16px",
-                          fontSize: 14,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          marginTop: 8,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          transition: "all 0.2s ease"
-                        }}
-                        onMouseEnter={e =>
-                          (e.currentTarget.style.background =
-                            "rgba(251, 191, 36, 0.2)")
-                        }
-                        onMouseLeave={e =>
-                          (e.currentTarget.style.background =
-                            "rgba(251, 191, 36, 0.1)")
-                        }
-                      >
-                        <span>Restaurar Componentes</span>
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M20 12V19C20 20.1046 19.1046 21 18 21H6C4.89543 21 4 20.1046 4 19V5C4 3.89543 4.89543 3 6 3H14M15 3H21M21 3V9M21 3L12 12"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Restore component functionality is now handled elsewhere in the application */}
               </li>
 
               {/* Seção de Detalhamento de Cores */}
