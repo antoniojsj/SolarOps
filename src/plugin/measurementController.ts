@@ -68,8 +68,12 @@ const getAllMeasurementNodes = async (
   const storedData = node.getPluginDataKeys();
 
   if (node.type === "INSTANCE") {
-    const mainComp = await node.getMainComponentAsync();
-    componentId = mainComp ? mainComp.id : componentId;
+    try {
+      const mainComp = await node.getMainComponentAsync();
+      componentId = mainComp ? mainComp.id : null;
+    } catch (e) {
+      // Main component is not available, which is fine.
+    }
   }
 
   if (node.name === GROUP_NAME_DETACHED) {

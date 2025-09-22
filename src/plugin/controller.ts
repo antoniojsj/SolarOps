@@ -145,6 +145,7 @@ interface UIMessage {
   id?: string;
   field?: string;
   nodes?: string[];
+  nodeId?: string; // Added for restore component functionality
   styleId?: string;
   tokens?: any;
   success?: boolean;
@@ -170,6 +171,16 @@ interface UIMessage {
   borderRadius?: number;
   payload?: any;
   savedTokens?: any[];
+
+  // Add specific message types for restore component
+  "restore-component"?: {
+    nodeId: string;
+  };
+  "component-restored"?: {
+    success: boolean;
+    message: string;
+    nodeId: string;
+  };
 }
 
 // Declaração da constante figma
@@ -326,6 +337,126 @@ function preprocessLibraries(
   };
 }
 
+// Função para encontrar instâncias quebradas de forma isolada e robusta.
+async function findBrokenInstances(
+  nodes: readonly SceneNode[]
+): Promise<any[]> {
+  const instances: InstanceNode[] = [];
+  console.log("[Controller] Iniciando busca por instâncias quebradas...");
+
+  // Helper para encontrar recursivamente todas as instâncias na seleção
+  function collectInstances(nodesToSearch: readonly SceneNode[]) {
+    for (const node of nodesToSearch) {
+      console.log(`[Controller] Verificando nó: ${node.name} (${node.type})`);
+
+      // Verifica se é uma instância ou um componente que pode conter instâncias
+      if (node.type === "INSTANCE") {
+        console.log(
+          `[Controller] Instância encontrada: ${node.name} (${node.id})`
+        );
+        instances.push(node as InstanceNode);
+      }
+
+      // Verifica se o nó tem filhos e continua a recursão
+      if ("children" in node && (node as any).children.length > 0) {
+        console.log(`[Controller] Procurando em filhos de ${node.name}...`);
+        collectInstances((node as any).children);
+      }
+    }
+  }
+
+  collectInstances(nodes);
+  console.log(
+    `[Controller] Total de instâncias encontradas: ${instances.length}`
+  );
+
+  const promises = instances.map(async instance => {
+    try {
+      console.log(
+        `[Controller] Verificando instância: ${instance.name} (${instance.id})`
+      );
+
+      // Tenta acessar o componente principal
+      const mainComponent = await instance.getMainComponentAsync();
+
+      // Verifica se o mainComponent é nulo ou indefinido
+      if (!mainComponent) {
+        console.log(
+          `[Controller] Componente principal nulo para: ${instance.name} (${instance.id})`
+        );
+        return {
+          type: "restore-component",
+          message: "Componente principal não encontrado",
+          nodeId: instance.id,
+          nodeName: instance.name,
+          value: instance.name
+        };
+      }
+
+      // Verifica se o mainComponent foi excluído
+      if ("removed" in mainComponent && mainComponent.removed) {
+        console.log(
+          `[Controller] Componente principal removido para: ${instance.name} (${instance.id})`
+        );
+        return {
+          type: "restore-component",
+          message: "Componente principal foi removido",
+          nodeId: instance.id,
+          nodeName: instance.name,
+          value: instance.name
+        };
+      }
+
+      // Verifica se o mainComponent tem um parent (não está órfão)
+      if (!mainComponent.parent) {
+        console.log(
+          `[Controller] Componente principal sem parent: ${instance.name} (${instance.id})`
+        );
+        return {
+          type: "restore-component",
+          message: "Componente principal está órfão",
+          nodeId: instance.id,
+          nodeName: instance.name,
+          value: instance.name
+        };
+      }
+
+      // Se chegou até aqui, o componente parece estar OK
+      console.log(
+        `[Controller] Instância OK: ${instance.name} (${instance.id})`
+      );
+      return null;
+    } catch (e) {
+      // Se houver qualquer erro, consideramos como instância quebrada
+      console.log(
+        `[Controller] INSTÂNCIA QUEBRADA DETECTADA: ${instance.name} (${instance.id})`,
+        e.message
+      );
+      return {
+        type: "restore-component",
+        message: "Erro ao acessar componente principal: " + e.message,
+        nodeId: instance.id,
+        nodeName: instance.name,
+        value: instance.name
+      };
+    }
+  });
+
+  const results = await Promise.all(promises);
+  const errors = results.filter(Boolean) as any[];
+
+  console.log(
+    `[Controller] Total de instâncias quebradas encontradas: ${errors.length}`
+  );
+  if (errors.length > 0) {
+    console.log(
+      "[Controller] Detalhes das instâncias quebradas:",
+      JSON.stringify(errors, null, 2)
+    );
+  }
+  return errors;
+}
+
 // Função principal de linting otimizada
 async function lint(
   nodes: readonly any[],
@@ -333,15 +464,54 @@ async function lint(
   parentFrameId: string | null = null,
   savedTokens: any[] = []
 ): Promise<any[]> {
-  // Pré-processa as bibliotecas uma vez para otimizar a busca de IDs de estilo
+  // 1. Faz uma varredura separada e robusta para encontrar instâncias quebradas.
+  // Isso evita que a lógica complexa de linting interfira na detecção.
+  const brokenInstanceErrors = await findBrokenInstances(nodes);
+
+  // 2. Pré-processa as bibliotecas uma vez para otimizar a busca de IDs de estilo nas outras regras.
   const preprocessedLibs = preprocessLibraries(libraries);
-  return await lintRecursive(
+  const otherErrors = await lintRecursive(
     nodes,
     preprocessedLibs,
     parentFrameId,
     savedTokens,
     libraries
   );
+
+  // 3. Combina os erros de instâncias quebradas com os outros erros de linting.
+  console.log(
+    "[Controller] Erros de instâncias quebradas (antes de combinar):",
+    JSON.stringify(brokenInstanceErrors, null, 2)
+  );
+  console.log(
+    "[Controller] Outros erros (antes de combinar):",
+    JSON.stringify(otherErrors, null, 2)
+  );
+
+  const combinedErrors = [...brokenInstanceErrors, ...otherErrors];
+
+  console.log("[Controller] Total de erros combinados:", combinedErrors.length);
+  console.log("[Controller] Erros combinados (objeto):", combinedErrors);
+  console.log(
+    "[Controller] Erros combinados (JSON):",
+    JSON.stringify(combinedErrors, null, 2)
+  );
+
+  // Verifica se há erros do tipo restore-component
+  const restoreComponentErrors = combinedErrors.filter(
+    err => err.type === "restore-component"
+  );
+  console.log(
+    `[Controller] Encontrados ${restoreComponentErrors.length} erros do tipo 'restore-component'`
+  );
+  restoreComponentErrors.forEach((err, i) => {
+    console.log(
+      `[Controller] Erro restore-component ${i + 1}:`,
+      JSON.stringify(err, null, 2)
+    );
+  });
+
+  return combinedErrors;
 }
 
 async function lintRecursive(
@@ -356,46 +526,37 @@ async function lintRecursive(
   savedTokens: any[],
   libraries: any[]
 ): Promise<any[]> {
-  let errors: any[] = [];
+  let allErrors: any[] = [];
 
-  try {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
+  for (const node of nodes) {
+    if (!node || node.visible === false || node.locked === true) {
+      continue;
+    }
 
-      if (node.visible === false || node.locked === true) {
-        continue;
+    // Determine the current frame context for this node and its children.
+    const currentFrameId = node.type === "FRAME" ? node.id : parentFrameId;
+
+    // Lint the current node unless it's a type we completely ignore for linting.
+    if (node.type !== "SLICE" && node.type !== "GROUP") {
+      try {
+        const nodeErrors = await determineTypeWithFrame(
+          node,
+          preprocessedLibs,
+          currentFrameId,
+          savedTokens,
+          libraries
+        );
+        if (nodeErrors && nodeErrors.length > 0) {
+          allErrors.push(...nodeErrors);
+        }
+      } catch (e) {
+        console.error(`Error linting node ${node.id} (${node.name}):`, e);
       }
+    }
 
-      // Pular tipos de nodes que não precisam ser analisados
-      if (node.type === "SLICE" || node.type === "GROUP") {
-        continue;
-      }
-
-      // Identifica o frame pai: se o node for um FRAME, ele é o novo parentFrameId
-      let currentFrameId = parentFrameId;
-      if (node.type === "FRAME") {
-        currentFrameId = node.id;
-      }
-
-      // Chama a função de lint para o node, passando o parentFrameId e tokens salvos
-      const nodeErrors = await determineTypeWithFrame(
-        node,
-        preprocessedLibs,
-        currentFrameId,
-        savedTokens,
-        libraries
-      );
-
-      if (nodeErrors && Array.isArray(nodeErrors)) {
-        errors = errors.concat(nodeErrors);
-      }
-
-      // Se o node tiver filhos, processa recursivamente
-      if (
-        node.children &&
-        Array.isArray(node.children) &&
-        node.children.length > 0
-      ) {
+    // Recurse into children, if any. This is now independent of the parent's type.
+    if (node.children && node.children.length > 0) {
+      try {
         const childErrors = await lintRecursive(
           node.children,
           preprocessedLibs,
@@ -403,15 +564,16 @@ async function lintRecursive(
           savedTokens,
           libraries
         );
-        errors.push(...childErrors);
+        if (childErrors && childErrors.length > 0) {
+          allErrors.push(...childErrors);
+        }
+      } catch (e) {
+        console.error(`Error recursing into children of ${node.id}:`, e);
       }
     }
-  } catch (error) {
-    console.error("[Controller] Erro durante o linting:", error);
-    // Retorna array vazio em caso de erro, mas não quebra o plugin
   }
 
-  return errors;
+  return allErrors;
 }
 
 // Função para determinar o tipo de node e aplicar regras de linting, incluindo o parentFrameId
@@ -429,65 +591,82 @@ async function determineTypeWithFrame(
 ): Promise<any[]> {
   try {
     let errors: any[] = [];
+    // A verificação de instâncias quebradas foi movida para uma função separada (`findBrokenInstances`)
+    // para maior robustez e para evitar que a lógica de linting de estilos interfira.
+
     switch (node.type) {
       case "SLICE":
       case "GROUP":
-        return [];
+        // Não há regras para esses tipos, então apenas continuamos.
+        break;
       case "CIRCLE":
       case "VECTOR":
       case "STAR":
       case "BOOLEAN_OPERATION":
       case "SQUARE":
-        errors = await lintShapeRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintShapeRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       case "FRAME":
-        errors = await lintFrameRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintFrameRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       case "INSTANCE":
       case "RECTANGLE":
-        errors = await lintRectangleRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintRectangleRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       case "COMPONENT":
-        errors = await lintComponentRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintComponentRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       case "TEXT":
-        errors = await lintTextRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintTextRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       case "LINE":
-        errors = await lintLineRules(
-          node,
-          preprocessedLibs,
-          savedTokens,
-          libraries
+        errors.push(
+          ...(await lintLineRules(
+            node,
+            preprocessedLibs,
+            savedTokens,
+            libraries
+          ))
         );
         break;
       default:
-        return [];
+        // Para tipos não tratados, não fazemos nada.
+        break;
     }
     // Adiciona o parentFrameId em cada erro
     if (parentFrameId) {
@@ -552,17 +731,6 @@ async function lintFrameRules(
 ): Promise<any[]> {
   const errors: any[] = [];
   try {
-    // Adiciona verificação para instâncias quebradas (componente principal deletado)
-    if (node.type === "INSTANCE" && node.mainComponent === null) {
-      errors.push({
-        type: "detach",
-        message: "Instância quebrada (componente principal não encontrado)",
-        nodeId: node.id,
-        nodeName: node.name,
-        value: node.name
-      });
-    }
-
     await Promise.all([
       newCheckFills(node, errors, preprocessedLibs, savedTokens, libraries),
       newCheckEffects(node, errors, preprocessedLibs, savedTokens, libraries),
@@ -844,27 +1012,83 @@ async function getLibrariesWithLocalVariables(
   return effectiveLibraries;
 }
 
-// Função para coletar todos os nodes recursivamente (otimizada)
-function collectAllNodes(nodes: any[]): any[] {
-  const all: any[] = [];
-  const maxNodes = 1000; // Limite para evitar processamento excessivo
+// Função para restaurar um componente quebrado
+async function restoreBrokenComponent(
+  nodeId: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const node = figma.getNodeById(nodeId) as InstanceNode;
 
-  function collect(node: any) {
-    if (all.length >= maxNodes) return; // Parar se atingir o limite
-
-    all.push(node);
-    if (node.children && Array.isArray(node.children)) {
-      for (const child of node.children) {
-        collect(child);
-      }
+    if (!node) {
+      return { success: false, message: "Node não encontrado" };
     }
-  }
 
-  for (const node of nodes) {
-    collect(node);
-  }
+    if (node.type !== "INSTANCE") {
+      return {
+        success: false,
+        message: "Apenas instâncias podem ser restauradas"
+      };
+    }
 
-  return all;
+    // Tenta restaurar o componente principal
+    try {
+      // Tenta obter o componente principal
+      const mainComponent = node.mainComponent;
+      if (mainComponent) {
+        // Se o componente principal ainda estiver disponível, tenta restaurar
+        // Cria uma nova instância do componente principal
+        const newInstance = mainComponent.createInstance();
+
+        // Copia as propriedades visuais e de layout da instância quebrada para a nova
+        if (node.parent) {
+          // Salva a posição e tamanho
+          const { x, y, width, height, rotation } = node;
+
+          // Insere a nova instância na mesma posição
+          (node.parent as any).appendChild(newInstance);
+
+          // Aplica as mesmas propriedades visuais
+          newInstance.x = x;
+          newInstance.y = y;
+          newInstance.resize(width, height);
+          newInstance.rotation = rotation;
+
+          // Remove a instância quebrada
+          node.remove();
+
+          // Seleciona a nova instância
+          figma.currentPage.selection = [newInstance];
+
+          return {
+            success: true,
+            message: "Componente restaurado com sucesso"
+          };
+        } else {
+          return {
+            success: false,
+            message: "Não foi possível acessar o nó pai"
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: "Componente principal não encontrado"
+        };
+      }
+    } catch (e) {
+      console.error("Erro ao restaurar componente:", e);
+      return {
+        success: false,
+        message: `Erro ao restaurar componente: ${e.message}`
+      };
+    }
+  } catch (e) {
+    console.error("Erro ao processar restauração:", e);
+    return {
+      success: false,
+      message: `Erro ao processar restauração: ${e.message}`
+    };
+  }
 }
 
 // Listener para mensagens da UI
@@ -1051,13 +1275,54 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       });
       return;
     }
+
+    // Handle restore component action
+    if (msg.type === "restore-component" && msg.nodeId) {
+      try {
+        const result = await restoreBrokenComponent(msg.nodeId);
+
+        // Notify the UI about the result
+        figma.ui.postMessage({
+          type: "component-restored",
+          success: result.success,
+          message: result.message,
+          nodeId: msg.nodeId
+        });
+
+        // If successful, update the UI to reflect the changes
+        if (result.success) {
+          // Trigger a re-check of the current selection
+          const nodesToCheck = figma.currentPage.selection;
+          if (nodesToCheck.length > 0) {
+            const errors = await lint(nodesToCheck, [], null, []);
+            const groupedErrors = groupErrorsByNode(errors);
+
+            figma.ui.postMessage({
+              type: "errors-updated",
+              errors: groupedErrors,
+              totalErrors: errors.length
+            });
+          }
+        }
+
+        return;
+      } catch (e) {
+        console.error("Error in restore-component handler:", e);
+        figma.ui.postMessage({
+          type: "component-restored",
+          success: false,
+          message: `Erro ao restaurar componente: ${e.message}`,
+          nodeId: msg.nodeId
+        });
+      }
+      return;
+    }
     // Handler para atualizar erros (usado pela página de camadas)
     if (msg.type === "update-errors") {
       console.log("[Controller] Processando update-errors");
       try {
-        const nodes = figma.currentPage.selection;
-        if (nodes && nodes.length > 0) {
-          const allNodes = collectAllNodes(nodes);
+        const nodesToLint = figma.currentPage.selection;
+        if (nodesToLint && nodesToLint.length > 0) {
           const baseLibraries = Array.isArray(msg.libraries)
             ? msg.libraries
             : [];
@@ -1067,13 +1332,13 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           );
 
           const lintResults = await lint(
-            allNodes,
+            nodesToLint,
             effectiveLibraries,
             null,
             msg.savedTokens || []
           );
           const groupedErrors = groupErrorsByNode(lintResults);
-          const serializedNodes = serializeNodes(allNodes);
+          const serializedNodes = serializeNodes(nodesToLint);
 
           figma.ui.postMessage({
             type: "updated errors",
@@ -1644,15 +1909,12 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
       figma.ui.postMessage({ type: "show-preloader" });
       try {
-        const nodes = figma.currentPage.selection;
-        const allNodes = collectAllNodes(nodes);
+        const nodesToLint = figma.currentPage.selection;
 
         // Limitar o tempo de processamento
         const startTime = Date.now();
         const maxProcessingTime = 5000; // 5 segundos máximo
 
-        // Resolve libraries (tokens) to use in audit:
-        // Priority: libraries passed from UI; fallback to saved user libs in clientStorage.
         console.log(
           "[Controller] Iniciando resolução das bibliotecas para auditoria"
         );
@@ -1720,13 +1982,13 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         );
 
         const lintResults = await lint(
-          allNodes,
+          nodesToLint,
           effectiveLibrariesWithVariables,
           null,
           msg.savedTokens || []
         );
 
-        // Verificar se o processamento demorou muito
+        // Check if processing took too long
         if (Date.now() - startTime > maxProcessingTime) {
           console.warn(
             "[Controller] Processamento demorou mais que 5 segundos"
@@ -1734,15 +1996,24 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         }
 
         const groupedErrors = groupErrorsByNode(lintResults);
-        const serializedNodes = serializeNodes(allNodes);
+        const serializedNodes = serializeNodes(nodesToLint);
 
-        // Salva o resultado da análise no clientStorage
+        // Count total nodes for summary
+        let totalNodeCount = 0;
+        const countNodes = (nodesToCount: any[]) => {
+          totalNodeCount += nodesToCount.length;
+          nodesToCount.forEach(n => {
+            if (n.children) countNodes(n.children);
+          });
+        };
+        countNodes(serializedNodes);
+
         const inspectorData = {
           errors: groupedErrors,
           nodes: serializedNodes,
           date: new Date().toISOString(),
           summary: {
-            totalNodes: allNodes.length,
+            totalNodes: totalNodeCount,
             totalErrors: lintResults.length
           }
         };

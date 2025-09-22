@@ -23,15 +23,17 @@ function InfoPanel({ isVisible, onClose }) {
         <div className="info-panel-content">
           <h3>Sobre o SolarOps</h3>
           <p>
-            O SolarOps é uma iniciativa do Studio de Design da Compass UOL, que
-            oferece aos clientes parceiros diversas ações para aprimorar seus
-            processos e potencializar os ganhos operacionais em design.
+            O SolarOps é uma iniciativa do Studio de UX na AI/R Company pela
+            Compass UOL, que oferece aos clientes parceiros diversas ações para
+            aprimorar seus processos e potencializar os ganhos operacionais em
+            design.
           </p>
           <p>
-            Este plugin tem o objetivo de facilitar o trabalho de qualidade nos
-            projetos de design, permitindo realizar uma auditoria de
-            conformidade visual ao comparar o uso dos tokens e componentes do
-            design system da companhia com o projeto analisado.
+            ste plugin tem o objetivo de facilitar e escalar o trabalho de
+            qualidade em projetos de design. Ele funciona como um assistente
+            multifuncional, permitindo realizar auditorias de conformidade,
+            verificar a acessibilidade e fornecer ferramentas que agilizam o
+            handoff para o desenvolvimento.
           </p>
           <p>
             Além da auditoria de conformidade, o plugin possibilita identificar

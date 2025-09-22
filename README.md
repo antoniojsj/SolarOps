@@ -1,6 +1,6 @@
 # SolarOps - Plugin para Figma
 
-O SolarOps é uma iniciativa do Studio de Design da Compass UOL, que oferece aos clientes parceiros diversas ações para aprimorar seus processos e potencializar os ganhos operacionais em design.
+O SolarOps é uma iniciativa do Studio de UX na AI/R Company pela Compass UOL, que oferece aos clientes parceiros diversas ações para aprimorar seus processos e potencializar os ganhos operacionais em design.
 
 Este plugin tem o objetivo de facilitar e escalar o trabalho de qualidade em projetos de design. Ele funciona como um assistente multifuncional, permitindo realizar auditorias de conformidade, verificar a acessibilidade e fornecer ferramentas que agilizam o handoff para o desenvolvimento.
 
