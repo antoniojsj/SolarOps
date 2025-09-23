@@ -18,7 +18,7 @@ interface ErrorItem {
     type?: string;
     [key: string]: any;
   };
-  errors?: Array<{
+  errors: Array<{
     type: string;
     value?: string;
     message: string;

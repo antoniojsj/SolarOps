@@ -29,7 +29,7 @@ interface ErrorItem {
     type?: string;
     [key: string]: any;
   };
-  errors?: Array<{
+  errors: Array<{
     type: string;
     value?: string;
     message: string;
@@ -780,35 +780,38 @@ const App = ({}) => {
         )
         .forEach(el => el.remove());
 
-      // Cria um wrapper para a exportação com o estilo correto
+      // Cria um wrapper para a exportação com espaçamento ajustado
       const exportWrapper = document.createElement("div");
-      exportWrapper.style.padding = "0";
+      exportWrapper.style.padding = "24px 0 16px 0"; // Ajuste do padding top e bottom
+      exportWrapper.style.margin = "0";
       exportWrapper.style.backgroundColor = "#000";
-      exportWrapper.style.borderRadius = "16px";
+      exportWrapper.style.borderRadius = "0";
       exportWrapper.style.width = "100%";
-      exportWrapper.style.maxWidth = "600px";
-      exportWrapper.style.margin = "0 auto";
+      exportWrapper.style.display = "block";
       exportWrapper.style.boxSizing = "border-box";
       exportWrapper.style.fontFamily =
         'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      exportWrapper.style.overflow = "hidden";
 
       // Cria um container para o cabeçalho do relatório
       const headerContainer = document.createElement("div");
       headerContainer.style.display = "flex";
       headerContainer.style.justifyContent = "space-between";
       headerContainer.style.alignItems = "center";
-      headerContainer.style.marginBottom = "8px";
+      headerContainer.style.margin = "0";
+      headerContainer.style.padding = "0";
       headerContainer.style.width = "100%";
-      headerContainer.style.padding = "0 8px";
 
       // Adiciona o título do relatório
       const title = document.createElement("h1");
       title.textContent = "Relatório da Auditoria";
       title.style.color = "#fff";
-      title.style.margin = "0";
-      title.style.fontSize = "18px";
+      title.style.margin = "0 0 16px 0"; // Ajuste da margem inferior
+      title.style.padding = "0 8px"; // Alinhamento com o conteúdo
+      title.style.fontSize = "20px";
       title.style.fontWeight = "600";
       title.style.fontFamily = "inherit";
+      title.style.lineHeight = "1.2";
 
       // Adiciona a logo da Compass
       const logoContainer = document.createElement("div");
@@ -823,13 +826,15 @@ const App = ({}) => {
       headerContainer.appendChild(title);
       headerContainer.appendChild(logoContainer);
 
-      // Cria um container para o conteúdo do relatório
+      // Cria um container para o conteúdo do relatório com espaçamento ajustado
       const contentContainer = document.createElement("div");
       contentContainer.className = "report-content";
+      contentContainer.style.margin = "0";
+      contentContainer.style.padding = "8px 24px 0 24px"; // Ajuste do padding horizontal e top
+      contentContainer.style.boxSizing = "border-box";
       contentContainer.style.width = "100%";
-      contentContainer.style.maxWidth = "100%";
+      contentContainer.style.maxWidth = "1000px";
       contentContainer.style.margin = "0 auto";
-      contentContainer.style.padding = "0 24px 0";
 
       // Adiciona o cabeçalho e o conteúdo ao container
       contentContainer.appendChild(headerContainer);
@@ -844,6 +849,15 @@ const App = ({}) => {
         lastElement.style.marginBottom = "0";
         lastElement.style.paddingBottom = "0";
       }
+
+      // Remove margens extras dos gráficos
+      const charts = containerClone.querySelectorAll(
+        ".chart-container, .chart, .recharts-wrapper"
+      );
+      charts.forEach((chart: HTMLElement) => {
+        chart.style.margin = "0";
+        chart.style.padding = "0";
+      });
 
       // Garante que todo o texto seja visível na exportação
       const allTextElements = exportWrapper.querySelectorAll("*");
@@ -878,11 +892,12 @@ const App = ({}) => {
       tempContainer.style.position = "absolute";
       tempContainer.style.left = "-9999px";
       tempContainer.style.top = "0";
-      tempContainer.style.visibility = "visible"; // Torna visível para captura
+      tempContainer.style.visibility = "visible";
       tempContainer.style.zIndex = "9999";
-      tempContainer.style.width = "800px";
-      tempContainer.style.height = "auto";
-      tempContainer.style.overflow = "visible";
+      tempContainer.style.padding = "0";
+      tempContainer.style.margin = "0";
+      tempContainer.style.border = "none";
+      tempContainer.style.background = "transparent";
 
       tempContainer.appendChild(exportWrapper);
       document.body.appendChild(tempContainer);
@@ -893,19 +908,28 @@ const App = ({}) => {
         // Força um reflow para garantir que todos os estilos sejam aplicados
         void exportWrapper.offsetHeight;
 
+        // Remove qualquer altura fixa para permitir que o conteúdo defina o tamanho
+        exportWrapper.style.height = "auto";
+        tempContainer.style.height = "auto";
+
+        // Força o redesenho
+        void exportWrapper.offsetHeight;
+
         // Importa o html2canvas dinamicamente para evitar problemas de SSR
         const html2canvas = (await import("html2canvas")).default;
 
         console.log("Convertendo o relatório para canvas...");
 
-        // Converte o wrapper de exportação para canvas
+        // Converte o wrapper de exportação para canvas sem margens
         const canvas = await html2canvas(exportWrapper, {
-          backgroundColor: "#000000",
-          scale: 1.5, // Aumenta a escala para melhor qualidade
-          logging: true,
-          useCORS: true,
-          allowTaint: true,
-          removeContainer: false,
+          scale: 2, // Maior resolução
+          backgroundColor: "#000000", // Fundo preto
+          logging: false, // Desativa logs
+          useCORS: true, // Permite carregar imagens de outras origens
+          allowTaint: true, // Permite carregar imagens de outras origens
+          windowWidth: exportWrapper.scrollWidth,
+          windowHeight: exportWrapper.scrollHeight,
+          removeContainer: true,
           onclone: (clonedDoc, element) => {
             // Garante que todos os estilos sejam aplicados corretamente no documento clonado
             const style = clonedDoc.createElement("style");
