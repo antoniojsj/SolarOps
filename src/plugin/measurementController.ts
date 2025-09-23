@@ -29,6 +29,13 @@ import { drawSpacing, getSpacing, setSpacing } from "./measurement/spacing"; // 
 import { getState } from "./measurement/store"; // Adjusted path
 import { setTooltip } from "./measurement/tooltip"; // Adjusted path
 
+// Type for note data
+interface NoteData {
+  text: string;
+  type: string;
+  color: string;
+}
+
 figma.skipInvisibleInstanceChildren = true;
 
 // This part will be handled by SolarOps's main controller, not here.
@@ -41,6 +48,155 @@ figma.skipInvisibleInstanceChildren = true;
 // figma.root.setRelaunchData({
 //   open: '',
 // });
+
+// Add note to the canvas
+export const addNote = async (noteData: NoteData) => {
+  try {
+    // Create a frame for the note
+    const noteFrame = figma.createFrame();
+    noteFrame.name = `Note: ${noteData.type}`;
+
+    // Set the size and style
+    noteFrame.resize(240, 120);
+    noteFrame.fills = [
+      {
+        type: "SOLID",
+        color: { r: 0.1, g: 0.1, b: 0.1 },
+        opacity: 0.9
+      }
+    ];
+    noteFrame.cornerRadius = 8;
+    noteFrame.strokes = [
+      {
+        type: "SOLID",
+        color: hexToRgb(noteData.color) || { r: 0.5, g: 0.5, b: 0.5 },
+        opacity: 1
+      }
+    ];
+    noteFrame.strokeWeight = 2;
+
+    // Add a header with the note type
+    const headerContainer = figma.createFrame();
+    headerContainer.name = "Note Header Container";
+    headerContainer.layoutMode = "HORIZONTAL";
+    headerContainer.layoutSizingHorizontal = "HUG";
+    headerContainer.layoutSizingVertical = "HUG";
+    headerContainer.counterAxisAlignItems = "CENTER";
+    headerContainer.primaryAxisAlignItems = "MIN"; // Alinha o conteúdo à esquerda
+    headerContainer.paddingTop = 4;
+    headerContainer.paddingBottom = 4;
+    headerContainer.paddingLeft = 8;
+    headerContainer.paddingRight = 8;
+    headerContainer.cornerRadius = 4;
+    headerContainer.layoutAlign = "INHERIT"; // Herda o alinhamento do pai
+    headerContainer.fills = [
+      {
+        type: "SOLID",
+        color: hexToRgb(noteData.color) || { r: 1, g: 1, b: 1 },
+        opacity: 0.08 // 8% de opacidade
+      }
+    ];
+
+    const header = figma.createText();
+    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+    header.name = "Note Header";
+    header.characters = noteData.type.toUpperCase();
+    header.fontSize = 10;
+    header.letterSpacing = { value: 1, unit: "PIXELS" };
+    header.textCase = "UPPER";
+    header.fills = [
+      {
+        type: "SOLID",
+        color: hexToRgb(noteData.color) || { r: 1, g: 1, b: 1 },
+        opacity: 1
+      }
+    ];
+
+    // Adiciona o texto ao container do cabeçalho
+    headerContainer.appendChild(header);
+
+    // Remove formatação Markdown do texto
+    const removeMarkdown = (text: string): string => {
+      return text
+        .replace(/\*\*(.*?)\*\*/g, "$1") // Remove **negrito**
+        .replace(/(?:\*|_)(.*?)(?:\*|_)/g, "$1"); // Remove *itálico* ou _itálico_
+    };
+
+    // Cria o texto da nota
+    const noteText = figma.createText();
+    noteText.name = "Note Content";
+    noteText.characters = removeMarkdown(noteData.text);
+    noteText.fontSize = 12;
+    noteText.fills = [
+      {
+        type: "SOLID",
+        color: { r: 1, g: 1, b: 1 },
+        opacity: 0.9
+      }
+    ];
+    noteText.textAutoResize = "HEIGHT";
+
+    // Position elements
+    noteFrame.layoutMode = "VERTICAL";
+    noteFrame.counterAxisAlignItems = "MIN"; // Alinha itens à esquerda
+    noteFrame.itemSpacing = 0; // Removido o espaçamento padrão para controlar manualmente
+    noteFrame.horizontalPadding = 16;
+    noteFrame.verticalPadding = 16;
+
+    // Add elements to frame
+    noteFrame.appendChild(headerContainer);
+
+    // Adiciona um frame vazio como espaçador
+    const spacer = figma.createFrame();
+    spacer.name = "Spacer";
+    spacer.resize(1, 24); // 24px de altura
+    spacer.fills = [];
+    spacer.layoutGrow = 0; // Impede que o spacer cresça
+
+    // Configura o texto para ocupar toda a largura e alinhar à esquerda
+    noteText.layoutAlign = "STRETCH";
+    noteText.textAlignHorizontal = "LEFT";
+
+    noteFrame.appendChild(spacer);
+    noteFrame.appendChild(noteText);
+
+    // Position the note near the center of the viewport
+    const viewportCenter = {
+      x: figma.viewport.center.x,
+      y: figma.viewport.center.y
+    };
+
+    noteFrame.x = viewportCenter.x - noteFrame.width / 2;
+    noteFrame.y = viewportCenter.y - noteFrame.height / 2;
+
+    // Add to current page
+    figma.currentPage.appendChild(noteFrame);
+
+    // Select the new note
+    figma.currentPage.selection = [noteFrame];
+
+    return true;
+  } catch (error) {
+    console.error("Error creating note:", error);
+    return false;
+  }
+};
+
+// Helper function to convert hex color to RGB
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  // Remove # if present
+  hex = hex.replace(/^#/, "");
+
+  // Parse r, g, b values
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return null;
+
+  return {
+    r: parseInt(result[1], 16) / 255,
+    g: parseInt(result[2], 16) / 255,
+    b: parseInt(result[3], 16) / 255
+  };
+}
 
 export const getPluginData = (node, name) => {
   const data = node.getPluginData(name);
@@ -365,6 +521,14 @@ export const sendSelection = () =>
 EventEmitter.on("resize", ({ width, height }) =>
   figma.ui.resize(width, height)
 );
+
+// Handle add-note message
+EventEmitter.on("add-note", async (noteData: NoteData) => {
+  const success = await addNote(noteData);
+  if (!success) {
+    figma.notify("Erro ao adicionar a nota. Por favor, tente novamente.");
+  }
+});
 
 EventEmitter.answer("current selection", async () => getSelectionArray());
 
@@ -847,7 +1011,7 @@ export const createPresetMeasurementForNode = async (
   node: SceneNode,
   position: PresetPosition,
   offset = 10,
-  strokeCap: VectorStrokeCap = "NONE"
+  strokeCap: StrokeCap = "NONE"
 ) => {
   const { x, y, w, h } = getNodeAbs(node as any);
 
@@ -991,13 +1155,9 @@ export const createPresetMeasurementForNode = async (
 
   const groupNodes = [leftVec, rightVec, bg, text];
 
-  if (strokeCap === "STANDARD") {
-    leftVec.strokeCap = "NONE";
-    rightVec.strokeCap = "NONE";
-  } else {
-    leftVec.strokeCap = strokeCap;
-    rightVec.strokeCap = strokeCap;
-  }
+  // Definir o strokeCap para os vetores
+  leftVec.strokeCap = strokeCap || "NONE";
+  rightVec.strokeCap = strokeCap || "NONE";
 
   const group = figma.group(groupNodes, figma.currentPage);
   group.name = `Dimension (${labelText})`;

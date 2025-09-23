@@ -1340,9 +1340,29 @@ async function restoreBrokenComponent(
   }
 }
 
+// Importar a função addNote do measurementController
+import { addNote } from "./measurementController";
+
 // Listener para mensagens da UI
 figma.ui.onmessage = async (msg: UIMessage) => {
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
+
+  // Verificar se é uma mensagem de adicionar nota
+  if (msg.type === "add-note") {
+    try {
+      console.log(
+        "[Controller] Recebida mensagem para adicionar nota:",
+        msg.payload
+      );
+      const success = await addNote(msg.payload);
+      if (!success) {
+        console.error("[Controller] Falha ao adicionar nota");
+      }
+    } catch (error) {
+      console.error("[Controller] Erro ao processar adição de nota:", error);
+    }
+    return;
+  }
 
   try {
     // ===== Handlers do Medidor (canvas) =====

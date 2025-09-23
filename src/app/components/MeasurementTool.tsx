@@ -18,6 +18,7 @@ const COLORS = {
   primary: "#3b82f6",
   background: "rgba(30, 30, 30, 0.9)",
   text: "#e0e0e0",
+  textMuted: "#a0a0a0",
   border: "#444",
   highlight: "rgba(59, 130, 246, 0.2)"
 };
@@ -140,8 +141,19 @@ const MeasurementTool: React.FC = observer(() => {
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(
     "notes"
   );
-  const [strokeCap, setStrokeCap] = useState<StrokeCap>("STANDARD");
-  const [strokeOffset, setStrokeOffset] = useState(10);
+  const [strokeCap, setStrokeCap] = useState<StrokeCap>("NONE");
+  const [strokeOffset, setStrokeOffset] = useState(0);
+  const [noteText, setNoteText] = useState("");
+  const [noteType, setNoteType] = useState("comportamento");
+
+  // Cores para cada tipo de nota
+  const noteTypeColors = {
+    comportamento: "#3b82f6", // Azul
+    acessibilidade: "#10b981", // Verde
+    interacao: "#f59e0b", // Amarelo
+    navegacao: "#8b5cf6", // Roxo
+    responsividade: "#ec4899" // Rosa
+  };
 
   // Inicializa o plugin
   useEffect(() => {
@@ -270,6 +282,28 @@ const MeasurementTool: React.FC = observer(() => {
     );
   };
 
+  // Adicionar uma nova nota
+  const addNote = () => {
+    if (!noteText.trim()) return;
+
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "add-note",
+          payload: {
+            text: noteText,
+            type: noteType,
+            color: noteTypeColors[noteType as keyof typeof noteTypeColors]
+          }
+        }
+      },
+      "*"
+    );
+
+    // Limpar o campo de texto após adicionar a nota
+    setNoteText("");
+  };
+
   // Distância: presets no canvas
   const createPreset = (
     position: "top" | "bottom" | "left" | "right" | "h-center" | "v-center"
@@ -288,7 +322,7 @@ const MeasurementTool: React.FC = observer(() => {
   return (
     <MeasurementContainer>
       <PanelSection>
-        <PanelTitle>Modo de Medição</PanelTitle>
+        <PanelTitle>Recursos</PanelTitle>
         <Toolbar>
           <ToolButton
             $active={measurementMode === "notes"}
@@ -386,6 +420,133 @@ const MeasurementTool: React.FC = observer(() => {
         )}
       </PanelSection>
 
+      {/* Seção de Adicionar Notas - Apenas no modo de anotações */}
+      {measurementMode === "notes" && (
+        <PanelSection>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "12px"
+            }}
+          >
+            <PanelTitle style={{ margin: 0 }}>Adicionar notas</PanelTitle>
+            <select
+              value={noteType}
+              onChange={e => setNoteType(e.target.value)}
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                border: `1px solid ${COLORS.border}`,
+                color: COLORS.text,
+                borderRadius: "4px",
+                padding: "4px 8px",
+                fontSize: "12px",
+                height: "28px",
+                minWidth: "120px",
+                outline: "none",
+                cursor: "pointer"
+              }}
+            >
+              <option value="comportamento">Comportamento</option>
+              <option value="acessibilidade">Acessibilidade</option>
+              <option value="interacao">Interação</option>
+              <option value="navegacao">Navegação</option>
+              <option value="responsividade">Responsividade</option>
+            </select>
+          </div>
+          <div
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.06)",
+              borderRadius: "6px",
+              padding: "12px",
+              minHeight: "160px",
+              border: `1px solid ${COLORS.border}`,
+              marginTop: "8px"
+            }}
+          >
+            <textarea
+              id="notes-textarea"
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              placeholder="Digite suas notas aqui..."
+              style={{
+                width: "100%",
+                minHeight: "120px",
+                backgroundColor: "transparent",
+                border: "none",
+                color: COLORS.text,
+                fontSize: "12px",
+                lineHeight: "1.5",
+                resize: "none",
+                outline: "none",
+                fontFamily: "Inter, sans-serif",
+                padding: "8px 0"
+              }}
+              onKeyDown={e => {
+                // Adiciona atalhos de teclado
+                if (e.ctrlKey || e.metaKey) {
+                  const textarea = e.target as HTMLTextAreaElement;
+                  const start = textarea.selectionStart || 0;
+                  const end = textarea.selectionEnd || 0;
+                  const text = textarea.value;
+                  const selectedText = text.substring(start, end);
+                  const beforeText = text.substring(0, start);
+                  const afterText = text.substring(end);
+
+                  if (e.key === "b") {
+                    e.preventDefault();
+                    const newText = `${beforeText}**${selectedText}**${afterText}`;
+                    setNoteText(newText);
+                    // Atualiza a seleção após a atualização do estado
+                    setTimeout(() => {
+                      textarea.setSelectionRange(start + 2, end + 2);
+                    }, 0);
+                  } else if (e.key === "i") {
+                    e.preventDefault();
+                    const newText = `${beforeText}*${selectedText}*${afterText}`;
+                    setNoteText(newText);
+                    // Atualiza a seleção após a atualização do estado
+                    setTimeout(() => {
+                      textarea.setSelectionRange(start + 1, end + 1);
+                    }, 0);
+                  }
+                } else if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  addNote();
+                }
+              }}
+            />
+            <button
+              onClick={addNote}
+              disabled={!noteText.trim()}
+              style={
+                {
+                  backgroundColor: noteText.trim() ? COLORS.primary : "#4b5563",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  cursor: noteText.trim() ? "pointer" : "not-allowed",
+                  width: "100%",
+                  marginTop: "8px",
+                  transition: "background-color 0.2s",
+                  opacity: noteText.trim() ? 1 : 0.7,
+                  ":hover": noteText.trim()
+                    ? {
+                        backgroundColor: "#2563eb"
+                      }
+                    : {}
+                } as React.CSSProperties
+              }
+            >
+              Inserir nota
+            </button>
+          </div>
+        </PanelSection>
+      )}
+
       {measurementMode === "distance" && (
         <PanelSection>
           <PanelTitle>Estilo da Linha</PanelTitle>
@@ -398,39 +559,43 @@ const MeasurementTool: React.FC = observer(() => {
         </PanelSection>
       )}
 
-      <PanelSection>
-        <PanelTitle>Controles</PanelTitle>
-        <Toolbar>
-          <ToolButton onClick={toggleGuides} $active={showGuides}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M3 3h18v18H3z" />
-              <path d="M3 9h18M9 3v18M3 15h18M15 3v18" />
-            </svg>
-            {showGuides ? "Ocultar Guias" : "Mostrar Guias"}
-          </ToolButton>
-
-          <ToolButton onClick={clearMeasurements}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-            Limpar
-          </ToolButton>
-        </Toolbar>
-      </PanelSection>
+      {measurementMode === "distance" && (
+        <PanelSection>
+          <PanelTitle>Controles</PanelTitle>
+          <Toolbar>
+            <ToolButton onClick={toggleGuides} $active={showGuides}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M3 3v18h18" />
+                <path d="M3 12h18" />
+                <path d="M3 6h18" />
+                <path d="M3 18h18" />
+              </svg>
+              Mostrar guias
+            </ToolButton>
+            <ToolButton onClick={clearMeasurements}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              Limpar
+            </ToolButton>
+          </Toolbar>
+        </PanelSection>
+      )}
 
       {null}
     </MeasurementContainer>
