@@ -69,8 +69,8 @@ export const addNode = async (
       gap = anyNode.itemSpacing || 0;
     }
 
-    // Ícone de Padding (border_style)
-    const padIconSvg = `<svg width="16" height="16" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg" fill="#8C8C8C"><path d="M280-120v-80h80v80h-80Zm160 0v-80h80v80h-80Zm160 0v-80h80v80h-80Zm160 0v-80h80v80h-80Zm0-160v-80h80v80h-80Zm0-160v-80h80v80h-80Zm0-160v-80h80v80h-80ZM120-120v-720h720v80H200v640h-80Z"/></svg>`;
+    // Ícone de Padding do arquivo assets/Padding.svg
+    const padIconSvg = `<svg width="16" height="16" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg" fill="#8C8C8C"><path d="M80-80v-800h80v800H80Zm340-200v-400h120v400H420ZM800-80v-800h80v800h-80Z"/></svg>`;
     const padIcon = figma.createNodeFromSvg(padIconSvg);
     const padText = createTooltipTextNode({ fontColor, fontSize });
     padText.x += 20;
@@ -102,10 +102,8 @@ export const addNode = async (
           : "None";
     }
     // Escolher ícone conforme modo (horizontal/vertical)
-    const layoutIconSvg =
-      layoutLabel === "Horizontal"
-        ? `<svg width="16" height="16" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg" fill="#8C8C8C"><path d="M80-80v-800h80v800H80Zm340-200v-400h120v400H420ZM800-80v-800h80v800h-80Z"/></svg>`
-        : `<svg width="16" height="16" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg" fill="#8C8C8C"><path d="M80-80v-80h800v80H80Zm200-340v-120h400v120H280ZM80-800v-80h800v80H80Z"/></svg>`;
+    // Usando o ícone de layout correto da pasta assets
+    const layoutIconSvg = `<svg width="16" height="16" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg" fill="#8C8C8C"><path d="M120-120v-520h200v-200h520v720H120Zm520-80h120v-560H400v120h240v440Zm-240 0h160v-360H400v360Zm-200 0h120v-360H200v360Zm440-440v80-80Zm-320 80Zm240 0Zm80-80Z"/></svg>`;
     const layoutIcon = figma.createNodeFromSvg(layoutIconSvg);
     const layoutText = createTooltipTextNode({ fontColor, fontSize });
     layoutText.x += 20;
@@ -143,7 +141,7 @@ export const addNode = async (
     ) {
       hasGrid = true;
     }
-    const gridIconSvg = `<svg width=\"16\" height=\"16\" viewBox=\"0 -960 960 960\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"#8C8C8C\"><path d=\"M480-118 120-398l66-50 294 228 294-228 66 50-360 280Zm0-202L120-600l360-280 360 280-360 280Zm0-280Zm0 178 230-178-230-178-230 178 230 178Z\"/></svg>`;
+    const gridIconSvg = `<svg width=\"16\" height=\"16\" viewBox=\"0 -960 960 960\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"#8C8C8C\"><path d=\"M200-80v-120H80v-80h120v-160H80v-80h120v-160H80v-80h120v-120h80v120h160v-120h80v120h160v-120h80v120h120v80H760v160h120v80H760v160h120v80H760v120h-80v-120H520v120h-80v-120H280v120h-80Zm80-200h160v-160H280v160Zm240 0h160v-160H520v160ZM280-520h160v-160H280v160Zm240 0h160v-160H520v160Z\"/></svg>`;
     const gridIcon = figma.createNodeFromSvg(gridIconSvg);
     const gridText = createTooltipTextNode({ fontColor, fontSize });
     gridText.x += 20;
