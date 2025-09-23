@@ -172,6 +172,8 @@ function SettingsPanel(props: SettingsPanelProps) {
   // Ao abrir o painel, sempre busca as bibliotecas salvas do plugin para garantir persistência
   React.useEffect(() => {
     if (props.panelVisible && isAuthenticated) {
+      // Também carrega tokens salvos automaticamente
+      handleLoadSavedTokens();
       fetchUserLibsFromPlugin();
     }
   }, [props.panelVisible, isAuthenticated]);
@@ -179,9 +181,52 @@ function SettingsPanel(props: SettingsPanelProps) {
   // Ao autenticar, inicia no passo de busca, mas só se não houver libs salvas
   React.useEffect(() => {
     if (isAuthenticated) {
+      // Também carrega tokens salvos automaticamente
+      handleLoadSavedTokens();
       fetchUserLibsFromPlugin();
     }
   }, [isAuthenticated]);
+
+  // Enriquecimento de bibliotecas com radius (fallback em designTokens.radius ou borderRadiusValues)
+  const libsEnriched = React.useMemo(() => {
+    const base = Array.isArray(libs) ? libs : [];
+    const dtRadius = Array.isArray(props.designTokens?.radius)
+      ? props.designTokens.radius
+      : [];
+    const brValues = Array.isArray(props.borderRadiusValues)
+      ? props.borderRadiusValues
+      : [];
+    return base.map(lib => {
+      const hasRadius = Array.isArray(lib.radius) && lib.radius.length > 0;
+      let radius = hasRadius ? lib.radius : [];
+      if (!hasRadius) {
+        if (dtRadius.length > 0) {
+          radius = dtRadius.map((v: any, idx: number) => {
+            if (typeof v === "number")
+              return { id: `radius-${idx}`, name: `Radius/${v}`, value: v };
+            if (v && typeof v === "object")
+              return {
+                id: v.id || `radius-${idx}`,
+                name: v.name || `Radius/${v.value ?? idx}`,
+                value: v.value ?? v
+              };
+            return {
+              id: `radius-${idx}`,
+              name: `Radius/${String(v)}`,
+              value: v
+            };
+          });
+        } else if (brValues.length > 0) {
+          radius = brValues.map((n: number, idx: number) => ({
+            id: `radius-br-${idx}`,
+            name: `Radius/${n}`,
+            value: n
+          }));
+        }
+      }
+      return { ...lib, radius };
+    });
+  }, [libs, props.designTokens, props.borderRadiusValues]);
 
   // Handler para buscar bibliotecas e exibir seleção
   function handleFetchAndShowLibs() {
@@ -310,18 +355,26 @@ function SettingsPanel(props: SettingsPanelProps) {
             {/* Tokens sem grupo (sem barra) */}
             {grouped["__root__"] &&
               grouped["__root__"].map((token, i) => {
-                // Detecta tipo do token para ícone
+                // Detecta tipo do token para ícone/label
+                const cat = (category || "").toLowerCase();
                 const isTokenText =
-                  token.style || token.fontSize || token.fontFamily;
-                const isTokenEffect =
-                  token.effects ||
-                  (category && category.toLowerCase().includes("effect"));
+                  token.style ||
+                  token.fontSize ||
+                  token.fontFamily ||
+                  cat.includes("text");
+                const isTokenEffect = token.effects || cat.includes("effect");
                 const isTokenStroke =
-                  token.strokeWeight !== undefined ||
-                  (category && category.toLowerCase().includes("stroke"));
+                  token.strokeWeight !== undefined || cat.includes("stroke");
+                const isTokenRadius = cat.includes("radius");
+                const isTokenGap =
+                  cat.includes("gap") || cat.includes("spacing");
+                const isTokenGrid = cat.includes("grid");
                 const isTokenColor =
                   !isTokenText &&
                   !isTokenEffect &&
+                  !isTokenRadius &&
+                  !isTokenGap &&
+                  !isTokenGrid &&
                   (token.value !== undefined || token.color !== undefined);
                 return (
                   <li
@@ -412,7 +465,43 @@ function SettingsPanel(props: SettingsPanelProps) {
                           }}
                         />
                       )}
-                    <span>{token.name}</span>
+                    {/* Label principal */}
+                    <span>{token.name || token.id || "Token"}</span>
+                    {/* Suporte a Radius/Gap/Grid com info ao lado */}
+                    {(isTokenRadius || isTokenGap || isTokenGrid) && (
+                      <span
+                        style={{
+                          color: "#bdbdbd",
+                          fontSize: 12,
+                          marginLeft: 8
+                        }}
+                      >
+                        {(() => {
+                          const v = token.value ?? token;
+                          if (isTokenRadius || isTokenGap) {
+                            const n =
+                              typeof v === "number"
+                                ? v
+                                : typeof v?.value === "number"
+                                ? v.value
+                                : undefined;
+                            return n !== undefined ? `${n}px` : String(v);
+                          }
+                          if (isTokenGrid) {
+                            if (typeof v === "string") return v;
+                            try {
+                              return (
+                                JSON.stringify(v).slice(0, 60) +
+                                (JSON.stringify(v).length > 60 ? "…" : "")
+                              );
+                            } catch {
+                              return String(v);
+                            }
+                          }
+                          return null;
+                        })()}
+                      </span>
+                    )}
                     {token.info && (
                       <span
                         style={{
@@ -898,7 +987,7 @@ function SettingsPanel(props: SettingsPanelProps) {
                     padding: 24
                   }}
                 >
-                  Busque as bibliotecas para importar dos dados.
+                  Busque as bibliotecas para importar os dados.
                 </div>
               </div>
             )}
@@ -1038,29 +1127,30 @@ function SettingsPanel(props: SettingsPanelProps) {
           {/* Passo 3: Revisão/listagem dos tokens antes de salvar */}
           {isAuthenticated && !showLibSelection && step === "review" && (
             <>
-              {libs.length > 0 && (
+              {libsEnriched.length > 0 && (
                 <div style={{ marginBottom: 20, width: "100%" }}>
                   <AnalysisResultsCard
-                    projectName={libs[0].name}
+                    projectName={libsEnriched[0].name}
                     analysisDate={(
-                      (libs[0].fills?.length || 0) +
-                      (libs[0].text?.length || 0) +
-                      (libs[0].effects?.length || 0) +
-                      (libs[0].strokes?.length || 0) +
-                      (libs[0].gaps?.length || 0) +
-                      (libs[0].paddings?.length || 0) +
-                      (libs[0].strokeWidths?.length || 0) +
-                      (libs[0].grids?.length || 0)
+                      (libsEnriched[0].fills?.length || 0) +
+                      (libsEnriched[0].text?.length || 0) +
+                      (libsEnriched[0].effects?.length || 0) +
+                      (libsEnriched[0].radius?.length || 0) +
+                      (libsEnriched[0].strokes?.length || 0) +
+                      (libsEnriched[0].gaps?.length || 0) +
+                      (libsEnriched[0].paddings?.length || 0) +
+                      (libsEnriched[0].strokeWidths?.length || 0) +
+                      (libsEnriched[0].grids?.length || 0)
                     ).toString()}
                   />
                 </div>
               )}
-              {libs.length > 0 ? (
+              {libsEnriched.length > 0 ? (
                 <ul
                   className="library-list"
                   style={{ width: "100%", padding: 0, margin: 0 }}
                 >
-                  {libs.map((lib, idx) => (
+                  {libsEnriched.map((lib, idx) => (
                     <li
                       key={lib.name + idx}
                       className="library-list-item"
@@ -1096,6 +1186,12 @@ function SettingsPanel(props: SettingsPanelProps) {
                             <TokenAccordion
                               category="Effect styles"
                               tokens={lib.effects}
+                            />
+                          )}
+                          {lib.radius && lib.radius.length > 0 && (
+                            <TokenAccordion
+                              category="Radius"
+                              tokens={lib.radius}
                             />
                           )}
                           {lib.strokes && lib.strokes.length > 0 && (
@@ -1152,29 +1248,30 @@ function SettingsPanel(props: SettingsPanelProps) {
           {isAuthenticated && !showLibSelection && step === "saved" && (
             <>
               {/* Card de identificação do projeto e resumo de tokens */}
-              {libs.length > 0 && (
+              {libsEnriched.length > 0 && (
                 <div style={{ marginBottom: 20, width: "100%" }}>
                   <AnalysisResultsCard
-                    projectName={libs[0].name}
+                    projectName={libsEnriched[0].name}
                     analysisDate={(
-                      (libs[0].fills?.length || 0) +
-                      (libs[0].text?.length || 0) +
-                      (libs[0].effects?.length || 0) +
-                      (libs[0].strokes?.length || 0) +
-                      (libs[0].gaps?.length || 0) +
-                      (libs[0].paddings?.length || 0) +
-                      (libs[0].strokeWidths?.length || 0) +
-                      (libs[0].grids?.length || 0)
+                      (libsEnriched[0].fills?.length || 0) +
+                      (libsEnriched[0].text?.length || 0) +
+                      (libsEnriched[0].effects?.length || 0) +
+                      (libsEnriched[0].radius?.length || 0) +
+                      (libsEnriched[0].strokes?.length || 0) +
+                      (libsEnriched[0].gaps?.length || 0) +
+                      (libsEnriched[0].paddings?.length || 0) +
+                      (libsEnriched[0].strokeWidths?.length || 0) +
+                      (libsEnriched[0].grids?.length || 0)
                     ).toString()}
                   />
                 </div>
               )}
-              {libs.length > 0 ? (
+              {libsEnriched.length > 0 ? (
                 <ul
                   className="library-list"
                   style={{ width: "100%", padding: 0, margin: 0 }}
                 >
-                  {libs.map((lib, idx) => (
+                  {libsEnriched.map((lib, idx) => (
                     <li
                       key={lib.name + idx}
                       className="library-list-item"
@@ -1210,6 +1307,12 @@ function SettingsPanel(props: SettingsPanelProps) {
                             <TokenAccordion
                               category="Effect styles"
                               tokens={lib.effects}
+                            />
+                          )}
+                          {lib.radius && lib.radius.length > 0 && (
+                            <TokenAccordion
+                              category="Radius"
+                              tokens={lib.radius}
                             />
                           )}
                           {lib.strokes && lib.strokes.length > 0 && (

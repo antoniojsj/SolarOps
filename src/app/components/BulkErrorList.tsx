@@ -48,7 +48,7 @@ function BulkErrorList(props) {
       },
       "*"
     );
-  }, []); // Added closing braces and dependency array
+  }, []);
 
   // Listen for project name response
   React.useEffect(() => {
@@ -464,6 +464,21 @@ function BulkErrorList(props) {
     setIsModalOpen(true);
   }
 
+  // Seleciona um nó e solicita dados detalhados ao plugin
+  function handleSelect(error) {
+    const nodeId = error && (error.nodeId || (error.node && error.node.id));
+    if (!nodeId) return;
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "fetch-layer-data",
+          id: nodeId
+        }
+      },
+      "*"
+    );
+  }
+
   function handleSelectAll(error) {
     parent.postMessage(
       {
@@ -489,45 +504,6 @@ function BulkErrorList(props) {
       },
       "*"
     );
-  }
-
-  function handleSuggestion(error, index) {
-    const message: any = {
-      type: "apply-styles",
-      error: { ...error },
-      field: "suggestions",
-      index: index,
-      count: error.count
-    };
-
-    // Adiciona a propriedade específica para erros de radius e gap
-    if (error.type === "radius" && error.property) {
-      message.error.property = error.property;
-    } else if (error.type === "gap") {
-      message.error.property = "itemSpacing"; // Propriedade padrão para gap
-    }
-
-    parent.postMessage(
-      {
-        pluginMessage: message
-      },
-      "*"
-    );
-  }
-
-  function handleSelect(error) {
-    const nodeId = error.nodeId || (error.node && error.node.id);
-    if (nodeId) {
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "fetch-layer-data",
-            id: nodeId
-          }
-        },
-        "*"
-      );
-    }
   }
 
   function handleIgnoreAll(error) {
@@ -625,6 +601,7 @@ function BulkErrorList(props) {
         error={error}
         index={index}
         key={`${nodeId}-${error.type}-${index}`}
+        libraries={props.libraries}
         handleIgnoreChange={handleIgnoreChange}
         handleSelectAll={handleSelectAll}
         handleCreateStyle={handleCreateStyle}
@@ -914,6 +891,40 @@ function BulkErrorList(props) {
       name: frame.name,
       errors: frameErrors
     });
+  }
+
+  function handleSuggestion(error, index) {
+    // Decide a fonte das opções: preferir suggestions; caso ausente, usar matches
+    const hasSuggestions =
+      Array.isArray(error.suggestions) && error.suggestions.length > 0;
+    const hasMatches = Array.isArray(error.matches) && error.matches.length > 0;
+    const field = hasSuggestions
+      ? "suggestions"
+      : hasMatches
+      ? "matches"
+      : "suggestions";
+
+    const message: any = {
+      type: "apply-styles",
+      error: { ...error },
+      field,
+      index: index,
+      count: error.count
+    };
+
+    // Adiciona a propriedade específica para erros de radius e gap
+    if (error.type === "radius" && error.property) {
+      message.error.property = error.property;
+    } else if (error.type === "gap") {
+      message.error.property = "itemSpacing"; // Propriedade padrão para gap
+    }
+
+    parent.postMessage(
+      {
+        pluginMessage: message
+      },
+      "*"
+    );
   }
 
   // Listener para receber o JSON exportado e baixar

@@ -191,6 +191,7 @@ declare const figma: {
     appendChild: (node: any) => void;
   };
   getNodeById: (id: string) => any;
+  getStyleById: (id: string) => any;
   viewport: {
     scrollAndZoomIntoView: (nodes: any[]) => void;
     bounds: {
@@ -211,6 +212,9 @@ declare const figma: {
     getAsync: (key: string) => Promise<any>;
     setAsync: (key: string, value: any) => Promise<void>;
   };
+  variables?: {
+    getLocalVariablesAsync: () => Promise<any[]>;
+  };
   root: {
     name: string;
   };
@@ -230,6 +234,233 @@ figma.showUI(__html__, { width: 480, height: 700 });
 figma.ui.resize(480, 700);
 
 // Inicialização do controlador de medições não é necessária aqui; measurementController gerencia seus próprios estados.
+
+// Ouve mensagens vindas da UI para fornecer sugestões sob demanda e gerenciar tokens/libs
+figma.ui.onmessage = async (msg: any) => {
+  try {
+    if (!msg || !msg.type) return;
+    if (msg.type === "fetch-suggestions") {
+      const error = msg.error || {};
+      const type = (error.type || error.errorType || "").toLowerCase();
+      let suggestions: any[] = [];
+
+      if (type === "fill" || type === "stroke") {
+        try {
+          const paints = await getLocalPaintStyles();
+          suggestions = Array.isArray(paints) ? paints : [];
+        } catch (e) {
+          console.warn(
+            "[controller] Falha ao obter estilos de pintura locais",
+            e
+          );
+        }
+      } else if (type === "text") {
+        try {
+          const texts = await getLocalTextStyles();
+          suggestions = Array.isArray(texts) ? texts : [];
+        } catch (e) {
+          console.warn(
+            "[controller] Falha ao obter estilos de texto locais",
+            e
+          );
+        }
+      } else if (type === "effects") {
+        try {
+          const effects = await getLocalEffectStyles();
+          suggestions = Array.isArray(effects) ? effects : [];
+        } catch (e) {
+          console.warn(
+            "[controller] Falha ao obter estilos de efeito locais",
+            e
+          );
+        }
+      }
+
+      figma.ui.postMessage({
+        type: "fetched-suggestions",
+        error,
+        suggestions
+      });
+      return;
+    }
+
+    if (msg.type === "fetch-token-libraries") {
+      try {
+        // Estilos locais
+        const paints = await getLocalPaintStyles();
+        const texts = await getLocalTextStyles();
+        const effects = await getLocalEffectStyles();
+
+        // Variáveis locais (radius, gap, grid)
+        let radius: any[] = [];
+        let gaps: any[] = [];
+        let grids: any[] = [];
+        try {
+          // APIs de variáveis podem não existir em alguns ambientes; proteger com try
+          // @ts-ignore
+          const allVars = await figma.variables.getLocalVariablesAsync?.();
+          if (Array.isArray(allVars)) {
+            radius = allVars
+              .filter(
+                (v: any) =>
+                  v.resolvedType === "FLOAT" &&
+                  (v.name.toLowerCase().includes("radius") ||
+                    v.name.toLowerCase().includes("corner"))
+              )
+              .map((v: any) => ({
+                id: v.id,
+                name: v.name,
+                value: v.valuesByMode[Object.keys(v.valuesByMode)[0]]
+              }));
+            gaps = allVars
+              .filter(
+                (v: any) =>
+                  v.resolvedType === "FLOAT" &&
+                  (v.name.toLowerCase().includes("gap") ||
+                    v.name.toLowerCase().includes("spacing"))
+              )
+              .map((v: any) => ({
+                id: v.id,
+                name: v.name,
+                value: v.valuesByMode[Object.keys(v.valuesByMode)[0]]
+              }));
+            grids = allVars
+              .filter((v: any) => v.name.toLowerCase().includes("grid"))
+              .map((v: any) => ({
+                id: v.id,
+                name: v.name,
+                value: v.valuesByMode[Object.keys(v.valuesByMode)[0]]
+              }));
+          }
+        } catch (e) {
+          // Silencioso: ambiente pode não ter API de variáveis
+        }
+
+        const tokenLibraries = [
+          {
+            id: "local-styles",
+            name: "Local Styles",
+            fills: Array.isArray(paints) ? paints : [],
+            text: Array.isArray(texts) ? texts : [],
+            effects: Array.isArray(effects) ? effects : [],
+            radius,
+            gaps,
+            grids
+          }
+        ];
+
+        figma.ui.postMessage({
+          type: "fetched-token-libraries",
+          tokenLibraries
+        });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "fetched-token-libraries",
+          tokenLibraries: []
+        });
+      }
+      return;
+    }
+
+    if (msg.type === "save-user-libs") {
+      try {
+        const libs = Array.isArray(msg.libs) ? msg.libs : [];
+        await figma.clientStorage.setAsync("user-libs", libs);
+        figma.ui.postMessage({ type: "user-libs-saved", success: true });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "user-libs-saved",
+          success: false,
+          message: String(e)
+        });
+      }
+      return;
+    }
+
+    if (msg.type === "get-user-libs") {
+      try {
+        const libs = (await figma.clientStorage.getAsync("user-libs")) || [];
+        figma.ui.postMessage({ type: "user-libs-loaded", libs });
+      } catch (e) {
+        figma.ui.postMessage({ type: "user-libs-loaded", libs: [] });
+      }
+      return;
+    }
+
+    if (msg.type === "save-design-tokens") {
+      try {
+        const tokens = msg.tokens || {};
+        // Garantir que radius e grids existam como arrays, se presentes
+        if (tokens && typeof tokens === "object") {
+          if (tokens.radius && !Array.isArray(tokens.radius)) {
+            tokens.radius = [tokens.radius];
+          }
+          if (tokens.grid && !Array.isArray(tokens.grid)) {
+            tokens.grid = [tokens.grid];
+          }
+        }
+        await figma.clientStorage.setAsync("design-tokens", tokens);
+        figma.ui.postMessage({
+          type: "design-tokens-saved",
+          success: true,
+          tokens
+        });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "design-tokens-saved",
+          success: false,
+          message: String(e)
+        });
+      }
+      return;
+    }
+
+    if (msg.type === "load-saved-tokens") {
+      try {
+        const tokens =
+          (await figma.clientStorage.getAsync("design-tokens")) || {};
+        figma.ui.postMessage({
+          type: "saved-tokens-loaded",
+          success: true,
+          tokens
+        });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "saved-tokens-loaded",
+          success: false,
+          message: String(e)
+        });
+      }
+      return;
+    }
+
+    if (msg.type === "save-library-tokens") {
+      try {
+        // Figma não tem filesystem; persistimos em clientStorage
+        const libraries = msg.libraries || [];
+        const filename = msg.filename || `libraries_${Date.now()}`;
+        await figma.clientStorage.setAsync(
+          `library-tokens:${filename}`,
+          libraries
+        );
+        figma.ui.postMessage({
+          type: "library-tokens-saved",
+          success: true,
+          filePath: `clientStorage:${filename}`
+        });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: "library-tokens-saved",
+          success: false,
+          message: String(e)
+        });
+      }
+      return;
+    }
+  } catch (e) {
+    console.error("[controller] ui.onmessage error", e);
+  }
+};
 
 // Sempre que a seleção mudar, notificar a UI e, se estiver em modo de medição,
 // criar uma medição simples entre dois itens selecionados (modo distância)

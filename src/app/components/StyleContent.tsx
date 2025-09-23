@@ -135,10 +135,50 @@ const StyleContent = ({ style, type, error }) => {
     }
   };
 
+  // Fallback para nome/label do token quando não houver style.name
+  const getDisplayName = () => {
+    if (
+      style &&
+      typeof style.name === "string" &&
+      style.name.trim().length > 0
+    ) {
+      return truncateStyle(style.name);
+    }
+    switch (type) {
+      case "fill":
+      case "stroke": {
+        const paint =
+          style.paint || (Array.isArray(style.paints) && style.paints[0]);
+        if (paint && paint.type === "SOLID" && paint.color) {
+          const { r, g, b, a } = paint.color;
+          const rr = Math.round((r || 0) * 255);
+          const gg = Math.round((g || 0) * 255);
+          const bb = Math.round((b || 0) * 255);
+          const aa = a !== undefined ? a : 1;
+          return `rgba(${rr}, ${gg}, ${bb}, ${aa})`;
+        }
+        return truncateStyle(style.value || "Token de cor");
+      }
+      case "text": {
+        const styleString = style.fontName?.style || style.style?.fontStyle;
+        return truncateStyle(styleString || style.value || "Token de texto");
+      }
+      case "effects": {
+        return truncateStyle(style.value || "Token de efeito");
+      }
+      case "radius":
+      case "gap": {
+        return truncateStyle(style.value || "Token");
+      }
+      default:
+        return truncateStyle(style.value || "Token");
+    }
+  };
+
   return (
     <div className="style-list-item">
       {renderStylePreview()}
-      <span className="style-name">{truncateStyle(style.name)}</span>
+      <span className="style-name">{getDisplayName()}</span>
     </div>
   );
 };

@@ -1317,7 +1317,7 @@ export function checkPadding(
       // Busca sugestões de tokens de espaçamento
       const paddingSuggestions =
         libraries
-          ?.flatMap(lib => lib.spacing || [])
+          ?.flatMap(lib => lib.paddings || [])
           .filter(Boolean)
           .map(v => ({
             id: v.id,

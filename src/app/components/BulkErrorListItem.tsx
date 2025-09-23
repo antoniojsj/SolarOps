@@ -27,7 +27,7 @@ function truncate(string) {
 }
 
 function BulkErrorListItem(props) {
-  const { error } = props;
+  const { error, libraries = [] } = props;
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<
     number | null
   >(null);
@@ -60,22 +60,171 @@ function BulkErrorListItem(props) {
     error.nodeId || (error.node && error.node.id) || `error-${props.index}`;
   const clipPathId = `clip_bulk_select_all_${props.index}`;
   // Verifica se há sugestões disponíveis para o erro atual
-  const hasSuggestions =
-    (error.suggestions && error.suggestions.length > 0) || // Verifica sugestões diretas
-    (error.type && ["radius", "gap"].includes(error.type) && error.property); // Verifica se é um erro de radius ou gap com propriedade definida
+  const hasSuggestions = Boolean(
+    error.suggestions && error.suggestions.length > 0
+  );
+  const hasMatches = Boolean(error.matches && error.matches.length > 0);
+  // Fallback: busca tokens nas libraries quando não houver suggestions/matches
+  const getLibraryOptionsByType = (type: string): any[] => {
+    if (!Array.isArray(libraries)) return [];
+    const lower = (type || "").toLowerCase();
+    // Normaliza sinônimos comuns
+    const normalized =
+      lower === "color" || lower === "colors"
+        ? "fill"
+        : lower === "border" || lower === "borders"
+        ? "stroke"
+        : lower === "typography"
+        ? "text"
+        : lower === "effect"
+        ? "effects"
+        : lower;
+    try {
+      if (normalized === "fill") {
+        return libraries
+          .flatMap((lib: any) => lib?.fills || [])
+          .filter(Boolean);
+      }
+      if (normalized === "stroke") {
+        // Strokes usam PaintStyles também
+        return libraries
+          .flatMap((lib: any) => lib?.fills || [])
+          .filter(Boolean);
+      }
+      if (normalized === "effects") {
+        return libraries
+          .flatMap((lib: any) => lib?.effects || [])
+          .filter(Boolean);
+      }
+      if (normalized === "text") {
+        return libraries.flatMap((lib: any) => lib?.text || []).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn(
+        "[BulkErrorListItem] Falha ao extrair opções das libraries",
+        e
+      );
+    }
+    return [];
+  };
+
+  const libOptions = React.useMemo(() => getLibraryOptionsByType(error.type), [
+    error.type,
+    libraries
+  ]);
+  const initialOptions = hasSuggestions
+    ? error.suggestions
+    : hasMatches
+    ? error.matches
+    : libOptions;
+  const [options, setOptions] = useState<any[]>(initialOptions);
+  const didLoadRef = useRef<boolean>(false);
+  // Sincroniza quando o erro muda
+  useEffect(() => {
+    // Atualiza apenas quando o nó ou o tipo mudarem (evita loops por novas referências de arrays)
+    setOptions(initialOptions);
+    // Reset flag quando muda o item
+    didLoadRef.current = initialOptions && initialOptions.length > 0;
+    console.log("[BulkErrorListItem] Sync options on error change", {
+      nodeId: error.nodeId,
+      type: error.type,
+      initialOptionsCount: initialOptions ? initialOptions.length : 0,
+      hasSuggestions,
+      hasMatches,
+      hasLibOptions: libOptions && libOptions.length > 0
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error.nodeId, error.type]);
+
+  // Solicitar sugestões automaticamente ao montar se não houver nenhuma opção
+  useEffect(() => {
+    const eligible = ["fill", "stroke", "effects", "text"].includes(
+      (error.type || "").toLowerCase()
+    );
+    if (eligible && (!options || options.length === 0) && !didLoadRef.current) {
+      console.log("[BulkErrorListItem] Auto-fetching suggestions", {
+        nodeId: error.nodeId,
+        type: error.type
+      });
+      parent.postMessage(
+        { pluginMessage: { type: "fetch-suggestions", error } },
+        "*"
+      );
+    }
+    // Apenas na montagem e quando mudar o item
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error.nodeId, error.type]);
+
+  // Ouve respostas do plugin com sugestões e atualiza as opções deste item
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const msg = event?.data?.pluginMessage;
+      if (!msg || !msg.type) return;
+      if (msg.type === "fetched-suggestions") {
+        const pmError = msg.error || {};
+        const sameNode = pmError.nodeId === error.nodeId;
+        const sameType = (pmError.type || pmError.errorType) === error.type;
+        if (sameNode && sameType) {
+          const incoming =
+            Array.isArray(msg.suggestions) && msg.suggestions.length > 0
+              ? msg.suggestions
+              : Array.isArray(msg.matches) && msg.matches.length > 0
+              ? msg.matches
+              : [];
+          if (incoming.length > 0) {
+            // Evita setar caso as opções já sejam iguais (shallow check por id/len)
+            const sameLength = options && options.length === incoming.length;
+            const sameFirstId =
+              sameLength &&
+              options[0] &&
+              incoming[0] &&
+              options[0].id === incoming[0].id;
+            if (!sameLength || !sameFirstId) {
+              setOptions(incoming);
+              didLoadRef.current = true;
+            }
+          }
+        }
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [error.nodeId, error.type]);
+  // Permite abrir dropdown para mais tipos, mesmo quando sugestões são carregadas de forma dinâmica
+  const canOpenDropdown = Boolean(
+    hasSuggestions ||
+      (options && options.length > 0) ||
+      (error.type &&
+        [
+          "radius",
+          "gap",
+          "padding",
+          "fill",
+          "stroke",
+          "border",
+          "effects",
+          "text"
+        ].includes((error.type || "").toLowerCase())) ||
+        ["color", "colors", "typography", "effect"].includes(
+          (error.type || "").toLowerCase()
+        )
+  );
   const selectedSuggestion =
     selectedSuggestionIndex !== null &&
-    error.suggestions &&
-    error.suggestions[selectedSuggestionIndex]
-      ? error.suggestions[selectedSuggestionIndex]
+    options &&
+    options[selectedSuggestionIndex]
+      ? options[selectedSuggestionIndex]
       : null;
 
   // Debug: Log para verificar as sugestões e o estado do dropdown
   console.log(`[BulkErrorListItem] Erro tipo: ${error.type}`, {
     hasSuggestions,
+    hasMatches,
     suggestionsCount: error.suggestions ? error.suggestions.length : 0,
-    suggestions: error.suggestions
-      ? error.suggestions.map((s, i) => ({
+    matchesCount: error.matches ? error.matches.length : 0,
+    optionsCount: options.length,
+    options: options
+      ? options.map((s, i) => ({
           id: s.id,
           name: s.name,
           type: s.type,
@@ -190,21 +339,18 @@ function BulkErrorListItem(props) {
           <div
             className="custom-select__trigger"
             onClick={e => {
-              // Para erros do tipo 'radius' ou 'gap', verifica se há sugestões disponíveis ou se há uma propriedade definida
-              const hasValidSuggestions =
-                (error.suggestions && error.suggestions.length > 0) ||
-                (error.type &&
-                  ["radius", "gap"].includes(error.type) &&
-                  error.property);
+              const hasValidSuggestions = hasSuggestions || hasMatches;
 
               console.log(
                 `[BulkErrorListItem] Dropdown clicado - Tipo: ${error.type}`,
                 {
                   hasValidSuggestions,
                   hasSuggestions,
+                  hasMatches,
                   suggestionsCount: error.suggestions
                     ? error.suggestions.length
                     : 0,
+                  matchesCount: error.matches ? error.matches.length : 0,
                   isDropdownOpen: !isDropdownOpen,
                   errorType: error.type,
                   errorProperty: error.property,
@@ -214,47 +360,18 @@ function BulkErrorListItem(props) {
                   errorNodeName: error.nodeName
                 }
               );
-
-              // Permite abrir o dropdown para erros de radius e gap mesmo sem sugestões diretas
-              // pois as sugestões serão carregadas do contexto
-              if (hasValidSuggestions) {
-                console.log(
-                  `[BulkErrorListItem] Abrindo dropdown para tipo: ${error.type}`,
-                  {
-                    suggestions: error.suggestions
-                      ? error.suggestions.map(s => ({
-                          id: s.id,
-                          name: s.name,
-                          type: s.type,
-                          value: s.value,
-                          hasPaint: !!s.paint,
-                          paintType: s.paint ? s.paint.type : "no-paint",
-                          keys: s ? Object.keys(s) : []
-                        }))
-                      : "no-suggestions",
-                    error: {
-                      type: error.type,
-                      property: error.property,
-                      nodeId: error.nodeId,
-                      nodeName: error.nodeName,
-                      value: error.value
-                    }
-                  }
-                );
-                setIsDropdownOpen(!isDropdownOpen);
-              } else {
-                console.warn(
-                  `[BulkErrorListItem] Nenhuma sugestão disponível para tipo: ${error.type}`,
-                  {
-                    errorType: error.type,
-                    hasSuggestions,
-                    errorKeys: Object.keys(error),
-                    errorValue: error.value,
-                    errorNodeId: error.nodeId,
-                    errorNodeName: error.nodeName
-                  }
+              // Solicita sugestões ao plugin quando não houver opções
+              if (
+                canOpenDropdown &&
+                (!options || options.length === 0) &&
+                !didLoadRef.current
+              ) {
+                parent.postMessage(
+                  { pluginMessage: { type: "fetch-suggestions", error } },
+                  "*"
                 );
               }
+              setIsDropdownOpen(!isDropdownOpen);
             }}
             style={{
               display: "flex",
@@ -263,7 +380,7 @@ function BulkErrorListItem(props) {
               padding: "8px",
               border: "1px solid #444",
               borderRadius: "4px",
-              cursor: hasSuggestions ? "pointer" : "default",
+              cursor: canOpenDropdown ? "pointer" : "default",
               height: "32px"
             }}
           >
@@ -278,7 +395,7 @@ function BulkErrorListItem(props) {
                 {truncate(error.value) || "Valor inválido"}
               </span>
             )}
-            {hasSuggestions && (
+            {canOpenDropdown && (
               <svg
                 width="16"
                 height="16"
@@ -291,7 +408,8 @@ function BulkErrorListItem(props) {
               </svg>
             )}
           </div>
-          {isDropdownOpen && hasSuggestions && (
+          {/* dropdown render está abaixo; bloco duplicado removido */}
+          {isDropdownOpen && canOpenDropdown && (
             <ul
               className="custom-select__options"
               style={{
@@ -310,30 +428,42 @@ function BulkErrorListItem(props) {
                 overflowY: "auto"
               }}
             >
-              {error.suggestions.map((suggestion, index) => (
+              {options && options.length > 0 ? (
+                options.map((suggestion, index) => (
+                  <li
+                    key={index}
+                    onClick={() => handleSelectSuggestion(index)}
+                    style={{
+                      padding: "8px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center"
+                    }}
+                    className="custom-select__option"
+                  >
+                    <StyleContent
+                      style={suggestion}
+                      type={error.type.toLowerCase()}
+                      error={error}
+                    />
+                  </li>
+                ))
+              ) : (
                 <li
-                  key={index}
-                  onClick={() => handleSelectSuggestion(index)}
                   style={{
                     padding: "8px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center"
+                    color: "#B3B3B3",
+                    fontStyle: "italic"
                   }}
-                  className="custom-select__option"
                 >
-                  <StyleContent
-                    style={suggestion}
-                    type={error.type.toLowerCase()}
-                    error={error}
-                  />
+                  Nenhum token disponível para este item
                 </li>
-              ))}
+              )}
             </ul>
           )}
         </div>
 
-        {hasSuggestions && (
+        {canOpenDropdown && (
           <div
             style={{
               marginTop: "8px",
@@ -342,7 +472,17 @@ function BulkErrorListItem(props) {
             }}
           >
             <button
-              onClick={() => handleSuggestion(error, selectedSuggestionIndex)}
+              onClick={() => {
+                // Garante que o apply use as opções locais como suggestions
+                const errorWithOptions = { ...error } as any;
+                if (
+                  !errorWithOptions.suggestions ||
+                  errorWithOptions.suggestions.length === 0
+                ) {
+                  errorWithOptions.suggestions = options || [];
+                }
+                handleSuggestion(errorWithOptions, selectedSuggestionIndex);
+              }}
               disabled={selectedSuggestionIndex === null}
               style={{
                 padding: "8px 16px",
