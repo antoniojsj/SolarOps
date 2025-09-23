@@ -1103,206 +1103,449 @@ function BulkErrorList(props) {
           >
             Conformidade
           </div>
-          {/* {!props.initialLoadComplete ? (
-            <>
-              <PreloaderCSS />
+          {/* Conteúdo principal */}
+          <div style={{ padding: "0 16px 24px 16px" }}>
+            <div
+              className="system-card"
+              style={{
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                marginBottom: 16
+              }}
+            >
+              <ConformityScoreBar
+                totalElements={totalElements}
+                nonConformElements={nonConformUniqueCount}
+              />
+            </div>
+            {/* Resumo - Cards de métricas */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 8,
+                marginBottom: 16
+              }}
+            >
               <div
                 style={{
-                  color: "yellow",
-                  background: "#222",
+                  background: "rgba(39,174,96,0.12)",
+                  border: "1px solid rgba(39,174,96,0.30)",
+                  borderRadius: 6,
                   padding: 12,
-                  margin: 16,
-                  borderRadius: 8,
-                  textAlign: "center"
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4
                 }}
               >
-                <strong>Debug:</strong> initialLoadComplete ={" "}
-                {String(props.initialLoadComplete)}
-                <br />
-                errorArray.length ={" "}
-                {Array.isArray(props.errorArray)
-                  ? props.errorArray.length
-                  : "undefined"}
-                <br />
-                ignoredErrorArray.length ={" "}
-                {Array.isArray(props.ignoredErrorArray)
-                  ? props.ignoredErrorArray.length
-                  : "undefined"}
-                <br />
-                <span style={{ fontSize: 12 }}>
-                  Se este aviso não sumir, o carregamento não está sendo
-                  concluído.
+                <span style={{ color: "#ffffff", fontSize: 11, opacity: 0.9 }}>
+                  Conformes
+                </span>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
+                  {conformElements}
                 </span>
               </div>
-              {console.log(
-                "[DEBUG BulkErrorList] initialLoadComplete:",
-                props.initialLoadComplete,
-                "errorArray.length:",
-                Array.isArray(props.errorArray)
-                  ? props.errorArray.length
-                  : "undefined",
-                "ignoredErrorArray.length:",
-                Array.isArray(props.ignoredErrorArray)
-                  ? props.ignoredErrorArray.length
-                  : "undefined"
-              )}
-            </>
-          ) : ( */}
-          <>
-            <motion.ul className="errors-list">
-              <li style={{ listStyle: "none" }}>
+              <div
+                style={{
+                  background: "rgba(254,98,98,0.12)",
+                  border: "1px solid rgba(254,98,98,0.30)",
+                  borderRadius: 6,
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4
+                }}
+              >
+                <span style={{ color: "#ffffff", fontSize: 11, opacity: 0.9 }}>
+                  Não conformes
+                </span>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
+                  {nonConformUniqueCount}
+                </span>
+              </div>
+              <div
+                style={{
+                  background: "rgba(251,191,36,0.12)",
+                  border: "1px solid rgba(251,191,36,0.30)",
+                  borderRadius: 6,
+                  padding: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4
+                }}
+              >
+                <span style={{ color: "#ffffff", fontSize: 11, opacity: 0.9 }}>
+                  Restore component
+                </span>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
+                  {detachCount}
+                </span>
+              </div>
+            </div>
+
+            {/* Erros por categoria */}
+            {(() => {
+              // Normaliza categorias para contagem
+              const errorTypeMap: Record<string, string> = {
+                gap: "gap",
+                padding: "padding",
+                fill: "fill",
+                radius: "radius",
+                border: "stroke",
+                stroke: "stroke",
+                spacing: "gap",
+                text: "text",
+                "font-family": "text",
+                "font-size": "text",
+                "font-weight": "text",
+                "line-height": "text",
+                "letter-spacing": "text",
+                "font-style": "text",
+                "text-decoration": "text",
+                opacity: "effects",
+                blur: "effects",
+                shadow: "effects",
+                component: "component",
+                "restore-component": "component"
+              };
+              const counts = (filteredFlatErrors || []).reduce(
+                (acc: Record<string, number>, err: any) => {
+                  const orig = (err.type ||
+                    err.errorType ||
+                    err.category) as string;
+                  const norm = errorTypeMap[orig] || orig || "outros";
+                  acc[norm] = (acc[norm] || 0) + 1;
+                  return acc;
+                },
+                {} as Record<string, number>
+              );
+              const entries = Object.entries(counts).sort(
+                (a, b) => Number(b[1]) - Number(a[1])
+              );
+              const totalErr = (filteredFlatErrors || []).length || 1;
+              return (
                 <div
                   className="system-card"
-                  style={{ border: "1px solid rgba(255, 255, 255, 0.1)" }}
-                >
-                  <ConformityScoreBar
-                    totalElements={totalElements}
-                    nonConformElements={nonConformUniqueCount}
-                  />
-                </div>
-              </li>
-              <li
-                style={{ listStyle: "none", marginTop: 24, marginBottom: 24 }}
-              >
-                <div
                   style={{
-                    display: "flex",
-                    gap: 16,
-                    width: "100%",
-                    maxWidth: "100%",
-                    margin: "0 auto",
-                    justifyContent: "space-between"
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    padding: 12,
+                    marginBottom: 12,
+                    background: "rgba(255,255,255,0.03)"
                   }}
                 >
-                  {/* Card 1: Elementos conformes */}
                   <div
-                    className="summary-report-card"
                     style={{
-                      flex: 1,
-                      minWidth: 120,
-                      maxWidth: 220,
-                      background: "rgba(39, 174, 96, 0.08)",
-                      border: "1.5px solid rgba(39, 174, 96, 0.4)",
-                      padding: 16,
                       display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      boxSizing: "border-box"
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 12
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 16,
-                        color: "#fff",
-                        lineHeight: 1,
-                        marginBottom: 8
-                      }}
+                    <div
+                      style={{ fontSize: 14, color: "#fff", fontWeight: 400 }}
                     >
-                      {conformElements}
-                    </span>
-                    <span
-                      style={{
-                        fontWeight: 400,
-                        fontSize: 12,
-                        color: "#fff",
-                        marginBottom: 8
-                      }}
-                    >
-                      Elementos conformes
+                      Erros por categoria
+                    </div>
+                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {(filteredFlatErrors || []).length} erros
                     </span>
                   </div>
-                  {/* Card 2: Elementos não conformes */}
+                  {entries.length === 0 ? (
+                    <div style={{ color: "#9ca3af", fontSize: 12 }}>
+                      Sem erros ativos.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6
+                      }}
+                    >
+                      {entries.map(([cat, n]) => {
+                        const width = Math.max(
+                          6,
+                          Math.round((Number(n) / totalErr) * 100)
+                        );
+                        return (
+                          <div
+                            key={cat}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr auto",
+                              gap: 8,
+                              alignItems: "center"
+                            }}
+                          >
+                            <div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 4
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    color: "#fff",
+                                    fontSize: 12,
+                                    textTransform: "capitalize"
+                                  }}
+                                >
+                                  {cat}
+                                </span>
+                                <span
+                                  style={{
+                                    background: "rgba(255,255,255,0.08)",
+                                    border: "1px solid rgba(255,255,255,0.18)",
+                                    color: "#e5e7eb",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11
+                                  }}
+                                >
+                                  {n}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  height: 6,
+                                  background: "rgba(255,255,255,0.06)",
+                                  borderRadius: 3,
+                                  overflow: "hidden"
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${width}%`,
+                                    height: "100%",
+                                    background:
+                                      "linear-gradient(90deg,#18a0fb,#27ae60)"
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                color: "#9ca3af",
+                                fontSize: 11,
+                                textAlign: "right"
+                              }}
+                            >
+                              {Math.round((Number(n) / totalErr) * 100)}%
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Tokens com problemas (ex.: cores) */}
+            {(() => {
+              const topColors = (colorBreakdown || [])
+                .filter(c => c.nonConform > 0)
+                .slice(0, 8);
+              if (topColors.length === 0) return null;
+              return (
+                <div
+                  className="system-card"
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    padding: 12,
+                    marginBottom: 12,
+                    background: "rgba(255,255,255,0.03)"
+                  }}
+                >
                   <div
-                    className="summary-report-card"
                     style={{
-                      flex: 1,
-                      minWidth: 120,
-                      maxWidth: 220,
-                      background: "rgba(254, 98, 98, 0.08)",
-                      border: "1.5px solid rgba(254, 98, 98, 0.4)",
-                      padding: 16,
                       display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      boxSizing: "border-box"
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 12
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 16,
-                        color: "#fff",
-                        lineHeight: 1,
-                        marginBottom: 8
-                      }}
+                    <div
+                      style={{ fontSize: 14, color: "#fff", fontWeight: 400 }}
                     >
-                      {nonConformUniqueCount}
-                    </span>
-                    <span
-                      style={{
-                        fontWeight: 400,
-                        fontSize: 12,
-                        color: "#fff",
-                        marginBottom: 8
-                      }}
-                    >
-                      Elementos não conformes
+                      Tokens com problemas (cores)
+                    </div>
+                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {topColors.length} itens
                     </span>
                   </div>
-                  {/* Card 3: Restore component */}
                   <div
-                    className="summary-report-card"
                     style={{
-                      flex: 1,
-                      minWidth: 120,
-                      maxWidth: 220,
-                      background: "rgba(251, 191, 36, 0.08)",
-                      border: "1.5px solid rgba(251, 191, 36, 0.4)",
-                      padding: 16,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      boxSizing: "border-box"
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+                      gap: 8
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 16,
-                        color: "#fff",
-                        lineHeight: 1,
-                        marginBottom: 8
-                      }}
-                    >
-                      {detachCount}
-                    </span>
-                    <span
-                      style={{
-                        fontWeight: 400,
-                        fontSize: 12,
-                        color: "#fff",
-                        marginBottom: 8
-                      }}
-                    >
-                      Restore component
-                    </span>
+                    {topColors.map(c => (
+                      <div
+                        key={c.color}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: 8,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: 6,
+                          background: "rgba(255,255,255,0.02)"
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 14,
+                            height: 14,
+                            borderRadius: 3,
+                            background: c.color as string,
+                            border: "1px solid rgba(255,255,255,0.2)"
+                          }}
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2
+                          }}
+                        >
+                          <span style={{ color: "#fff", fontSize: 12 }}>
+                            {c.color}
+                          </span>
+                          <span style={{ color: "#9ca3af", fontSize: 11 }}>
+                            Não conformes: {c.nonConform} • Uso total: {c.total}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </li>
-            </motion.ul>
-            {/* Banner - mostrar sempre quando há análise completa */}
-            {props.initialLoadComplete && totalErrorsWithMatches > 0 && (
-              <motion.ul className="errors-list">
-                <li style={{ listStyle: "none" }} key="banner-item">
-                  <Banner
-                    totalErrorsWithMatches={totalErrorsWithMatches}
-                    handleFixAllErrors={handleFixAllFromBanner}
-                  />
-                </li>
-              </motion.ul>
-            )}
-          </>
+              );
+            })()}
+
+            {/* Recomendações */}
+            {(() => {
+              // Gerar recomendações simples com base nos tipos de erro presentes
+              const present = new Set(
+                (filteredFlatErrors || []).map(
+                  (e: any) => (e.type || e.errorType || e.category) as string
+                )
+              );
+              const hasText = Array.from(present).some(t =>
+                [
+                  "text",
+                  "font-size",
+                  "font-weight",
+                  "line-height",
+                  "font-family",
+                  "letter-spacing",
+                  "text-decoration"
+                ].includes(t)
+              );
+              const hasFill = Array.from(present).some(t =>
+                ["fill", "color", "colors"].includes(t)
+              );
+              const hasStroke = Array.from(present).some(t =>
+                ["stroke", "border"].includes(t)
+              );
+              const hasEffects = Array.from(present).some(t =>
+                ["effects", "shadow", "blur", "opacity"].includes(t)
+              );
+              const hasRadius = Array.from(present).some(t =>
+                ["radius", "corner"].includes(t)
+              );
+              const hasGap = Array.from(present).some(t =>
+                ["gap", "spacing", "padding"].includes(t)
+              );
+              const hasComponent = Array.from(present).some(t =>
+                ["component", "restore-component"].includes(t)
+              );
+
+              const recs: string[] = [];
+              if (hasText)
+                recs.push(
+                  "Defina e aplique estilos tipográficos do sistema (tokens de texto) para garantir consistência de fonte, peso e espaçamento."
+                );
+              if (hasFill)
+                recs.push(
+                  "Substitua cores diretas por tokens de cor nomeados. Centralize a paleta e mapeie usos (ex.: Background/Primary, Text/Muted)."
+                );
+              if (hasStroke)
+                recs.push(
+                  "Padronize bordas usando tokens ou estilos compartilhados. Revise espessuras e cores de stroke para coerência."
+                );
+              if (hasEffects)
+                recs.push(
+                  "Consolide sombras/blur/opacity em estilos de efeito. Evite valores arbitrários por componente."
+                );
+              if (hasRadius)
+                recs.push(
+                  "Mapeie tokens de radius (ex.: Radius/XS, S, M, L) e aplique consistentemente aos componentes."
+                );
+              if (hasGap)
+                recs.push(
+                  "Normalize espaçamentos (gap/padding) com um scale de spacing (4, 8, 12, 16...). Use tokens de layout."
+                );
+              if (hasComponent)
+                recs.push(
+                  "Revise instâncias destacadas (detach/restore). Recrie ou vincule novamente ao componente principal."
+                );
+
+              if (recs.length === 0) return null;
+              return (
+                <div
+                  className="system-card"
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    padding: 12,
+                    marginBottom: 16,
+                    background: "rgba(255,255,255,0.03)"
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 12
+                    }}
+                  >
+                    <div
+                      style={{ fontSize: 14, color: "#fff", fontWeight: 400 }}
+                    >
+                      Recomendações
+                    </div>
+                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {recs.length} itens
+                    </span>
+                  </div>
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                  >
+                    {recs.map((r, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.02)",
+                          borderRadius: 6,
+                          padding: 10,
+                          color: "#e5e7eb",
+                          fontSize: 12
+                        }}
+                      >
+                        {r}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 
@@ -1335,10 +1578,16 @@ function BulkErrorList(props) {
                   e => getErrorType(e) === "restore-component"
                 ).length;
                 return (
-                  <div key={frame.id} style={{ marginBottom: 48 }}>
+                  <div key={frame.id} style={{ marginBottom: 32 }}>
                     <h2
                       className="analysis-title"
-                      style={{ margin: "0 0 8px 0" }}
+                      style={{
+                        color: "#fff",
+                        fontSize: 14,
+                        fontWeight: 400,
+                        margin: "0 0 8px 0",
+                        paddingLeft: 0
+                      }}
                     >
                       {frame.name}
                     </h2>
@@ -1351,132 +1600,114 @@ function BulkErrorList(props) {
                         nonConformElements={frameNonConformNodeIds.size}
                       />
                     </div>
-                    <div style={{ height: 24 }} />
+                    <div style={{ height: 16 }} />
                     <div
                       style={{
-                        display: "flex",
-                        gap: 16,
-                        width: "100%",
-                        maxWidth: "100%",
-                        margin: "0 auto",
-                        justifyContent: "space-between"
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: 8,
+                        marginBottom: 16
                       }}
                     >
                       <div
-                        className="summary-report-card"
                         style={{
-                          flex: 1,
-                          minWidth: 120,
-                          maxWidth: 220,
-                          background: "rgba(39, 174, 96, 0.08)",
-                          border: "1.5px solid rgba(39, 174, 96, 0.4)",
-                          padding: 16,
+                          background: "rgba(39,174,96,0.12)",
+                          border: "1px solid rgba(39,174,96,0.30)",
+                          borderRadius: 6,
+                          padding: 12,
                           display: "flex",
                           flexDirection: "column",
-                          alignItems: "flex-start",
-                          boxSizing: "border-box"
+                          gap: 4
                         }}
                       >
                         <span
                           style={{
-                            fontWeight: 700,
-                            fontSize: 16,
+                            color: "#ffffff",
+                            fontSize: 11,
+                            opacity: 0.9
+                          }}
+                        >
+                          Conformes
+                        </span>
+                        <span
+                          style={{
                             color: "#fff",
-                            lineHeight: 1,
-                            marginBottom: 8
+                            fontWeight: 700,
+                            fontSize: 16
                           }}
                         >
                           {frameConformElements}
                         </span>
-                        <span
-                          style={{
-                            fontWeight: 400,
-                            fontSize: 12,
-                            color: "#fff",
-                            marginBottom: 8
-                          }}
-                        >
-                          Elementos conformes
-                        </span>
                       </div>
                       <div
-                        className="summary-report-card"
                         style={{
-                          flex: 1,
-                          minWidth: 120,
-                          maxWidth: 220,
-                          background: "rgba(254, 98, 98, 0.08)",
-                          border: "1.5px solid rgba(254, 98, 98, 0.4)",
-                          padding: 16,
+                          background: "rgba(254,98,98,0.12)",
+                          border: "1px solid rgba(254,98,98,0.30)",
+                          borderRadius: 6,
+                          padding: 12,
                           display: "flex",
                           flexDirection: "column",
-                          alignItems: "flex-start",
-                          boxSizing: "border-box"
+                          gap: 4
                         }}
                       >
                         <span
                           style={{
-                            fontWeight: 700,
-                            fontSize: 16,
+                            color: "#ffffff",
+                            fontSize: 11,
+                            opacity: 0.9
+                          }}
+                        >
+                          Não conformes
+                        </span>
+                        <span
+                          style={{
                             color: "#fff",
-                            lineHeight: 1,
-                            marginBottom: 8
+                            fontWeight: 700,
+                            fontSize: 16
                           }}
                         >
                           {frameNonConformNodeIds.size}
                         </span>
-                        <span
-                          style={{
-                            fontWeight: 400,
-                            fontSize: 12,
-                            color: "#fff",
-                            marginBottom: 8
-                          }}
-                        >
-                          Elementos não conformes
-                        </span>
                       </div>
                       <div
-                        className="summary-report-card"
                         style={{
-                          flex: 1,
-                          minWidth: 120,
-                          maxWidth: 220,
-                          background: "rgba(251, 191, 36, 0.08)",
-                          border: "1.5px solid rgba(251, 191, 36, 0.4)",
-                          padding: 16,
+                          background: "rgba(251,191,36,0.12)",
+                          border: "1px solid rgba(251,191,36,0.30)",
+                          borderRadius: 6,
+                          padding: 12,
                           display: "flex",
                           flexDirection: "column",
-                          alignItems: "flex-start",
-                          boxSizing: "border-box"
+                          gap: 4
                         }}
                       >
                         <span
                           style={{
-                            fontWeight: 700,
-                            fontSize: 16,
-                            color: "#fff",
-                            lineHeight: 1,
-                            marginBottom: 8
-                          }}
-                        >
-                          {frameDetachCount}
-                        </span>
-                        <span
-                          style={{
-                            fontWeight: 400,
-                            fontSize: 12,
-                            color: "#fff",
-                            marginBottom: 8
+                            color: "#ffffff",
+                            fontSize: 11,
+                            opacity: 0.9
                           }}
                         >
                           Restore component
                         </span>
+                        <span
+                          style={{
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: 16
+                          }}
+                        >
+                          {frameDetachCount}
+                        </span>
                       </div>
                     </div>
-                    <div style={{ height: 24 }} />
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                      <li style={{ marginBottom: 16 }}>
+                    <ul
+                      style={{
+                        listStyle: "none",
+                        padding: 0,
+                        margin: "16px 0 0 0"
+                      }}
+                    >
+                      <li>
                         <button
                           style={{
                             width: "100%",
