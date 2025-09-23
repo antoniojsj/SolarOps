@@ -131,6 +131,16 @@ function BulkErrorList(props) {
       ? props.errorArray
       : [];
 
+    console.log("=== TOTAL DE ERROS ENCONTRADOS ===", allErrors.length);
+    console.log(
+      "Primeiros 5 erros:",
+      allErrors.slice(0, 5).map(err => ({
+        type: getErrorType(err),
+        nodeId: getErrorNodeId(err),
+        value: getErrorValue(err)
+      }))
+    );
+
     // Passo 3: Criar um mapa de erros ignorados para uma filtragem eficiente.
     const ignoredErrorsMap = new Map<string, Set<string>>();
     if (Array.isArray(props.ignoredErrorArray)) {
@@ -149,8 +159,23 @@ function BulkErrorList(props) {
       const nodeId = getErrorNodeId(err);
       if (!nodeId) return false; // Ignora erros sem um nó associado
       const ignoredValues = ignoredErrorsMap.get(nodeId);
-      return !ignoredValues || !ignoredValues.has(getErrorValue(err));
+      const isIgnored = ignoredValues && ignoredValues.has(getErrorValue(err));
+      return !isIgnored;
     });
+
+    console.log("=== ERROS ATIVOS APÓS FILTRO ===", activeErrors.length);
+    console.log("Tipos de erro ativos:", [
+      ...new Set(activeErrors.map(getErrorType))
+    ]);
+
+    // Contagem de erros por tipo
+    const errorCounts = activeErrors.reduce((acc, err) => {
+      const type = getErrorType(err);
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    console.log("Contagem de erros por tipo:", errorCounts);
 
     // Passo 5: Calcular as estatísticas de conformidade para cada tipo de item (Cores, Texto, etc.).
     const stats: Record<
@@ -170,28 +195,107 @@ function BulkErrorList(props) {
       }
     }
 
-    // 5b: Determinar quais dos nós aplicáveis estão "não conformes".
+    // 5b: Mapeamento completo de tipos de erro para categorias
+    const errorTypeMap: Record<string, string> = {
+      // Tipos básicos
+      gap: "gap",
+      padding: "padding",
+      fill: "fill",
+      radius: "radius",
+      border: "stroke",
+      stroke: "stroke",
+      spacing: "gap",
+      // Tipos de texto
+      text: "text",
+      "font-family": "text",
+      "font-size": "text",
+      "font-weight": "text",
+      "line-height": "text",
+      "letter-spacing": "text",
+      "font-style": "text",
+      "text-decoration": "text",
+      // Outros tipos que podem aparecer
+      opacity: "effects",
+      blur: "effects",
+      shadow: "effects",
+      component: "component",
+      "restore-component": "component"
+    };
+
+    // Mapear todos os erros por tipo normalizado
+    const errorsByType = new Map<string, Set<string>>();
+
     for (const error of activeErrors) {
       const nodeId = getErrorNodeId(error);
-      const errorType = getErrorType(error);
-      if (!nodeId || !errorType) continue;
+      const originalType = getErrorType(error);
+      if (!nodeId || !originalType) continue;
 
-      for (const type of itemTypes) {
-        const isMatch =
-          (type.key === "component" && errorType === "restore-component") ||
-          type.key === errorType;
-        if (isMatch && stats[type.key].applicable.has(nodeId)) {
-          stats[type.key].nonConform.add(nodeId);
-        }
+      // Normaliza o tipo de erro usando o mapeamento
+      const normalizedType = errorTypeMap[originalType] || originalType;
+
+      if (!errorsByType.has(normalizedType)) {
+        errorsByType.set(normalizedType, new Set());
+      }
+      errorsByType.get(normalizedType)!.add(nodeId);
+    }
+
+    // Log para depuração
+    console.log("=== CONTAGEM DE ERROS POR TIPO ===");
+    errorsByType.forEach((nodes, type) => {
+      console.log(`Tipo: ${type}, Quantidade: ${nodes.size}`);
+    });
+
+    // Mapear os erros para as categorias de item
+    for (const error of activeErrors) {
+      const nodeId = getErrorNodeId(error);
+      const originalType = getErrorType(error);
+      if (!nodeId || !originalType) continue;
+
+      // Normalizar o tipo de erro
+      const errorType = errorTypeMap[originalType] || originalType;
+
+      // Encontrar a categoria correspondente
+      const category = itemTypes.find(type => type.key === errorType);
+      if (category && stats[category.key]?.applicable.has(nodeId)) {
+        stats[category.key].nonConform.add(nodeId);
       }
     }
+
+    // Garantir que pelo menos os erros totais sejam refletidos
+    const totalNonConform = activeErrors.length;
+    console.log("Total de erros ativos:", totalNonConform);
+
+    // Log para depuração
+    console.log("=== ESTATÍSTICAS DE CONFORMIDADE ===");
+    itemTypes.forEach(type => {
+      const stat = stats[type.key];
+      console.log(`${type.label} (${type.key}):`);
+      console.log(`- Aplicável: ${stat.applicable.size}`);
+      console.log(`- Não conforme: ${stat.nonConform.size}`);
+      console.log(`- Conforme: ${stat.applicable.size - stat.nonConform.size}`);
+    });
 
     // Passo 6: Calcular a conformidade geral.
     const nodesWithActiveErrors = new Set(
       activeErrors.map(e => getErrorNodeId(e))
     );
-    const totalNonConformElements = nodesWithActiveErrors.size;
-    const totalConformElements = totalScannedElements - totalNonConformElements;
+
+    // Métrica do card de não conformes (mantida): maior entre erros e nós únicos
+    const totalNonConformElements = Math.max(
+      nodesWithActiveErrors.size,
+      activeErrors.length
+    );
+    // Métrica de elementos conformes: baseada APENAS em nós únicos com erro
+    const totalConformElements = Math.max(
+      0,
+      totalScannedElements - nodesWithActiveErrors.size
+    );
+
+    console.log("=== RESUMO FINAL ===");
+    console.log("Total de elementos escaneados:", totalScannedElements);
+    console.log("Total de erros ativos:", activeErrors.length);
+    console.log("Elementos não conformes:", totalNonConformElements);
+    console.log("Elementos conformes:", totalConformElements);
 
     // NOVO: Passo 6.5: Calcular detalhamento de conformidade por cor
     const simpleRgba = (color: any, opacity?: number) => {
@@ -1040,8 +1144,8 @@ function BulkErrorList(props) {
                   style={{ border: "1px solid rgba(255, 255, 255, 0.1)" }}
                 >
                   <ConformityScoreBar
-                    total={totalElements}
-                    errors={nonConformElements}
+                    totalElements={totalElements}
+                    nonConformElements={nonConformElements}
                   />
                 </div>
               </li>
@@ -1198,8 +1302,93 @@ function BulkErrorList(props) {
                 >
                   {itemTypes.map(type => {
                     const stat = conformityStats[type.key];
-                    const nonConform = stat.nonConform.size;
-                    const conform = stat.applicable.size - nonConform;
+                    if (!stat) return null;
+
+                    // Conta todos os erros do tipo específico diretamente da lista de erros ativos
+                    let errorCount = 0;
+
+                    // Mapeamento de tipos de erro para categorias
+                    const errorTypeMap: Record<string, string> = {
+                      text: "text",
+                      "font-family": "text",
+                      "font-size": "text",
+                      "font-weight": "text",
+                      "line-height": "text",
+                      "letter-spacing": "text",
+                      spacing: "gap",
+                      gap: "gap",
+                      border: "stroke",
+                      stroke: "stroke"
+                    };
+
+                    // Conta os erros para o tipo atual
+                    for (const error of filteredFlatErrors) {
+                      const errorType = getErrorType(error);
+                      const mappedType = errorTypeMap[errorType] || errorType;
+
+                      if (
+                        mappedType === type.key ||
+                        (type.key === "component" &&
+                          errorType === "restore-component")
+                      ) {
+                        errorCount++;
+                      }
+                    }
+
+                    // Garante que não temos mais erros do que elementos aplicáveis
+                    const nonConform = Math.min(
+                      errorCount,
+                      stat.applicable.size
+                    );
+                    const conform = Math.max(
+                      0,
+                      stat.applicable.size - nonConform
+                    );
+
+                    // Log detalhado para depuração
+                    if (type.key === "text") {
+                      console.log(`[DEBUG] ${type.label} - Análise Detalhada:`);
+                      console.log("Total de erros encontrados:", errorCount);
+                      console.log(
+                        "Elementos aplicáveis:",
+                        stat.applicable.size
+                      );
+                      console.log("Erros não conformes:", nonConform);
+                      console.log("Elementos conformes:", conform);
+
+                      // Log de todos os erros de texto
+                      const textErrors = filteredFlatErrors.filter(err => {
+                        const errorType = getErrorType(err);
+                        return (
+                          errorType === "text" ||
+                          errorType.startsWith("font-") ||
+                          errorType === "line-height" ||
+                          errorType === "letter-spacing"
+                        );
+                      });
+
+                      console.log("Erros de texto detalhados:", textErrors);
+
+                      // Log dos primeiros 5 erros para inspeção
+                      textErrors.slice(0, 5).forEach((err, idx) => {
+                        console.log(`Erro ${idx + 1}:`, {
+                          type: getErrorType(err),
+                          value: getErrorValue(err),
+                          nodeId: getErrorNodeId(err),
+                          error: err
+                        });
+                      });
+
+                      // Verifica se há erros que não estão sendo contados corretamente
+                      const allErrorTypes = new Set(
+                        filteredFlatErrors.map(getErrorType)
+                      );
+                      console.log(
+                        "Tipos de erro encontrados:",
+                        Array.from(allErrorTypes)
+                      );
+                    }
+
                     return (
                       <ConformityItemChart
                         key={type.key}
@@ -1375,9 +1564,13 @@ function BulkErrorList(props) {
                 const frameNonConformNodeIds = new Set(
                   frameErrors.map(e => getErrorNodeId(e))
                 );
-                const frameNonConformElements = frameNonConformNodeIds.size;
+                // Alinha com a lógica do card geral: considerar o maior entre nós únicos e total de erros
+                const frameNonConformElements = Math.max(
+                  frameNonConformNodeIds.size,
+                  frameErrors.length
+                );
                 const frameConformElements = Math.max(
-                  totalElements - frameNonConformElements,
+                  totalElements - frameNonConformNodeIds.size,
                   0
                 );
                 const frameDetachCount = frameErrors.filter(
@@ -1396,8 +1589,8 @@ function BulkErrorList(props) {
                       style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     >
                       <ConformityScoreBar
-                        total={totalElements}
-                        errors={frameNonConformElements}
+                        totalElements={totalElements}
+                        nonConformElements={frameNonConformElements}
                       />
                     </div>
                     <div style={{ height: 24 }} />

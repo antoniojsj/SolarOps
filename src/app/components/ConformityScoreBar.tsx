@@ -1,8 +1,8 @@
 import * as React from "react";
 
 interface ConformityScoreBarProps {
-  total: number;
-  errors: number;
+  totalElements: number;
+  nonConformElements: number;
 }
 
 function getScoreColor(score: number) {
@@ -22,13 +22,28 @@ function getScoreStatus(score: number) {
 }
 
 const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
-  total,
-  errors
+  totalElements,
+  nonConformElements
 }) => {
-  const correct = Math.max(total - errors, 0);
-  const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+  // Denominador efetivo: quando há mais erros que elementos, usamos os erros para que o texto/barras reflitam o total real de ocorrências
+  // Mantém o layout e evita divisão por zero
+  const effectiveTotal = Math.max(totalElements, nonConformElements, 1);
+  // Elementos conformes: total efetivo - não conformes (nunca negativo)
+  const conformElements = Math.max(effectiveTotal - nonConformElements, 0);
+  // Porcentagem de conformidade baseada no total efetivo
+  const score = Math.round((conformElements / effectiveTotal) * 100);
   const { bg, color } = getScoreColor(score);
   const status = getScoreStatus(score);
+
+  console.log("[ConformityScoreBar] Dados recebidos:", {
+    totalElements,
+    nonConformElements
+  });
+  console.log("[ConformityScoreBar] Cálculo:", {
+    effectiveTotal,
+    conformElements,
+    score
+  });
 
   return (
     <div className="system-card conformity-score-card">
@@ -38,7 +53,7 @@ const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
             Score de Conformidade
           </div>
           <div className="conformity-score-desc" style={{ fontSize: 12 }}>
-            {correct} de {total} elementos
+            {conformElements} de {effectiveTotal} elementos
           </div>
         </div>
         <div
@@ -48,21 +63,41 @@ const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
           {score}%
         </div>
       </div>
-      <div className="conformity-score-progress-bg">
-        <div
-          className="conformity-score-progress-fill"
-          style={{ width: `${score}%` }}
-        />
-      </div>
       <div
+        className="conformity-score-row"
         style={{
           display: "flex",
-          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
           marginTop: 8
         }}
       >
-        <span className="analysis-results-label">Status</span>
-        <span style={{ fontSize: 12, fontWeight: 600, color }}>{status}</span>
+        <div
+          className="conformity-score-progress-bg"
+          style={{
+            flex: 1,
+            background: bg,
+            height: 8,
+            borderRadius: 999,
+            overflow: "hidden"
+          }}
+        >
+          <div
+            className="conformity-score-progress-fill"
+            style={{ width: `${score}%`, background: color, height: "100%" }}
+          />
+        </div>
+        <div
+          className="conformity-score-status"
+          style={{
+            color,
+            marginLeft: 4,
+            textAlign: "right",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {status}
+        </div>
       </div>
     </div>
   );

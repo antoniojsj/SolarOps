@@ -1,13 +1,15 @@
 import React from "react";
 
 interface AnalysisResultsCardProps {
-  projectName?: string; // Aqui será o nome da biblioteca
-  analysisDate?: string; // Aqui será o total de tokens
+  projectName?: string; // Nome do projeto ou biblioteca
+  analysisDate?: string; // Data da análise ou total de tokens
+  isAuditReport?: boolean; // Indica se é o relatório de auditoria
 }
 
 const AnalysisResultsCard: React.FC<AnalysisResultsCardProps> = ({
   projectName = "-",
-  analysisDate = "-"
+  analysisDate = "-",
+  isAuditReport = false // Por padrão, não é um relatório de auditoria
 }) => {
   return (
     <div
@@ -16,11 +18,15 @@ const AnalysisResultsCard: React.FC<AnalysisResultsCardProps> = ({
     >
       <div className="analysis-results-content" style={{ padding: 0 }}>
         <div className="analysis-results-item">
-          <span className="analysis-results-label">Biblioteca de tokens:</span>
+          <span className="analysis-results-label">
+            {isAuditReport ? "Projeto:" : "Biblioteca de tokens:"}
+          </span>
           <span className="analysis-results-value">{projectName}</span>
         </div>
         <div className="analysis-results-item">
-          <span className="analysis-results-label">Total de tokens:</span>
+          <span className="analysis-results-label">
+            {isAuditReport ? "Auditado em:" : "Total de tokens:"}
+          </span>
           <span className="analysis-results-value">{analysisDate}</span>
         </div>
       </div>
