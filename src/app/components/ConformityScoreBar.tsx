@@ -25,12 +25,11 @@ const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
   totalElements,
   nonConformElements
 }) => {
-  // Denominador efetivo: quando há mais erros que elementos, usamos os erros para que o texto/barras reflitam o total real de ocorrências
-  // Mantém o layout e evita divisão por zero
-  const effectiveTotal = Math.max(totalElements, nonConformElements, 1);
-  // Elementos conformes: total efetivo - não conformes (nunca negativo)
-  const conformElements = Math.max(effectiveTotal - nonConformElements, 0);
-  // Porcentagem de conformidade baseada no total efetivo
+  // Denominador é o total de elementos escaneados (alinha com os cards)
+  const effectiveTotal = Math.max(totalElements, 1);
+  // Elementos conformes: total - nós não conformes (nunca negativo)
+  const conformElements = Math.max(totalElements - nonConformElements, 0);
+  // Porcentagem de conformidade baseada no total de elementos
   const score = Math.round((conformElements / effectiveTotal) * 100);
   const { bg, color } = getScoreColor(score);
   const status = getScoreStatus(score);

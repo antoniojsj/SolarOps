@@ -105,6 +105,7 @@ function BulkErrorList(props) {
     conformityStats,
     totalElements,
     nonConformElements,
+    nonConformUniqueCount,
     conformElements,
     bulkErrorList,
     filteredFlatErrors,
@@ -359,6 +360,7 @@ function BulkErrorList(props) {
       conformityStats: stats,
       totalElements: totalScannedElements,
       nonConformElements: totalNonConformElements,
+      nonConformUniqueCount: nodesWithActiveErrors.size,
       conformElements: totalConformElements,
       bulkErrorList: displayableErrorList,
       filteredFlatErrors: activeErrors,
@@ -1155,7 +1157,7 @@ function BulkErrorList(props) {
                 >
                   <ConformityScoreBar
                     totalElements={totalElements}
-                    nonConformElements={nonConformElements}
+                    nonConformElements={nonConformUniqueCount}
                   />
                 </div>
               </li>
@@ -1235,7 +1237,7 @@ function BulkErrorList(props) {
                         marginBottom: 8
                       }}
                     >
-                      {nonConformElements}
+                      {nonConformUniqueCount}
                     </span>
                     <span
                       style={{
@@ -1346,7 +1348,7 @@ function BulkErrorList(props) {
                     >
                       <ConformityScoreBar
                         totalElements={totalElements}
-                        nonConformElements={frameNonConformElements}
+                        nonConformElements={frameNonConformNodeIds.size}
                       />
                     </div>
                     <div style={{ height: 24 }} />
@@ -1421,7 +1423,7 @@ function BulkErrorList(props) {
                             marginBottom: 8
                           }}
                         >
-                          {frameNonConformElements}
+                          {frameNonConformNodeIds.size}
                         </span>
                         <span
                           style={{

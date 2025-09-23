@@ -462,59 +462,72 @@ figma.ui.onmessage = async (msg: any) => {
   }
 };
 
-// Sempre que a seleção mudar, notificar a UI e, se estiver em modo de medição,
-// criar uma medição simples entre dois itens selecionados (modo distância)
-figma.on("selectionchange", async () => {
-  try {
-    const selLen =
-      figma.currentPage.selection && figma.currentPage.selection.length
-        ? figma.currentPage.selection.length
-        : 0;
-    figma.ui.postMessage({
-      type: "selection-updated",
-      payload: { count: selLen }
-    });
-
-    if (
-      MEASURE_STATE.isMeasuring &&
-      (MEASURE_STATE.mode === "distance" || MEASURE_STATE.mode === "angle")
-    ) {
-      const sel = figma.currentPage.selection as any[];
-      if (!sel || sel.length === 0) {
-        return;
-      }
-      const current = sel[0];
-      if (!MEASURE_RUNTIME.firstNodeId) {
-        // primeiro clique
-        MEASURE_RUNTIME.firstNodeId = current.id;
-        return;
-      }
-      if (
-        MEASURE_RUNTIME.firstNodeId &&
-        current.id !== MEASURE_RUNTIME.firstNodeId
-      ) {
-        // segundo clique
-        const a = figma.getNodeById(MEASURE_RUNTIME.firstNodeId) as any;
-        const b = current;
-        if (a && b) {
-          const ca = getAbsoluteCenter(a);
-          const cb = getAbsoluteCenter(b);
-          createMeasurement(ca.x, ca.y, cb.x, cb.y, MEASURE_STATE.mode as any);
-        }
-        // pronto para nova captura
-        MEASURE_RUNTIME.firstNodeId = undefined;
-      }
-    } else if (MEASURE_STATE.isMeasuring && MEASURE_STATE.mode === "area") {
-      const sel = figma.currentPage.selection as any[];
-      if (!sel || sel.length === 0) return;
-      // Criar medição de área para todos os nós selecionados
-      for (const node of sel) {
-        await createAreaMeasurementForNode(node as SceneNode);
-      }
-    }
-  } catch (e) {
-    console.warn("[Controller] selectionchange handler error", e);
+// Debounce selection updates to avoid flooding and UI jank
+let selectionTimer: number | undefined;
+figma.on("selectionchange", () => {
+  if (selectionTimer) {
+    // @ts-ignore
+    clearTimeout(selectionTimer);
   }
+  // @ts-ignore
+  selectionTimer = setTimeout(async () => {
+    try {
+      const selLen =
+        figma.currentPage.selection && figma.currentPage.selection.length
+          ? figma.currentPage.selection.length
+          : 0;
+      figma.ui.postMessage({
+        type: "selection-updated",
+        payload: { count: selLen }
+      });
+
+      if (
+        MEASURE_STATE.isMeasuring &&
+        (MEASURE_STATE.mode === "distance" || MEASURE_STATE.mode === "angle")
+      ) {
+        const sel = figma.currentPage.selection as any[];
+        if (!sel || sel.length === 0) {
+          return;
+        }
+        const current = sel[0];
+        if (!MEASURE_RUNTIME.firstNodeId) {
+          // primeiro clique
+          MEASURE_RUNTIME.firstNodeId = current.id;
+          return;
+        }
+        if (
+          MEASURE_RUNTIME.firstNodeId &&
+          current.id !== MEASURE_RUNTIME.firstNodeId
+        ) {
+          // segundo clique
+          const a = figma.getNodeById(MEASURE_RUNTIME.firstNodeId) as any;
+          const b = current;
+          if (a && b) {
+            const ca = getAbsoluteCenter(a);
+            const cb = getAbsoluteCenter(b);
+            createMeasurement(
+              ca.x,
+              ca.y,
+              cb.x,
+              cb.y,
+              MEASURE_STATE.mode as any
+            );
+          }
+          // pronto para nova captura
+          MEASURE_RUNTIME.firstNodeId = undefined;
+        }
+      } else if (MEASURE_STATE.isMeasuring && MEASURE_STATE.mode === "area") {
+        const sel = figma.currentPage.selection as any[];
+        if (!sel || sel.length === 0) return;
+        // Criar medição de área para todos os nós selecionados
+        for (const node of sel) {
+          await createAreaMeasurementForNode(node as SceneNode);
+        }
+      }
+    } catch (e) {
+      console.warn("[Controller] selectionchange handler error", e);
+    }
+  }, 120);
 });
 
 // Função para extrair e pré-processar os IDs de estilo das bibliotecas
@@ -2266,7 +2279,18 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             totalErrors: lintResults.length
           }
         };
-        await figma.clientStorage.setAsync("inspectorData", inspectorData);
+        // Manter em cache em memória para exportações sem depender de armazenamento persistente
+        (globalThis as any).LAST_INSPECTOR_DATA = inspectorData;
+        // Tentar salvar de forma resiliente, mas não falhar a auditoria caso exceda a cota
+        try {
+          // Nota: dados podem exceder 5MB dependendo do documento. Evitar travar em caso de erro.
+          await figma.clientStorage.setAsync("inspectorData", inspectorData);
+        } catch (e) {
+          console.warn(
+            "[Controller] Não foi possível salvar inspectorData no clientStorage (ignorado):",
+            e instanceof Error ? e.message : String(e)
+          );
+        }
         figma.ui.postMessage({
           type: "step-3-complete",
           errors: groupedErrors,
@@ -2289,9 +2313,10 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     // Handler para exportar o JSON da análise do inspector
     if (msg.type === "export-inspector-json") {
       try {
-        const inspectorData = await figma.clientStorage.getAsync(
-          "inspectorData"
-        );
+        let inspectorData = await figma.clientStorage.getAsync("inspectorData");
+        if (!inspectorData) {
+          inspectorData = (globalThis as any).LAST_INSPECTOR_DATA || null;
+        }
         if (inspectorData) {
           figma.ui.postMessage({
             type: "inspector-json-exported",

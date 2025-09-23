@@ -4,6 +4,8 @@ import { motion } from "framer-motion/dist/framer-motion";
 import StyleContent from "./StyleContent";
 import "../styles/modal.css";
 
+const DEBUG = false;
+
 function useOnClickOutside(ref, handler) {
   useEffect(() => {
     const listener = event => {
@@ -13,10 +15,11 @@ function useOnClickOutside(ref, handler) {
       handler(event);
     };
     document.addEventListener("mousedown", listener);
-    document.addEventListener("touchstart", listener);
+    // Mark touchstart as passive to avoid scroll blocking
+    document.addEventListener("touchstart", listener, { passive: true } as any);
     return () => {
       document.removeEventListener("mousedown", listener);
-      document.removeEventListener("touchstart", listener);
+      document.removeEventListener("touchstart", listener as any);
     };
   }, [ref, handler]);
 }
@@ -125,35 +128,19 @@ function BulkErrorListItem(props) {
     setOptions(initialOptions);
     // Reset flag quando muda o item
     didLoadRef.current = initialOptions && initialOptions.length > 0;
-    console.log("[BulkErrorListItem] Sync options on error change", {
-      nodeId: error.nodeId,
-      type: error.type,
-      initialOptionsCount: initialOptions ? initialOptions.length : 0,
-      hasSuggestions,
-      hasMatches,
-      hasLibOptions: libOptions && libOptions.length > 0
-    });
+    if (DEBUG)
+      console.log("[BulkErrorListItem] Sync options on error change", {
+        nodeId: error.nodeId,
+        type: error.type,
+        initialOptionsCount: initialOptions ? initialOptions.length : 0,
+        hasSuggestions,
+        hasMatches,
+        hasLibOptions: libOptions && libOptions.length > 0
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error.nodeId, error.type]);
 
-  // Solicitar sugestões automaticamente ao montar se não houver nenhuma opção
-  useEffect(() => {
-    const eligible = ["fill", "stroke", "effects", "text"].includes(
-      (error.type || "").toLowerCase()
-    );
-    if (eligible && (!options || options.length === 0) && !didLoadRef.current) {
-      console.log("[BulkErrorListItem] Auto-fetching suggestions", {
-        nodeId: error.nodeId,
-        type: error.type
-      });
-      parent.postMessage(
-        { pluginMessage: { type: "fetch-suggestions", error } },
-        "*"
-      );
-    }
-    // Apenas na montagem e quando mudar o item
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error.nodeId, error.type]);
+  // Removido auto-fetch em massa: sugestões serão buscadas sob demanda (clique)
 
   // Ouve respostas do plugin com sugestões e atualiza as opções deste item
   useEffect(() => {
@@ -205,9 +192,9 @@ function BulkErrorListItem(props) {
           "effects",
           "text"
         ].includes((error.type || "").toLowerCase())) ||
-        ["color", "colors", "typography", "effect"].includes(
-          (error.type || "").toLowerCase()
-        )
+      ["color", "colors", "typography", "effect"].includes(
+        (error.type || "").toLowerCase()
+      )
   );
   const selectedSuggestion =
     selectedSuggestionIndex !== null &&
@@ -217,30 +204,31 @@ function BulkErrorListItem(props) {
       : null;
 
   // Debug: Log para verificar as sugestões e o estado do dropdown
-  console.log(`[BulkErrorListItem] Erro tipo: ${error.type}`, {
-    hasSuggestions,
-    hasMatches,
-    suggestionsCount: error.suggestions ? error.suggestions.length : 0,
-    matchesCount: error.matches ? error.matches.length : 0,
-    optionsCount: options.length,
-    options: options
-      ? options.map((s, i) => ({
-          id: s.id,
-          name: s.name,
-          type: s.type,
-          hasPaint: !!s.paint,
-          paintType: s.paint ? s.paint.type : "no-paint",
-          keys: Object.keys(s),
-          index: i
-        }))
-      : "no-suggestions",
-    isDropdownOpen,
-    errorKeys: Object.keys(error),
-    errorType: typeof error,
-    errorString: JSON.stringify(error, null, 2)
-  });
+  if (DEBUG)
+    console.log(`[BulkErrorListItem] Erro tipo: ${error.type}`, {
+      hasSuggestions,
+      hasMatches,
+      suggestionsCount: error.suggestions ? error.suggestions.length : 0,
+      matchesCount: error.matches ? error.matches.length : 0,
+      optionsCount: options.length,
+      options: options
+        ? options.map((s, i) => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            hasPaint: !!s.paint,
+            paintType: s.paint ? s.paint.type : "no-paint",
+            keys: Object.keys(s),
+            index: i
+          }))
+        : "no-suggestions",
+      isDropdownOpen,
+      errorKeys: Object.keys(error),
+      errorType: typeof error,
+      errorString: JSON.stringify(error, null, 2)
+    });
 
-  if (hasSuggestions) {
+  if (DEBUG && hasSuggestions) {
     console.log(
       `[BulkErrorListItem] Detalhes das sugestões para ${error.type}:`,
       {
@@ -341,25 +329,26 @@ function BulkErrorListItem(props) {
             onClick={e => {
               const hasValidSuggestions = hasSuggestions || hasMatches;
 
-              console.log(
-                `[BulkErrorListItem] Dropdown clicado - Tipo: ${error.type}`,
-                {
-                  hasValidSuggestions,
-                  hasSuggestions,
-                  hasMatches,
-                  suggestionsCount: error.suggestions
-                    ? error.suggestions.length
-                    : 0,
-                  matchesCount: error.matches ? error.matches.length : 0,
-                  isDropdownOpen: !isDropdownOpen,
-                  errorType: error.type,
-                  errorProperty: error.property,
-                  errorKeys: Object.keys(error),
-                  errorValue: error.value,
-                  errorNodeId: error.nodeId,
-                  errorNodeName: error.nodeName
-                }
-              );
+              if (DEBUG)
+                console.log(
+                  `[BulkErrorListItem] Dropdown clicado - Tipo: ${error.type}`,
+                  {
+                    hasValidSuggestions,
+                    hasSuggestions,
+                    hasMatches,
+                    suggestionsCount: error.suggestions
+                      ? error.suggestions.length
+                      : 0,
+                    matchesCount: error.matches ? error.matches.length : 0,
+                    isDropdownOpen: !isDropdownOpen,
+                    errorType: error.type,
+                    errorProperty: error.property,
+                    errorKeys: Object.keys(error),
+                    errorValue: error.value,
+                    errorNodeId: error.nodeId,
+                    errorNodeName: error.nodeName
+                  }
+                );
               // Solicita sugestões ao plugin quando não houver opções
               if (
                 canOpenDropdown &&
@@ -506,4 +495,4 @@ function BulkErrorListItem(props) {
   );
 }
 
-export default BulkErrorListItem;
+export default React.memo(BulkErrorListItem);
