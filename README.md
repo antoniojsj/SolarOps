@@ -108,10 +108,6 @@ Os arquivos de build serão armazenados no diretório `dist/`.
 2. Vá em `Plugins` > `Development` > `Import plugin from manifest...`
 3. Selecione o arquivo `manifest.json` na raiz do projeto
 
-## 📄 Licença
-
-Este projeto está licenciado sob a licença ISC - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
 ## 🤝 Contribuindo
 
 Sinta-se à vontade para abrir issues e PRs. Para contribuições:
