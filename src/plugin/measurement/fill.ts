@@ -54,7 +54,7 @@ export const createFill = (
       case "dashed":
         cloneNode.dashPattern = [4];
         cloneNode.strokes = [].concat(solidColor(r, g, b));
-        cloneNode.strokeWeight = 1;
+        cloneNode.strokeWeight = 2;
         break;
       case "fill":
         cloneNode.fills = [].concat({
@@ -64,7 +64,7 @@ export const createFill = (
         break;
       case "fill-stroke":
         cloneNode.strokes = [].concat(solidColor(r, g, b));
-        cloneNode.strokeWeight = 1;
+        cloneNode.strokeWeight = 2;
 
         cloneNode.fills = [].concat({
           ...solidColor(r, g, b),
@@ -73,7 +73,7 @@ export const createFill = (
         break;
       case "stroke":
         cloneNode.strokes = [].concat(solidColor(r, g, b));
-        cloneNode.strokeWeight = 1;
+        cloneNode.strokeWeight = 2;
         break;
     }
 

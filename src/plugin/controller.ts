@@ -2241,9 +2241,11 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           }
         }
 
+        // CRÍTICA: Não usar bibliotecas locais automaticamente
+        // O sistema deve usar APENAS tokens salvos explicitamente pelo usuário
         if (!effectiveLibraries || effectiveLibraries.length === 0) {
           console.warn(
-            "[Controller] Nenhuma biblioteca disponível para auditoria"
+            "[Controller] Nenhuma biblioteca disponível - usuário deve salvar tokens primeiro"
           );
           effectiveLibraries = [];
         }
@@ -2263,6 +2265,12 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           }))
         );
 
+        console.log(
+          "[Controller] DEBUG - Tokens recebidos:",
+          msg.savedTokens?.length || 0
+        );
+
+        // Execute linting on selected nodes
         const lintResults = await lint(
           nodesToLint,
           effectiveLibrariesWithVariables,
@@ -2608,8 +2616,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 // Função para carregar os tokens salvos
 async function loadSavedTokens() {
   try {
+    console.log("[Controller] Iniciando carregamento de tokens salvos");
     const savedFiles =
       (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
+    console.log(
+      "[Controller] Arquivos salvos encontrados:",
+      savedFiles.length,
+      savedFiles
+    );
+
     const tokensList: SavedTokenFile[] = [];
 
     // Carregar todos os tokens salvos, ordenados do mais recente para o mais antigo
@@ -2619,10 +2634,22 @@ async function loadSavedTokens() {
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )) {
       try {
+        console.log("[Controller] Carregando arquivo:", file.filename);
         const tokens = await figma.clientStorage.getAsync(file.filename);
+        console.log(
+          "[Controller] Conteúdo do arquivo:",
+          typeof tokens,
+          tokens?.length || 0,
+          "caracteres"
+        );
+
         if (typeof tokens === "string" && tokens.trim().length) {
           try {
             const parsed = JSON.parse(tokens);
+            console.log(
+              "[Controller] Tokens parseados com sucesso:",
+              Object.keys(parsed)
+            );
             tokensList.push({
               ...file,
               tokens: parsed
@@ -2630,14 +2657,22 @@ async function loadSavedTokens() {
           } catch (e) {
             console.warn(
               "[loadSavedTokens] Ignorando conteúdo inválido em",
-              file.filename
+              file.filename,
+              e
             );
           }
+        } else {
+          console.log("[Controller] Arquivo vazio ou inválido:", file.filename);
         }
       } catch (error) {
         console.error(`Erro ao carregar tokens de ${file.filename}:`, error);
       }
     }
+
+    console.log(
+      "[Controller] Total de conjuntos de tokens carregados:",
+      tokensList.length
+    );
 
     return {
       success: true,

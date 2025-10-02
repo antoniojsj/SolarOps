@@ -315,7 +315,7 @@ export const createPaddingLine = ({
   currentNode?: SceneNode;
   isGlobalGroup?: boolean;
 } & ExchangeStoreValues) => {
-  const STROKE_WIDTH = labelFontSize / 10;
+  const STROKE_WIDTH = labelFontSize / 5;
 
   const nodeData = getNodeAndParentNode(currentNode, parent);
   const mainColor = getColor(color);

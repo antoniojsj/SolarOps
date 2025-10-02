@@ -635,7 +635,7 @@ export const createMeasurement = async (
       opacity: 1
     }
   ];
-  leftVec.strokeWeight = 1;
+  leftVec.strokeWeight = 2;
   leftVec.strokeCap = "ROUND";
   leftVec.x = midX - ux * (halfGap + leftLen);
   leftVec.y = midY - uy * (halfGap + leftLen);
@@ -651,7 +651,7 @@ export const createMeasurement = async (
       opacity: 1
     }
   ];
-  rightVec.strokeWeight = 1;
+  rightVec.strokeWeight = 2;
   rightVec.strokeCap = "ROUND";
   rightVec.x = midX + ux * halfGap;
   rightVec.y = midY + uy * halfGap;
@@ -672,7 +672,7 @@ export const createMeasurement = async (
         opacity: 1
       }
     ];
-    v.strokeWeight = 1;
+    v.strokeWeight = 2;
     v.strokeCap = "ROUND";
     v.x = cx;
     v.y = cy;
@@ -1085,10 +1085,7 @@ export const createPresetMeasurementForNode = async (
   text.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
   text.characters = labelText;
   text.x = labelX - text.width / 2;
-  text.y =
-    labelY -
-    text.height / 2 -
-    (position === "top" ? 6 : position === "bottom" ? -6 : 0);
+  text.y = labelY - text.height / 2;
 
   const bg = figma.createRectangle();
   const bw = Math.max(20, text.width);
@@ -1134,7 +1131,7 @@ export const createPresetMeasurementForNode = async (
       opacity: 1
     }
   ];
-  leftVec.strokeWeight = 1;
+  leftVec.strokeWeight = 2;
   leftVec.x = midX - ux * (halfGap + leftLen);
   leftVec.y = midY - uy * (halfGap + leftLen);
 
@@ -1149,7 +1146,7 @@ export const createPresetMeasurementForNode = async (
       opacity: 1
     }
   ];
-  rightVec.strokeWeight = 1;
+  rightVec.strokeWeight = 2;
   rightVec.x = midX + ux * halfGap;
   rightVec.y = midY + uy * halfGap;
 

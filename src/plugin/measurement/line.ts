@@ -325,7 +325,7 @@ export const createLine = options => {
     }
 
     // LINE
-    line.strokeWeight = labelFontSize / 10;
+    line.strokeWeight = labelFontSize / 5;
     line.x = isHorizontal ? 0 : group.width / 2 - line.strokeWeight / 2;
     line.y = isHorizontal ? group.height / 2 + line.strokeWeight / 2 : 0;
 

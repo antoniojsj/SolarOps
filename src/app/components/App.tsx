@@ -157,6 +157,9 @@ const App = ({}) => {
     null
   );
 
+  // Estado para armazenar tokens salvos
+  const [savedTokens, setSavedTokens] = React.useState<any[]>([]);
+
   window.addEventListener("keydown", function(e) {
     if (e.key === "Escape") {
       // Close plugin when pressing Escape
@@ -349,31 +352,14 @@ const App = ({}) => {
           lintVectors: lintVectors,
           selection: "user",
           // Envia as bibliotecas ativas para a auditoria
-          libraries: activeComponentLibraries
+          libraries: activeComponentLibraries,
+          // Envia os tokens salvos para a auditoria
+          savedTokens: savedTokens
         }
       },
       "*"
     );
-  }, [activeComponentLibraries, lintVectors]);
-
-  const onScanEntirePage = React.useCallback(() => {
-    console.log(
-      "[App] onScanEntirePage chamado. Bibliotecas ativas:",
-      activeComponentLibraries
-    );
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: "run-app",
-          lintVectors: lintVectors,
-          selection: "page",
-          // Usando bibliotecas ativas para a auditoria
-          libraries: activeComponentLibraries
-        }
-      },
-      "*"
-    );
-  }, [activeComponentLibraries, lintVectors]);
+  }, [activeComponentLibraries, lintVectors, savedTokens]);
 
   // Atualiza as referências quando o estado muda
   React.useEffect(() => {
@@ -651,11 +637,19 @@ const App = ({}) => {
           );
           setActiveComponentLibraries(libs);
         }
-      } else if (type === "local-styles-imported") {
-        console.log("[LOG] local-styles-imported", {
-          t: performance.now() - t0
-        });
-        setLocalStyles(message);
+      } else if (type === "saved-tokens-loaded") {
+        console.log("[LOG] saved-tokens-loaded", { t: performance.now() - t0 });
+        if (success && message) {
+          console.log(
+            "[App] Tokens salvos carregados:",
+            message.length,
+            "conjuntos"
+          );
+          setSavedTokens(message);
+        } else {
+          console.warn("[App] Falha ao carregar tokens salvos");
+          setSavedTokens([]);
+        }
       } else if (type === "remote-styles-imported") {
         console.log("[LOG] remote-styles-imported", {
           t: performance.now() - t0
@@ -698,6 +692,34 @@ const App = ({}) => {
       },
       "*"
     );
+
+    // Carrega os tokens salvos
+    console.log("[App] Solicitando tokens salvos...");
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "load-saved-tokens"
+        }
+      },
+      "*"
+    );
+
+    // Verificação adicional após 2 segundos para garantir que os tokens foram carregados
+    const tokenCheckTimeout = setTimeout(() => {
+      if (savedTokens.length === 0) {
+        console.log("[App] Tentando carregar tokens novamente...");
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "load-saved-tokens"
+            }
+          },
+          "*"
+        );
+      }
+    }, 2000);
+
+    return () => clearTimeout(tokenCheckTimeout);
   }, []);
 
   // Debug: monitora alterações em activeComponentLibraries
