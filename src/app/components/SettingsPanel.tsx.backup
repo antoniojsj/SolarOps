@@ -80,11 +80,10 @@ function SettingsPanel(props: SettingsPanelProps) {
     setSaveStatus(null);
 
     try {
-      // Usar o novo handler force-save-tokens para garantir salvamento
       parent.postMessage(
         {
           pluginMessage: {
-            type: "force-save-tokens",
+            type: "save-design-tokens",
             tokens: props.designTokens
           }
         },

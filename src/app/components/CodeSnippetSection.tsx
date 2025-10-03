@@ -40,180 +40,167 @@ const formatNodeData = (node: any): string => {
   return JSON.stringify(cleanedNode, null, 2);
 };
 
-const extractCSS = (node: any): string => {
-  if (!node) return "/* No styles found */";
+const toKebabCase = (str: string) => {
+  if (!str) return "";
+  return str
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+};
 
-  // Try different possible style properties
-  const styles = node.styles || node.css || node.style || {};
+const extractImprovedCSS = (node: any, parentClass?: string): string => {
+  if (!node) return "";
+
+  const nodeName = toKebabCase(node.name || node.type || "unnamed");
+  const baseClass = parentClass ? `${parentClass}__${nodeName}` : nodeName;
+
   let css = "";
+  const styles: Record<string, any> = {};
 
-  // Group related CSS properties
-  const propertyGroups: Record<string, [string, string | number][]> = {
-    layout: [],
-    spacing: [],
-    typography: [],
-    colors: [],
-    borders: [],
-    effects: [],
-    other: []
-  };
+  if (node.layoutMode) {
+    styles.display = "flex";
+    styles.flexDirection = node.layoutMode === "HORIZONTAL" ? "row" : "column";
+    if (node.itemSpacing) styles.gap = `${node.itemSpacing}px`;
+  }
 
-  // Convert styles object to CSS with grouping
-  if (typeof styles === "object") {
-    Object.entries(styles).forEach(([property, value]) => {
-      if (value === undefined || value === null || value === "") return;
-
-      const cssProperty = property.replace(/([A-Z])/g, "-$1").toLowerCase();
-      const valueStr = String(value);
-
-      // Categorize properties
-      if (
-        [
-          "display",
-          "position",
-          "top",
-          "right",
-          "bottom",
-          "left",
-          "z-index",
-          "overflow",
-          "visibility"
-        ].includes(cssProperty)
-      ) {
-        propertyGroups.layout.push([cssProperty, valueStr]);
-      } else if (
-        [
-          "width",
-          "height",
-          "min-width",
-          "max-width",
-          "min-height",
-          "max-height",
-          "margin",
-          "padding"
-        ].some(p => cssProperty.startsWith(p))
-      ) {
-        propertyGroups.spacing.push([cssProperty, valueStr]);
-      } else if (
-        [
-          "color",
-          "background",
-          "background-color",
-          "background-image",
-          "opacity"
-        ].includes(cssProperty) ||
-        cssProperty.includes("color") ||
-        (typeof value === "string" &&
-          (value.startsWith("#") ||
-            value.startsWith("rgb") ||
-            value.startsWith("hsl")))
-      ) {
-        propertyGroups.colors.push([cssProperty, valueStr]);
-      } else if (
-        [
-          "font",
-          "font-family",
-          "font-size",
-          "font-weight",
-          "line-height",
-          "text-align",
-          "text-transform",
-          "letter-spacing",
-          "white-space"
-        ].includes(cssProperty)
-      ) {
-        propertyGroups.typography.push([cssProperty, valueStr]);
-      } else if (
-        cssProperty.includes("border") ||
-        cssProperty.includes("radius") ||
-        cssProperty.includes("shadow")
-      ) {
-        propertyGroups.borders.push([cssProperty, valueStr]);
-      } else if (
-        cssProperty.includes("shadow") ||
-        cssProperty.includes("filter") ||
-        cssProperty.includes("transform")
-      ) {
-        propertyGroups.effects.push([cssProperty, valueStr]);
-      } else {
-        propertyGroups.other.push([cssProperty, valueStr]);
-      }
-    });
-
-    // Generate CSS with comments for each group
-    Object.entries(propertyGroups).forEach(([group, properties]) => {
-      if (properties.length === 0) return;
-
-      css += `\n  /* ${group.charAt(0).toUpperCase() + group.slice(1)} */\n`;
-
-      properties.forEach(([prop, val]) => {
-        // Add comments for important or complex values
-        let comment = "";
-        if (prop === "z-index" && Number(val) > 100) {
-          comment = " /* High z-index, ensure this is intentional */";
-        } else if (prop === "position" && val === "fixed") {
-          comment = " /* Fixed positioning, may affect layout */";
-        } else if (prop === "display" && val === "none") {
-          comment = " /* Hides the element */";
-        }
-
-        css += `  ${prop}: ${val};${comment}\n`;
-      });
-    });
-
-    // Add responsive design considerations
-    if (propertyGroups.spacing.length > 0 || propertyGroups.layout.length > 0) {
-      css += "\n  /* Responsive Design Considerations */";
-      css += "\n  @media (max-width: 768px) {";
-      css += "\n    /* Adjust for tablets and mobile */";
-
-      // Make layout more mobile-friendly
-      if (
-        propertyGroups.layout.some(
-          ([p, v]) => p === "flex-direction" && v !== "column"
-        )
-      ) {
-        css += "\n    flex-direction: column;";
-      }
-
-      // Adjust spacing for mobile
-      if (
-        propertyGroups.spacing.some(
-          ([p]) => p.startsWith("padding") || p.startsWith("margin")
-        )
-      ) {
-        css += "\n    padding: 16px;";
-        css += "\n    margin: 8px 0;";
-      }
-
-      // Ensure text is readable on mobile
-      if (
-        propertyGroups.typography.some(
-          ([p]) => p === "font-size" || p === "line-height"
-        )
-      ) {
-        css += "\n    font-size: 16px;";
-        css += "\n    line-height: 1.5;";
-      }
-
-      css += "\n  }\n";
+  if (node.fills && Array.isArray(node.fills)) {
+    const fill = node.fills.find((f: any) => f.type === "SOLID");
+    if (fill && fill.color) {
+      const { r, g, b, a } = fill.color;
+      styles.backgroundColor = `rgba(${Math.round(r * 255)}, ${Math.round(
+        g * 255
+      )}, ${Math.round(b * 255)}, ${a || 1})`;
     }
-  } else if (typeof styles === "string") {
-    // If styles is already a string, use it directly with some formatting
-    css = styles
-      .split(";")
+  }
+
+  if (node.strokes && Array.isArray(node.strokes) && node.strokeWeight > 0) {
+    const stroke = node.strokes.find((s: any) => s.type === "SOLID");
+    if (stroke && stroke.color) {
+      const { r, g, b, a } = stroke.color;
+      styles.border = `${node.strokeWeight}px solid rgba(${Math.round(
+        r * 255
+      )}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a || 1})`;
+    }
+  }
+
+  if (node.cornerRadius) styles.borderRadius = `${node.cornerRadius}px`;
+
+  if (node.padding) {
+    const { top = 0, right = 0, bottom = 0, left = 0 } = node.padding;
+    styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+  }
+
+  if (node.type === "TEXT") {
+    if (node.fills && Array.isArray(node.fills)) {
+      const fill = node.fills.find((f: any) => f.type === "SOLID");
+      if (fill && fill.color) {
+        const { r, g, b, a } = fill.color;
+        styles.color = `rgba(${Math.round(r * 255)}, ${Math.round(
+          g * 255
+        )}, ${Math.round(b * 255)}, ${a || 1})`;
+      }
+    }
+    if (node.fontName)
+      styles.fontFamily = `"${node.fontName.family}", sans-serif`;
+    if (node.fontSize) styles.fontSize = `${node.fontSize}px`;
+    if (node.fontWeight) styles.fontWeight = node.fontWeight;
+    if (node.lineHeight)
+      styles.lineHeight = `${node.lineHeight.value}${
+        node.lineHeight.unit === "PIXELS" ? "px" : "%"
+      }`;
+    if (node.letterSpacing)
+      styles.letterSpacing = `${node.letterSpacing.value}px`;
+    if (node.textAlignHorizontal)
+      styles.textAlign = node.textAlignHorizontal.toLowerCase();
+  }
+
+  if (Object.keys(styles).length > 0) {
+    css += `.${baseClass} {\n`;
+    for (const [prop, value] of Object.entries(styles)) {
+      css += `  ${prop.replace(/([A-Z])/g, "-$1").toLowerCase()}: ${value};
+`;
+    }
+    css += `}
+
+`;
+  }
+
+  if (node.children && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      css += extractImprovedCSS(child, baseClass);
+    }
+  }
+
+  return css;
+};
+
+const generateImprovedHTML = (
+  node: any,
+  indent = 0,
+  parentClass?: string
+): string => {
+  if (!node) return "";
+
+  const indentStr = "  ".repeat(indent);
+  const nodeName = toKebabCase(node.name || node.type || "unnamed");
+  const baseClass = parentClass ? `${parentClass}__${nodeName}` : nodeName;
+
+  let tagName = "div";
+  const attributes = [`class="${baseClass}"`];
+  let textContent = "";
+
+  const isButton =
+    (node.name || "").toLowerCase().includes("button") ||
+    (node.name || "").toLowerCase().includes("btn");
+  const isLink = (node.name || "").toLowerCase().includes("link");
+  const isImage =
+    node.type === "VECTOR" ||
+    node.type === "IMAGE" ||
+    (node.name || "").toLowerCase().includes("icon");
+
+  if (isButton) {
+    tagName = "button";
+    attributes.push('type="button"');
+    attributes.push(`aria-label="${node.name || "button"}"`);
+  } else if (isLink) {
+    tagName = "a";
+    attributes.push('href="#"', `aria-label="${node.name || "link"}"`);
+  } else if (isImage) {
+    tagName = "img";
+    attributes.push(
+      `src="./assets/${nodeName}.svg"`,
+      `alt="${node.name || "image"}"`
+    );
+  } else if (node.type === "TEXT") {
+    tagName = "p";
+    textContent = node.characters || "";
+  }
+
+  let childrenContent = "";
+  if (node.children && Array.isArray(node.children)) {
+    childrenContent = node.children
+      .map((child: any) => generateImprovedHTML(child, indent + 1, baseClass))
       .filter(Boolean)
-      .map(prop => `  ${prop.trim()};`)
       .join("\n");
   }
 
-  // Generate a meaningful selector based on node properties
-  let selector = "." + (node.type || "component").toLowerCase();
-  if (node.name) {
-    selector += "-" + node.name.toLowerCase().replace(/\s+/g, "-");
+  const selfClosingTags = ["img"];
+  if (selfClosingTags.includes(tagName)) {
+    return `${indentStr}<${tagName} ${attributes.join(" ")} />`;
   }
 
-  return `${selector} {${css}\n}\n\n/* Add hover and focus states */\n${selector}:hover {\n  /* Add hover styles here */\n}\n\n${selector}:focus {\n  /* Add focus styles here */\n  outline: 2px solid #4d90fe;\n  outline-offset: 2px;\n}\n\n/* Accessibility improvements */\n${selector}[aria-disabled="true"] {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n\n/* Dark mode support */\n@media (prefers-color-scheme: dark) {\n  ${selector} {\n    /* Adjust colors for dark mode */\n    background-color: #2d2d2d;\n    color: #ffffff;\n  }\n}`;
+  if (childrenContent.trim() || textContent) {
+    return `${indentStr}<${tagName} ${attributes.join(" ")}>
+${textContent}${
+      childrenContent
+        ? `
+${childrenContent}
+${indentStr}`
+        : ""
+    }</${tagName}>`;
+  }
+
+  return `${indentStr}<${tagName} ${attributes.join(" ")}></${tagName}>`;
 };
 
 const generateTypeScriptTypes = (node: any): string => {
@@ -281,418 +268,10 @@ const generateTypeScriptTypes = (node: any): string => {
 
   const importStatements = Array.from(imports).join("\n");
 
-  return `${importStatements}
-
-/**
- * Props for the ${typeName.replace("Props", "")} component
- */
-interface ${typeName} {
-${properties.join("\n\n")}
-}
-
-/**
- * ${typeName.replace("Props", "")} component
- */
-const ${typeName.replace("Props", "")}: React.FC<${typeName}> = ({
-  className = '',
-  style = {},
-  children,
-  ...props
-}) => {
-  return (
-    <div 
-      className={\`${(
-        node.type || "component"
-      ).toLowerCase()}-container \${className}\`}
-      style={style}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-};
-
-export default ${typeName.replace("Props", "")};`;
-};
-
-const generateHTML = (node: any, indent = 0, parentNode?: any): string => {
-  if (!node) return "<!-- No node selected -->";
-
-  const indentStr = "  ".repeat(indent);
-  let tagName = "div";
-
-  // Determine tag name based on node type and properties
-  if (node.type) {
-    const type = node.type.toLowerCase();
-    tagName =
-      type === "text"
-        ? "span"
-        : type === "image"
-        ? "img"
-        : type === "button"
-        ? "button"
-        : type === "input"
-        ? "input"
-        : type === "link" || node.href
-        ? "a"
-        : type;
-  }
-
-  const attributes: string[] = [];
-  const classes: string[] = [];
-  const styles: Record<string, any> = {};
-
-  // Add ID if exists
-  if (node.id) {
-    attributes.push(`id="${node.id}"`);
-  }
-
-  // Add name as class if it exists
-  if (node.name) {
-    const nameClass = node.name
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .toLowerCase();
-    if (nameClass) classes.push(nameClass);
-  }
-
-  // Add type-specific classes
-  if (node.type) {
-    classes.push(node.type.toLowerCase());
-  }
-
-  // Handle common HTML attributes
-  const htmlAttributes: Record<string, string> = {
-    type: node.type,
-    href: node.href || node.url,
-    target: node.target,
-    rel: node.rel,
-    title: node.title || node.name,
-    alt: node.alt || node.name,
-    placeholder: node.placeholder,
-    value: node.value,
-    disabled: node.disabled ? "disabled" : undefined,
-    checked: node.checked ? "checked" : undefined,
-    selected: node.selected ? "selected" : undefined,
-    "aria-label": node.ariaLabel || node.name,
-    role: node.role || (tagName === "button" ? "button" : undefined)
-  };
-
-  // Add valid HTML attributes
-  Object.entries(htmlAttributes).forEach(([key, value]) => {
-    if (value !== undefined && value !== "" && value !== false) {
-      attributes.push(`${key}="${String(value).replace(/"/g, "&quot;")}"`);
-    }
-  });
-
-  // Process styles from various possible locations
-  const styleSources = [
-    node.styles,
-    node.style,
-    node.css,
-    node.props?.style,
-    node.props?.css
-  ];
-
-  // Merge all style sources
-  for (const style of styleSources) {
-    if (style && typeof style === "object") {
-      Object.assign(styles, style);
-    }
-  }
-
-  // Add dimensions if they exist
-  if (node.width) styles.width = `${node.width}px`;
-  if (node.height) styles.height = `${node.height}px`;
-  if (node.x !== undefined) styles.left = `${node.x}px`;
-  if (node.y !== undefined) styles.top = `${node.y}px`;
-
-  // Add flex properties if this is a flex container
-  if (node.layoutMode) {
-    styles.display = "flex";
-    if (node.layoutMode === "HORIZONTAL") {
-      styles.flexDirection = "row";
-    } else if (node.layoutMode === "VERTICAL") {
-      styles.flexDirection = "column";
-    }
-    if (node.itemSpacing) {
-      styles.gap = `${node.itemSpacing}px`;
-    }
-  }
-
-  // Add border radius if it exists
-  if (node.cornerRadius) {
-    styles.borderRadius =
-      typeof node.cornerRadius === "number"
-        ? `${node.cornerRadius}px`
-        : node.cornerRadius;
-  }
-
-  // Add background color if it exists
-  if (node.backgroundColor) {
-    styles.backgroundColor = node.backgroundColor;
-  } else if (node.fills && Array.isArray(node.fills)) {
-    const fill = node.fills.find((f: any) => f.type === "SOLID");
-    if (fill && fill.color) {
-      const { r, g, b, a } = fill.color;
-      styles.backgroundColor = `rgba(${Math.round(r * 255)}, ${Math.round(
-        g * 255
-      )}, ${Math.round(b * 255)}, ${a || 1})`;
-    }
-  }
-
-  // Add text styles if they exist
-  if (node.fontSize) styles.fontSize = `${node.fontSize}px`;
-  if (node.fontFamily) styles.fontFamily = node.fontFamily;
-  if (node.fontWeight) styles.fontWeight = node.fontWeight;
-  if (node.textAlign) styles.textAlign = node.textAlign.toLowerCase();
-  if (node.letterSpacing) styles.letterSpacing = `${node.letterSpacing}px`;
-  if (node.lineHeight) {
-    styles.lineHeight =
-      typeof node.lineHeight === "number"
-        ? `${node.lineHeight}px`
-        : node.lineHeight;
-  }
-
-  // Add padding if it exists
-  if (node.padding) {
-    const p = node.padding;
-    if (typeof p === "number") {
-      styles.padding = `${p}px`;
-    } else if (typeof p === "object") {
-      styles.paddingTop = `${p.top || 0}px`;
-      styles.paddingRight = `${p.right || 0}px`;
-      styles.paddingBottom = `${p.bottom || 0}px`;
-      styles.paddingLeft = `${p.left || 0}px`;
-    }
-  }
-
-  // Add margin if it exists
-  if (node.margin) {
-    const m = node.margin;
-    if (typeof m === "number") {
-      styles.margin = `${m}px`;
-    } else if (typeof m === "object") {
-      styles.marginTop = `${m.top || 0}px`;
-      styles.marginRight = `${m.right || 0}px`;
-      styles.marginBottom = `${m.bottom || 0}px`;
-      styles.marginLeft = `${m.left || 0}px`;
-    }
-  }
-
-  // Add border if it exists
-  if (node.stroke || (node.border && node.border.width > 0)) {
-    const border = node.stroke || node.border;
-    if (border) {
-      const { width = 1, color = "#000000" } = border;
-      const borderColor = color.startsWith("#")
-        ? color
-        : `rgba(${Math.round(color.r * 255)}, ${Math.round(
-            color.g * 255
-          )}, ${Math.round(color.b * 255)}, ${color.a || 1})`;
-
-      styles.border = `${width}px solid ${borderColor}`;
-    }
-  }
-
-  // Add box shadow if it exists
-  if (node.effects && node.effects.length > 0) {
-    const shadow = node.effects.find(
-      (e: any) => e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW"
-    );
-    if (shadow) {
-      const { color, offset, radius, spread } = shadow;
-      const shadowColor = color.startsWith("#")
-        ? color
-        : `rgba(${Math.round(color.r * 255)}, ${Math.round(
-            color.g * 255
-          )}, ${Math.round(color.b * 255)}, ${color.a || 1})`;
-
-      const shadowStr = `${offset?.x || 0}px ${offset?.y || 0}px ${radius ||
-        0}px ${spread || 0}px ${shadowColor}`;
-      styles.boxShadow =
-        shadow.type === "INNER_SHADOW" ? `inset ${shadowStr}` : shadowStr;
-    }
-  }
-
-  // Add opacity if it exists
-  if (node.opacity !== undefined && node.opacity !== 1) {
-    styles.opacity = node.opacity;
-  }
-
-  // Add transform if it exists
-  if (node.rotation) {
-    styles.transform = `rotate(${node.rotation}deg)`;
-  }
-
-  // Add position if it exists
-  if (node.position) {
-    styles.position = node.position;
-  }
-
-  // Add z-index if it exists
-  if (node.zIndex !== undefined) {
-    styles.zIndex = node.zIndex;
-  }
-
-  // Add overflow if it exists
-  if (node.overflow) {
-    styles.overflow = node.overflow.toLowerCase();
-  }
-
-  // Add display property if it exists
-  if (node.display) {
-    styles.display = node.display;
-  }
-
-  // Add flex properties if they exist
-  if (node.flex !== undefined) styles.flex = node.flex;
-  if (node.flexGrow !== undefined) styles.flexGrow = node.flexGrow;
-  if (node.flexShrink !== undefined) styles.flexShrink = node.flexShrink;
-  if (node.flexBasis !== undefined) {
-    styles.flexBasis =
-      typeof node.flexBasis === "number"
-        ? `${node.flexBasis}px`
-        : node.flexBasis;
-  }
-  if (node.alignSelf) styles.alignSelf = node.alignSelf.toLowerCase();
-  if (node.justifySelf) styles.justifySelf = node.justifySelf.toLowerCase();
-
-  // Add grid properties if this is a grid container
-  if (node.gridStyle) {
-    styles.display = "grid";
-    if (node.gridStyle.columnCount) {
-      styles.gridTemplateColumns = `repeat(${node.gridStyle.columnCount}, 1fr)`;
-    }
-    if (node.gridStyle.rowCount) {
-      styles.gridTemplateRows = `repeat(${node.gridStyle.rowCount}, 1fr)`;
-    }
-    if (node.gridStyle.columnGap) {
-      styles.columnGap = `${node.gridStyle.columnGap}px`;
-    }
-    if (node.gridStyle.rowGap) {
-      styles.rowGap = `${node.gridStyle.rowGap}px`;
-    }
-  }
-
-  // Add grid item properties if they exist
-  if (node.gridColumnStart !== undefined)
-    styles.gridColumnStart = node.gridColumnStart;
-  if (node.gridColumnEnd !== undefined)
-    styles.gridColumnEnd = node.gridColumnEnd;
-  if (node.gridRowStart !== undefined) styles.gridRowStart = node.gridRowStart;
-  if (node.gridRowEnd !== undefined) styles.gridRowEnd = node.gridRowEnd;
-
-  // Add text content if it exists
-  let textContent = "";
-  if (node.text || node.characters) {
-    textContent = node.text || node.characters;
-  }
-
-  // Handle image elements
-  if (tagName === "img") {
-    if (node.src || node.url) {
-      attributes.push(`src="${node.src || node.url}"`);
-    } else if (node.fills && node.fills.length > 0) {
-      const imageFill = node.fills.find((f: any) => f.type === "IMAGE");
-      if (imageFill?.imageRef) {
-        attributes.push(`src="${imageFill.imageRef}"`);
-      }
-    }
-    if (!attributes.some(attr => attr.startsWith("alt="))) {
-      attributes.push('alt=""');
-    }
-  }
-
-  // Handle input elements
-  if (tagName === "input") {
-    if (node.type === "checkbox" || node.type === "radio") {
-      if (node.checked) {
-        attributes.push("checked");
-      }
-    } else if (
-      node.type === "text" ||
-      node.type === "password" ||
-      node.type === "email"
-    ) {
-      if (node.placeholder) {
-        attributes.push(`placeholder="${node.placeholder}"`);
-      }
-      if (node.value) {
-        attributes.push(`value="${node.value}"`);
-      }
-    }
-  }
-
-  // Handle button elements
-  if (tagName === "button" && node.disabled) {
-    attributes.push("disabled");
-  }
-
-  // Add styles to attributes if any exist
-  if (Object.keys(styles).length > 0) {
-    const styleString = Object.entries(styles)
-      .filter(([_, v]) => v !== undefined && v !== null && v !== "")
-      .map(([k, v]) => `${k.replace(/([A-Z])/g, "-$1").toLowerCase()}: ${v};`)
-      .join(" ");
-
-    if (styleString) {
-      attributes.push(`style="${styleString}"`);
-    }
-  }
-
-  // Add class attribute if classes exist
-  if (classes.length > 0) {
-    attributes.unshift(`class="${classes.join(" ")}"`);
-  }
-
-  // Handle self-closing tags
-  const selfClosingTags = ["img", "input", "br", "hr", "meta", "link"];
-  const isSelfClosing = selfClosingTags.includes(tagName.toLowerCase());
-
-  if (isSelfClosing) {
-    return `${indentStr}<${tagName} ${attributes.join(" ")} />`;
-  }
-
-  // Handle children
-  let childrenContent = "";
-  if (
-    node.children &&
-    Array.isArray(node.children) &&
-    node.children.length > 0
-  ) {
-    const childNodes = node.children
-      .map((child: any) => generateHTML(child, indent + 1, node))
-      .filter(Boolean);
-
-    if (childNodes.length > 0) {
-      childrenContent = `\n${childNodes.join("\n")}\n${indentStr}`;
-    }
-  }
-
-  // If there's text content but no children, use the text content
-  if (textContent && !childrenContent) {
-    return `${indentStr}<${tagName} ${attributes.join(
-      " "
-    )}>${textContent}</${tagName}>`;
-  }
-
-  // If there are children, include them
-  if (childrenContent) {
-    return `${indentStr}<${tagName} ${attributes.join(
-      " "
-    )}>${childrenContent}</${tagName}>`;
-  }
-
-  // If there's text content and children, include both
-  if (textContent) {
-    return `${indentStr}<${tagName} ${attributes.join(
-      " "
-    )}>${textContent}</${tagName}>`;
-  }
-
-  // For empty elements, use self-closing tag if appropriate
-  return `${indentStr}<${tagName} ${attributes.join(" ")}></${tagName}>`;
+  return `${importStatements}\n\n/**\n * Props for the ${typeName.replace(
+    "Props",
+    ""
+  )} component\n */\ninterface ${typeName} {\n${properties.join("\n\n")}\n}`;
 };
 
 const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
@@ -726,12 +305,13 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
         {
           title: "CSS Styles",
           language: "css",
-          code: extractCSS(selectedNode)
+          code: extractImprovedCSS(selectedNode)
         },
         {
           title: "HTML",
           language: "html",
-          code: generateHTML(selectedNode) || "<div>No HTML available</div>"
+          code:
+            generateImprovedHTML(selectedNode) || "<!-- No HTML available -->"
         },
         {
           title: "TypeScript Types",

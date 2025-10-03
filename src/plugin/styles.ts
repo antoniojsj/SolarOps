@@ -229,6 +229,7 @@ async function getLocalPaintStyles() {
       return {
         id: style.id,
         name: style.name,
+        key: style.key || style.id, // Adiciona o key ou usa o id como fallback
         value:
           paint && paint.color
             ? {
@@ -258,7 +259,7 @@ async function getLocalTextStyles() {
     const textStyles = await getLocalTextStylesAlt();
     const textStylesData = textStyles.map(style => ({
       id: style.id,
-      key: style.key,
+      key: style.key || style.id, // Adiciona o key ou usa o id como fallback
       name: style.name,
       description: style.description,
       style: {
@@ -291,6 +292,7 @@ async function getLocalEffectStyles() {
     const effectStylesData = effectStyles.map(style => ({
       id: style.id,
       name: style.name,
+      key: style.key || style.id, // Adiciona o key ou usa o id como fallback
       effects: style.effects || []
     }));
 

@@ -74,6 +74,8 @@ interface SavedTokenFile {
   timestamp: string;
   name: string;
   tokens?: any;
+  flattenedTokens?: any[];
+  totalTokens?: number;
 }
 
 // Tipo para modos de mesclagem
@@ -419,12 +421,58 @@ figma.ui.onmessage = async (msg: any) => {
       try {
         const tokens =
           (await figma.clientStorage.getAsync("design-tokens")) || {};
+
+        console.log(
+          "[Controller] Dados brutos carregados do design-tokens:",
+          tokens
+        );
+        console.log("[Controller] Tipo dos dados carregados:", typeof tokens);
+        console.log(
+          "[Controller] Chaves dos dados carregados:",
+          Object.keys(tokens)
+        );
+
+        // Converte a estrutura simples dos tokens salvos para o formato esperado pela auditoria
+        // A auditoria espera um array de objetos com estrutura { tokens: { fills: [...], ... } }
+        const formattedTokens = [];
+
+        if (tokens && typeof tokens === "object") {
+          // Se os tokens têm a estrutura de bibliotecas (com fills, text, effects, etc.)
+          if (tokens.fills || tokens.text || tokens.effects) {
+            formattedTokens.push({
+              name: "Saved Design Tokens",
+              tokens: tokens
+            });
+            console.log("[Controller] Tokens formatados como biblioteca única");
+          }
+          // Se os tokens são uma lista simples de bibliotecas
+          else if (Array.isArray(tokens)) {
+            formattedTokens.push(...tokens);
+            console.log(
+              "[Controller] Tokens formatados como array de bibliotecas"
+            );
+          } else {
+            console.log("[Controller] Estrutura de tokens não reconhecida");
+          }
+        }
+
+        console.log(
+          "[Controller] Tokens salvos carregados e formatados:",
+          formattedTokens.length,
+          "bibliotecas"
+        );
+        console.log(
+          "[Controller] Estrutura formatada dos tokens:",
+          JSON.stringify(formattedTokens, null, 2)
+        );
+
         figma.ui.postMessage({
           type: "saved-tokens-loaded",
           success: true,
-          tokens
+          tokens: formattedTokens
         });
       } catch (e) {
+        console.error("[Controller] Erro ao carregar tokens salvos:", e);
         figma.ui.postMessage({
           type: "saved-tokens-loaded",
           success: false,
@@ -480,6 +528,40 @@ figma.on("selectionchange", () => {
         type: "selection-updated",
         payload: { count: selLen }
       });
+
+      if (selLen > 0) {
+        const selectedNode = figma.currentPage.selection[0];
+        if (selectedNode.reactions && selectedNode.reactions.length > 0) {
+          const animations = selectedNode.reactions
+            .map(reaction => {
+              const action = reaction.action;
+              if (action.type === "NODE" && action.transition) {
+                const destinationNode = figma.getNodeById(action.destinationId);
+                return {
+                  fromNode: selectedNode.name,
+                  toNode: destinationNode ? destinationNode.name : "Unknown",
+                  trigger: reaction.trigger.type,
+                  transition: {
+                    type: action.transition.type,
+                    duration: action.transition.duration,
+                    easing: action.transition.easing.type
+                  }
+                };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          if (animations.length > 0) {
+            figma.ui.postMessage({
+              type: "animation-data",
+              payload: {
+                animations: animations
+              }
+            });
+          }
+        }
+      }
 
       if (
         MEASURE_STATE.isMeasuring &&
@@ -2269,13 +2351,33 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           "[Controller] DEBUG - Tokens recebidos:",
           msg.savedTokens?.length || 0
         );
+        console.log(
+          "[Controller] DEBUG - Estrutura dos tokens salvos:",
+          msg.savedTokens || []
+        );
+
+        // Verificar se temos flattenedTokens disponíveis
+        const flattenedTokens =
+          msg.savedTokens && msg.savedTokens.length > 0
+            ? msg.savedTokens[0]?.flattenedTokens || []
+            : [];
+
+        console.log(
+          "[Controller] DEBUG - Flattened tokens para linting:",
+          flattenedTokens.length,
+          "tokens"
+        );
+        console.log(
+          "[Controller] DEBUG - Exemplo de flattened token:",
+          flattenedTokens[0] || "Nenhum token encontrado"
+        );
 
         // Execute linting on selected nodes
         const lintResults = await lint(
           nodesToLint,
           effectiveLibrariesWithVariables,
           null,
-          msg.savedTokens || []
+          flattenedTokens
         );
 
         // Check if processing took too long
@@ -2580,21 +2682,57 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       return;
     }
 
-    if (msg.type === "save-design-tokens") {
-      console.log("[Controller] Salvando tokens de design");
+    if (msg.type === "force-save-tokens") {
+      console.log("[Controller] Forçando salvamento de tokens");
       try {
         if (!msg.tokens) {
-          throw new Error("No tokens provided to save");
+          throw new Error("No tokens provided for force save");
         }
-        await saveDesignTokens(msg.tokens);
+
+        // Forçar salvamento no arquivo data.json
+        const result = await saveDesignTokens(msg.tokens);
+
+        if (result.success) {
+          console.log("[Controller] Tokens salvos com sucesso via force-save");
+          figma.ui.postMessage({
+            type: "design-tokens-saved",
+            success: true,
+            message: "Tokens salvos com sucesso",
+            tokens: result.tokens,
+            totalTokens: result.totalTokens
+          });
+        } else {
+          throw new Error(result.message);
+        }
+      } catch (error) {
+        console.error(
+          "[Controller] Erro ao forçar salvamento de tokens:",
+          error
+        );
         figma.ui.postMessage({
           type: "design-tokens-saved",
-          success: true
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    if (msg.type === "list-saved-tokens") {
+      console.log("[Controller] Listando tokens salvos");
+      try {
+        const result = await loadSavedTokens();
+        figma.ui.postMessage({
+          type: "saved-tokens-list",
+          success: result.success,
+          tokens: result.tokens,
+          message: result.success
+            ? `${result.tokens?.length || 0} conjuntos de tokens encontrados`
+            : result.message
         });
       } catch (error) {
-        console.error("[Controller] Erro ao salvar tokens de design:", error);
+        console.error("[Controller] Erro ao listar tokens salvos:", error);
         figma.ui.postMessage({
-          type: "design-tokens-saved",
+          type: "saved-tokens-list",
           success: false,
           error: error instanceof Error ? error.message : String(error)
         });
@@ -2616,43 +2754,170 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 // Função para carregar os tokens salvos
 async function loadSavedTokens() {
   try {
-    console.log("[Controller] Iniciando carregamento de tokens salvos");
+    console.log("[loadSavedTokens] Iniciando carregamento de tokens salvos");
+
+    // Primeiro tenta carregar do arquivo único
+    const dataFile = await figma.clientStorage.getAsync("data.json");
+
+    if (dataFile && typeof dataFile === "string") {
+      try {
+        const parsedData = JSON.parse(dataFile);
+        console.log("[loadSavedTokens] Dados carregados do arquivo data.json");
+        console.log(
+          "[loadSavedTokens] Total de tokens:",
+          parsedData.metadata?.totalTokens || 0
+        );
+        console.log(
+          "[loadSavedTokens] Categorias:",
+          parsedData.metadata?.categories || []
+        );
+
+        // Transforma os tokens salvos no formato esperado pelas funções de linting
+        const flattenedTokens: any[] = [];
+
+        if (parsedData.tokens) {
+          // Para cada categoria, transforma os tokens no formato esperado
+          Object.keys(parsedData.tokens).forEach(category => {
+            const categoryTokens = parsedData.tokens[category];
+
+            if (Array.isArray(categoryTokens)) {
+              categoryTokens.forEach((token: any) => {
+                // Cada token precisa ter uma estrutura específica para as funções de linting
+                const lintingToken = {
+                  id:
+                    token.id ||
+                    `${category}_${Math.random()
+                      .toString(36)
+                      .substr(2, 9)}`,
+                  name: token.name || `${category} token`,
+                  value: token.value || token,
+                  type: category,
+                  category: category,
+                  // Propriedades específicas por categoria
+                  ...(category === "fills" && {
+                    color: token.color || token.value?.color,
+                    opacity: token.opacity ?? token.value?.opacity
+                  }),
+                  ...(category === "text" && {
+                    fontFamily: token.fontFamily || token.value?.fontFamily,
+                    fontSize: token.fontSize || token.value?.fontSize,
+                    fontWeight: token.fontWeight || token.value?.fontWeight,
+                    lineHeight: token.lineHeight || token.value?.lineHeight,
+                    letterSpacing:
+                      token.letterSpacing || token.value?.letterSpacing
+                  }),
+                  ...(category === "effects" && {
+                    effectType:
+                      token.effectType || token.value?.effectType || token.type,
+                    radius: token.radius || token.value?.radius,
+                    offset: token.offset || token.value?.offset,
+                    color: token.color || token.value?.color
+                  }),
+                  ...(category === "gaps" && {
+                    gapValue: token.value || token.gapValue || token,
+                    unit: token.unit || "PIXELS"
+                  })
+                };
+
+                flattenedTokens.push(lintingToken);
+              });
+            }
+          });
+        }
+
+        console.log(
+          "[loadSavedTokens] Tokens transformados:",
+          flattenedTokens.length,
+          "tokens individuais"
+        );
+
+        // Retorna no formato esperado pela UI e funções de linting
+        const tokensList = [
+          {
+            filename: "data.json",
+            timestamp: parsedData.timestamp || parsedData.metadata?.savedAt,
+            name: `Tokens ${new Date(
+              parsedData.metadata?.savedAt || Date.now()
+            ).toLocaleString()}`,
+            tokens: parsedData.tokens, // Mantém estrutura original para UI
+            flattenedTokens: flattenedTokens, // Adiciona versão achatada para linting
+            totalTokens: parsedData.metadata?.totalTokens || 0
+          }
+        ];
+
+        console.log(
+          "[loadSavedTokens] Total de conjuntos de tokens carregados:",
+          tokensList.length
+        );
+
+        return {
+          success: true,
+          tokens: tokensList
+        };
+      } catch (parseError) {
+        console.error(
+          "[loadSavedTokens] Erro ao parsear data.json:",
+          parseError
+        );
+      }
+    }
+
+    // Fallback: tentar carregar arquivos antigos se data.json não existir
+    console.log(
+      "[loadSavedTokens] data.json não encontrado, tentando arquivos antigos..."
+    );
     const savedFiles =
       (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
     console.log(
-      "[Controller] Arquivos salvos encontrados:",
-      savedFiles.length,
-      savedFiles
+      "[loadSavedTokens] Arquivos antigos encontrados:",
+      savedFiles.length
     );
 
     const tokensList: SavedTokenFile[] = [];
 
-    // Carregar todos os tokens salvos, ordenados do mais recente para o mais antigo
-    // Removido o slice(0, 10) para carregar todos os tokens salvos
-    for (const file of (savedFiles as SavedTokenFile[]).sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    )) {
+    // Carregar tokens dos arquivos antigos (compatibilidade)
+    for (const file of (savedFiles as SavedTokenFile[]).slice(0, 5)) {
+      // Limitar a 5 arquivos
       try {
-        console.log("[Controller] Carregando arquivo:", file.filename);
-        const tokens = await figma.clientStorage.getAsync(file.filename);
         console.log(
-          "[Controller] Conteúdo do arquivo:",
-          typeof tokens,
-          tokens?.length || 0,
-          "caracteres"
+          "[loadSavedTokens] Carregando arquivo antigo:",
+          file.filename
         );
+        const tokens = await figma.clientStorage.getAsync(file.filename);
 
         if (typeof tokens === "string" && tokens.trim().length) {
           try {
             const parsed = JSON.parse(tokens);
             console.log(
-              "[Controller] Tokens parseados com sucesso:",
-              Object.keys(parsed)
+              "[loadSavedTokens] Tokens antigos parseados com sucesso"
             );
+
+            // Tentar transformar tokens antigos também
+            const flattenedTokens: any[] = [];
+            if (parsed && typeof parsed === "object") {
+              Object.keys(parsed).forEach(category => {
+                if (Array.isArray(parsed[category])) {
+                  parsed[category].forEach((token: any) => {
+                    flattenedTokens.push({
+                      id:
+                        token.id ||
+                        `${category}_${Math.random()
+                          .toString(36)
+                          .substr(2, 9)}`,
+                      name: token.name || `${category} token`,
+                      value: token.value || token,
+                      type: category,
+                      category: category
+                    });
+                  });
+                }
+              });
+            }
+
             tokensList.push({
               ...file,
-              tokens: parsed
+              tokens: parsed,
+              flattenedTokens: flattenedTokens
             });
           } catch (e) {
             console.warn(
@@ -2661,8 +2926,6 @@ async function loadSavedTokens() {
               e
             );
           }
-        } else {
-          console.log("[Controller] Arquivo vazio ou inválido:", file.filename);
         }
       } catch (error) {
         console.error(`Erro ao carregar tokens de ${file.filename}:`, error);
@@ -2670,7 +2933,7 @@ async function loadSavedTokens() {
     }
 
     console.log(
-      "[Controller] Total de conjuntos de tokens carregados:",
+      "[loadSavedTokens] Total de conjuntos de tokens carregados:",
       tokensList.length
     );
 
@@ -2690,36 +2953,89 @@ async function loadSavedTokens() {
   }
 }
 
-// Função para salvar os tokens de design
+// Função para salvar os tokens de design em arquivo único
 async function saveDesignTokens(tokens: any) {
   try {
-    // Criar um nome de arquivo único com timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `design-tokens-${timestamp}.json`;
-
-    // Salvar no clientStorage do Figma
-    await figma.clientStorage.setAsync(
-      filename,
-      JSON.stringify(tokens, null, 2)
-    );
-
-    // Obter a lista de arquivos salvos
-    const savedFiles =
-      (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
-
-    // Adicionar o novo arquivo à lista (limitar a 10 arquivos)
-    savedFiles.unshift({
-      filename,
-      timestamp: new Date().toISOString(),
-      name: `Tokens ${new Date().toLocaleString()}`
+    console.log("[saveDesignTokens] Iniciando salvamento de tokens");
+    console.log("[saveDesignTokens] Tokens recebidos:", {
+      type: typeof tokens,
+      isArray: Array.isArray(tokens),
+      length: tokens?.length,
+      keys: tokens ? Object.keys(tokens) : []
     });
 
-    // Salvar a lista completa de arquivos
+    if (!tokens) {
+      throw new Error("No tokens provided to save");
+    }
+
+    // Criar estrutura de dados para o arquivo único
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = "data.json";
+
+    console.log("[saveDesignTokens] Nome do arquivo:", filename);
+    console.log(
+      "[saveDesignTokens] Tamanho dos dados a salvar:",
+      JSON.stringify(tokens).length
+    );
+
+    // Estrutura completa para salvar
+    const fileData = {
+      metadata: {
+        savedAt: new Date().toISOString(),
+        version: "1.0",
+        totalTokens: Object.keys(tokens).reduce(
+          (acc: number, category: string) => {
+            return (
+              acc +
+              (Array.isArray(tokens[category]) ? tokens[category].length : 0)
+            );
+          },
+          0
+        ),
+        categories: Object.keys(tokens)
+      },
+      tokens: tokens,
+      timestamp: timestamp,
+      filename: filename
+    };
+
+    // Salvar no clientStorage do Figma em arquivo único
+    await figma.clientStorage.setAsync(
+      filename,
+      JSON.stringify(fileData, null, 2)
+    );
+
+    console.log(
+      "[saveDesignTokens] Dados salvos no clientStorage em",
+      filename
+    );
+
+    // Atualizar lista de arquivos salvos
+    const savedFiles =
+      (await figma.clientStorage.getAsync("savedTokenFiles")) || [];
+    const existingIndex = savedFiles.findIndex(
+      (file: any) => file.filename === filename
+    );
+
+    const fileInfo = {
+      filename,
+      timestamp: new Date().toISOString(),
+      name: `Tokens ${new Date().toLocaleString()}`,
+      totalTokens: fileData.metadata.totalTokens
+    };
+
+    if (existingIndex !== -1) {
+      savedFiles[existingIndex] = fileInfo;
+    } else {
+      savedFiles.unshift(fileInfo);
+    }
+
+    // Salvar a lista atualizada
     await figma.clientStorage.setAsync("savedTokenFiles", savedFiles);
 
-    console.log(`Design tokens salvos como: ${filename}`);
+    console.log("[saveDesignTokens] Lista de arquivos salva");
 
-    // Retornar a lista atualizada de tokens
+    // Retornar dados atualizados
     const loadedTokens = await loadSavedTokens();
 
     return {
@@ -2727,10 +3043,11 @@ async function saveDesignTokens(tokens: any) {
       message: "Design tokens salvos com sucesso",
       filename,
       timestamp: new Date().toISOString(),
-      tokens: loadedTokens.success ? loadedTokens.tokens : []
+      tokens: loadedTokens.success ? loadedTokens.tokens : [],
+      totalTokens: fileData.metadata.totalTokens
     };
   } catch (error) {
-    console.error("Erro ao salvar design tokens:", error);
+    console.error("[saveDesignTokens] Erro ao salvar design tokens:", error);
     return {
       success: false,
       message:

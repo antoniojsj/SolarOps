@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
+import AnimationSnippetSection from "./AnimationSnippetSection";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -53,6 +54,24 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
   onInspectClick
 }) => {
   const [activeTab, setActiveTab] = useState("inspect"); // 'inspect' or 'measure'
+  const [animationData, setAnimationData] = useState(null);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const { type, payload } = event.data.pluginMessage;
+      if (type === "animation-data") {
+        setAnimationData(payload.animations);
+      } else if (type === "no-selection") {
+        setAnimationData(null);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
 
   return (
     <div
@@ -475,6 +494,11 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                   selectedNode={selectedNode}
                   key={selectedNode?.id}
                 />
+
+                {/* Animation Snippets Section */}
+                {animationData && (
+                  <AnimationSnippetSection animationData={animationData} />
+                )}
 
                 {/* Other Properties Section */}
                 <div

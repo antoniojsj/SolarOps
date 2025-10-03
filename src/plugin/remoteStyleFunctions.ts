@@ -301,6 +301,26 @@ export async function detectTokenLibraries() {
       tokenLibrary.effects.length
     );
 
+    // Log detalhado dos tokens extraídos para verificar se nome e key estão presentes
+    if (tokenLibrary.fills.length > 0) {
+      console.log(
+        "[detectTokenLibraries] Exemplo de token fill:",
+        tokenLibrary.fills[0]
+      );
+    }
+    if (tokenLibrary.text.length > 0) {
+      console.log(
+        "[detectTokenLibraries] Exemplo de token text:",
+        tokenLibrary.text[0]
+      );
+    }
+    if (tokenLibrary.effects.length > 0) {
+      console.log(
+        "[detectTokenLibraries] Exemplo de token effect:",
+        tokenLibrary.effects[0]
+      );
+    }
+
     return [tokenLibrary];
   } catch (error) {
     console.error("[detectTokenLibraries] Erro ao detectar tokens:", error);

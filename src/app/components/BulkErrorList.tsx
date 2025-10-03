@@ -732,6 +732,21 @@ function BulkErrorList(props) {
     nonConformElements
   });
 
+  // Debug adicional: verificar estrutura das bibliotecas
+  if (props.libraries && props.libraries.length > 0) {
+    console.log("[BulkErrorList] Primeira biblioteca recebida:", {
+      name: props.libraries[0].name,
+      fillsCount: props.libraries[0].fills?.length || 0,
+      textCount: props.libraries[0].text?.length || 0,
+      effectsCount: props.libraries[0].effects?.length || 0,
+      strokesCount: props.libraries[0].strokes?.length || 0,
+      radiusCount: props.libraries[0].radius?.length || 0,
+      gapsCount: props.libraries[0].gaps?.length || 0,
+      paddingsCount: props.libraries[0].paddings?.length || 0,
+      isFromTokens: props.libraries[0].id?.includes("saved-tokens")
+    });
+  }
+
   // Função para verificar se um nó é aplicável a um determinado tipo
   function isNodeApplicable(node: any, typeKey: string): boolean {
     if (!node) return false;
@@ -1114,7 +1129,7 @@ function BulkErrorList(props) {
             >
               <ConformityScoreBar
                 totalElements={totalElements}
-                nonConformElements={nonConformUniqueCount}
+                nonConformElements={nonConformElements}
               />
             </div>
             {/* Resumo - Cards de métricas */}
@@ -1159,7 +1174,7 @@ function BulkErrorList(props) {
                   Não conformes
                 </span>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                  {nonConformUniqueCount}
+                  {nonConformElements}
                 </span>
               </div>
               <div
@@ -1597,7 +1612,7 @@ function BulkErrorList(props) {
                     >
                       <ConformityScoreBar
                         totalElements={totalElements}
-                        nonConformElements={frameNonConformNodeIds.size}
+                        nonConformElements={frameNonConformElements}
                       />
                     </div>
                     <div style={{ height: 16 }} />
@@ -1666,7 +1681,7 @@ function BulkErrorList(props) {
                             fontSize: 16
                           }}
                         >
-                          {frameNonConformNodeIds.size}
+                          {frameNonConformElements}
                         </span>
                       </div>
                       <div
