@@ -41,21 +41,17 @@ function InitialContent(props) {
           });
           // Não realizar troca automática de aba. O contraste só inicia se a aba de acessibilidade estiver ativa
           // (controlado por um efeito separado que observa activeTab e selectedNode)
-        } else if (pm.type === "no-selection") {
-          console.log("[InitialContent] Nenhum nó selecionado no Figma");
-          setSelectedNode(null);
-          setIsCheckingContrast(false);
-        } else if (pm.type === "selection-update") {
+        } else if (pm.type === "selection-changed") {
           console.log(
-            "[InitialContent] Atualização de seleção recebida:",
-            pm.selectedNodeIds
+            "[InitialContent] Seleção alterada recebida:",
+            pm.selection
           );
 
-          // Se não houver nós selecionados, limpar o estado
-          if (!pm.selectedNodeIds || pm.selectedNodeIds.length === 0) {
-            console.log(
-              "[InitialContent] Nenhum nó selecionado - limpando estado"
-            );
+          // Atualizar o estado com os novos nós selecionados
+          if (pm.selection && pm.selection.length > 0) {
+            setSelectedNode(pm.selection[0]);
+          } else {
+            console.log("[InitialContent] Nenhum nó selecionado");
             setSelectedNode(null);
             setIsCheckingContrast(false);
           }
@@ -268,6 +264,7 @@ function InitialContent(props) {
               libraries={props.libraries}
               onUpdateLibraries={props.onUpdateLibraries}
               localStyles={props.localStyles}
+              designTokens={props.designTokens}
             />
           )}
         </div>

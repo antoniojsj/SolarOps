@@ -142,404 +142,350 @@ function isTextStyleInLibrary(
   savedTokens: any[] = []
 ): boolean {
   try {
+    console.log(`[isTextStyleInLibrary] Verificando estilo ${styleId}`);
     console.log(
-      `[isTextStyleInLibrary] Verificando estilo ${styleId} para o nó ${node?.name ||
-        "sem nome"}`
+      `[isTextStyleInLibrary] Bibliotecas preprocessadas:`,
+      preprocessedLibs?.text?.size || 0
+    );
+    console.log(
+      `[isTextStyleInLibrary] Tokens salvos:`,
+      savedTokens?.length || 0
     );
 
     // Verifica se o estilo está nas bibliotecas carregadas
     if (preprocessedLibs?.text?.has(styleId)) {
       console.log(
-        `[isTextStyleInLibrary] Estilo ${styleId} encontrado nas bibliotecas carregadas`
+        `[isTextStyleInLibrary] ✓ Estilo encontrado nas bibliotecas preprocessadas`
+      );
+      return true;
+    }
+
+    // Verifica também apenas a parte do ID sem o sufixo (formato S:hash,nodeId)
+    const baseStyleId = styleId.split(",")[0];
+    if (baseStyleId !== styleId && preprocessedLibs?.text?.has(baseStyleId)) {
+      console.log(
+        `[isTextStyleInLibrary] ✓ Estilo base encontrado nas bibliotecas preprocessadas: ${baseStyleId}`
       );
       return true;
     }
 
     // Se não encontrou nas bibliotecas, verifica nos tokens salvos
     if (savedTokens && savedTokens.length > 0) {
-      console.log(
-        `[isTextStyleInLibrary] Verificando ${savedTokens.length} tokens salvos`
-      );
-
       try {
         // Obtém o estilo do Figma para comparar com os tokens
         const style = figma.getStyleById(styleId) as TextStyle | null;
         if (style) {
-          const styleProperties = {
-            fontName: style.fontName,
-            fontSize: style.fontSize,
-            lineHeight: style.lineHeight,
-            letterSpacing: style.letterSpacing,
-            textCase: style.textCase,
-            textDecoration: style.textDecoration,
-            paragraphIndent: style.paragraphIndent,
-            paragraphSpacing: style.paragraphSpacing
-          };
-
           console.log(
-            `[isTextStyleInLibrary] Propriedades do estilo ${style.name}:`,
-            {
-              fontFamily: styleProperties.fontName.family,
-              fontWeight: styleProperties.fontName.style,
-              fontSize: styleProperties.fontSize,
-              lineHeight: styleProperties.lineHeight,
-              letterSpacing: styleProperties.letterSpacing
-            }
+            `[isTextStyleInLibrary] Estilo do Figma encontrado: ${style.name}`
           );
 
           // Verifica se o estilo corresponde a algum token salvo
-          const tokenMatch = savedTokens.some((token, index) => {
-            if (!token || !token.value) {
-              console.log(
-                `[isTextStyleInLibrary] Token ${index} inválido ou sem valor`
-              );
-              return false;
+          const tokenMatch = savedTokens.some(tokenLib => {
+            console.log(
+              `[isTextStyleInLibrary] Verificando biblioteca de tokens:`,
+              tokenLib.name
+            );
+
+            // Verificação simples por ID, key e nome primeiro
+            if (tokenLib.tokens?.text) {
+              const simpleMatch = tokenLib.tokens.text.some((token: any) => {
+                // Verificação por ID
+                if (token.id && token.id === styleId) {
+                  console.log(
+                    `[isTextStyleInLibrary] ✓ Correspondência por ID: ${token.id}`
+                  );
+                  return true;
+                }
+
+                // Verificação por key
+                if (token.key && style.key && token.key === style.key) {
+                  console.log(
+                    `[isTextStyleInLibrary] ✓ Correspondência por key: ${token.key}`
+                  );
+                  return true;
+                }
+
+                // Verificação por nome
+                if (token.name && style.name && token.name === style.name) {
+                  console.log(
+                    `[isTextStyleInLibrary] ✓ Correspondência por nome: ${token.name}`
+                  );
+                  return true;
+                }
+
+                return false;
+              });
+
+              if (simpleMatch) return true;
             }
 
-            console.log(`[isTextStyleInLibrary] Verificando token ${index}:`, {
-              name: token.name,
-              value: token.value
-            });
+            // Verifica nos tokens achatados
+            if (tokenLib.flattenedTokens) {
+              const flatMatch = tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "text")
+                .some((token: any) => {
+                  // Verificação por ID
+                  if (token.id && token.id === styleId) {
+                    console.log(
+                      `[isTextStyleInLibrary] ✓ Correspondência por ID (flat): ${token.id}`
+                    );
+                    return true;
+                  }
 
-            // Verifica correspondência de fonte
-            if (token.value.fontFamily) {
-              const tokenFontFamily = token.value.fontFamily
-                .toLowerCase()
-                .trim();
-              const styleFontFamily = styleProperties.fontName.family
-                .toLowerCase()
-                .trim();
+                  // Verificação por key
+                  if (token.key && style.key && token.key === style.key) {
+                    console.log(
+                      `[isTextStyleInLibrary] ✓ Correspondência por key (flat): ${token.key}`
+                    );
+                    return true;
+                  }
 
-              // Remove espaços extras e normaliza a string
-              const normalizeFontName = (name: string) => {
-                return name
-                  .replace(/\s+/g, " ") // Substitui múltiplos espaços por um único
-                  .replace(/[^a-z0-9\s]/g, "") // Remove caracteres especiais
-                  .trim();
+                  // Verificação por nome
+                  if (token.name && style.name && token.name === style.name) {
+                    console.log(
+                      `[isTextStyleInLibrary] ✓ Correspondência por nome (flat): ${token.name}`
+                    );
+                    return true;
+                  }
+
+                  return false;
+                });
+
+              if (flatMatch) return true;
+            }
+
+            // Fallback: verificação detalhada por propriedades (mantém compatibilidade)
+            if (tokenLib.tokens?.text) {
+              const styleProperties = {
+                fontName: style.fontName,
+                fontSize: style.fontSize,
+                lineHeight: style.lineHeight,
+                letterSpacing: style.letterSpacing,
+                textCase: style.textCase,
+                textDecoration: style.textDecoration,
+                paragraphIndent: style.paragraphIndent,
+                paragraphSpacing: style.paragraphSpacing
               };
 
-              const normalizedToken = normalizeFontName(tokenFontFamily);
-              const normalizedStyle = normalizeFontName(styleFontFamily);
-
-              if (normalizedToken !== normalizedStyle) {
-                console.log(
-                  `[isTextStyleInLibrary] Fontes não correspondem: token=${tokenFontFamily} (${normalizedToken}), estilo=${styleFontFamily} (${normalizedStyle})`
-                );
-                return false;
-              }
-
-              // Verifica peso da fonte se disponível
-              if (token.value.fontWeight && styleProperties.fontName.style) {
-                const tokenWeight = token.value.fontWeight.toLowerCase();
-                const styleWeight = styleProperties.fontName.style.toLowerCase();
-
-                // Mapeia estilos de fonte para pesos numéricos aproximados
-                const weightMap: Record<string, number> = {
-                  thin: 100,
-                  extralight: 200,
-                  light: 300,
-                  regular: 400,
-                  normal: 400,
-                  medium: 500,
-                  semibold: 600,
-                  "semi-bold": 600,
-                  demibold: 600,
-                  "demi-bold": 600,
-                  bold: 700,
-                  extrabold: 800,
-                  "extra-bold": 800,
-                  ultrabold: 800,
-                  "ultra-bold": 800,
-                  black: 900,
-                  heavy: 900
-                };
-
-                // Normaliza os pesos para minúsculas e remove espaços/hífens
-                const normalizeWeight = (weight: string): number => {
-                  if (!weight) return 400;
-
-                  const normalized = weight
-                    .toString()
-                    .toLowerCase()
-                    .replace(/[-\s]/g, "");
-
-                  // Tenta encontrar no mapa
-                  const mapped = weightMap[normalized];
-                  if (mapped !== undefined) return mapped;
-
-                  // Tenta extrair número (ex: '700', '400italic')
-                  const numMatch = normalized.match(/^(\d+)/);
-                  if (numMatch) return parseInt(numMatch[1], 10);
-
-                  return 400; // Valor padrão
-                };
-
-                const tokenWeightNum = normalizeWeight(tokenWeight);
-                const styleWeightNum = normalizeWeight(styleWeight);
-
-                if (tokenWeightNum !== styleWeightNum) {
-                  console.log(
-                    `[isTextStyleInLibrary] Pesos de fonte não correspondem: token=${tokenWeight} (${tokenWeightNum}), estilo=${styleWeight} (${styleWeightNum})`
-                  );
+              return tokenLib.tokens.text.some((token: any) => {
+                if (!token || !token.value) {
                   return false;
                 }
-              }
-            }
 
-            // Verifica tamanho da fonte
-            if (token.value.fontSize && styleProperties.fontSize) {
-              const tokenSize = parseFloat(token.value.fontSize);
-              const styleSize = parseFloat(styleProperties.fontSize.toString());
+                // Verifica correspondência de fonte
+                if (token.value.fontFamily) {
+                  const tokenFontFamily = token.value.fontFamily
+                    .toLowerCase()
+                    .trim();
+                  const styleFontFamily = styleProperties.fontName.family
+                    .toLowerCase()
+                    .trim();
 
-              if (
-                isNaN(tokenSize) ||
-                isNaN(styleSize) ||
-                Math.abs(tokenSize - styleSize) > 0.1
-              ) {
-                console.log(
-                  `[isTextStyleInLibrary] Tamanhos de fonte não correspondem: token=${tokenSize}, estilo=${styleSize}`
-                );
-                return false;
-              }
-            }
-
-            // Verifica altura da linha
-            if (token.value.lineHeight && styleProperties.lineHeight) {
-              const tokenLineHeight = token.value.lineHeight;
-              const styleLineHeight = styleProperties.lineHeight;
-
-              // Função para normalizar valores de line height
-              const normalizeLineHeight = (lh: any) => {
-                if (!lh) return null;
-
-                // Se for um número, assume PIXELS
-                if (typeof lh === "number") {
-                  return { unit: "PIXELS", value: lh };
-                }
-
-                // Se for string, tenta converter para número
-                if (typeof lh === "string") {
-                  // Se terminar com %, é percentual
-                  if (lh.endsWith("%")) {
-                    return {
-                      unit: "PERCENT",
-                      value: parseFloat(lh) || 0
-                    };
+                  if (tokenFontFamily !== styleFontFamily) {
+                    return false;
                   }
-                  // Senão, assume PIXELS
-                  return {
-                    unit: "PIXELS",
-                    value: parseFloat(lh) || 0
-                  };
-                }
 
-                // Se for objeto com unit e value
-                if (lh.unit && lh.value !== undefined) {
-                  return {
-                    unit: lh.unit.toUpperCase(),
-                    value:
-                      typeof lh.value === "number"
-                        ? lh.value
-                        : parseFloat(lh.value) || 0
-                  };
-                }
+                  // Verifica peso da fonte se disponível
+                  if (
+                    token.value.fontWeight &&
+                    styleProperties.fontName.style
+                  ) {
+                    const tokenWeight = token.value.fontWeight
+                      .toString()
+                      .toLowerCase()
+                      .replace(/\s/g, "");
+                    const styleWeight = styleProperties.fontName.style
+                      .toLowerCase()
+                      .replace(/\s/g, "");
 
-                return null;
-              };
-
-              const normalizedTokenLH = normalizeLineHeight(tokenLineHeight);
-              const normalizedStyleLH = normalizeLineHeight(styleLineHeight);
-
-              if (!normalizedTokenLH || !normalizedStyleLH) {
-                console.log(
-                  "[isTextStyleInLibrary] Não foi possível normalizar os valores de line height"
-                );
-                return false;
-              }
-
-              // Se as unidades são diferentes, não correspondem
-              if (normalizedTokenLH.unit !== normalizedStyleLH.unit) {
-                console.log(
-                  `[isTextStyleInLibrary] Unidades de altura de linha não correspondem: token=${normalizedTokenLH.unit}, estilo=${normalizedStyleLH.unit}`
-                );
-                return false;
-              }
-
-              // Compara os valores com uma pequena margem de erro
-              if (
-                Math.abs(normalizedTokenLH.value - normalizedStyleLH.value) >
-                0.1
-              ) {
-                console.log(
-                  `[isTextStyleInLibrary] Valores de altura de linha (${normalizedTokenLH.unit}) não correspondem: token=${normalizedTokenLH.value}, estilo=${normalizedStyleLH.value}`
-                );
-                return false;
-              }
-            }
-
-            // Verifica espaçamento entre letras
-            if (token.value.letterSpacing && styleProperties.letterSpacing) {
-              const tokenLetterSpacing = token.value.letterSpacing;
-              const styleLetterSpacing = styleProperties.letterSpacing;
-
-              // Função para normalizar valores de letter spacing
-              const normalizeLetterSpacing = (ls: any) => {
-                if (ls === undefined || ls === null) return null;
-
-                // Se for um número, assume PIXELS
-                if (typeof ls === "number") {
-                  return { unit: "PIXELS", value: ls };
-                }
-
-                // Se for string, tenta converter para número
-                if (typeof ls === "string") {
-                  // Se terminar com %, é percentual
-                  if (ls.endsWith("%")) {
-                    return {
-                      unit: "PERCENT",
-                      value: parseFloat(ls) || 0
-                    };
+                    if (tokenWeight !== styleWeight) {
+                      return false;
+                    }
                   }
-                  // Senão, assume PIXELS
-                  return {
-                    unit: "PIXELS",
-                    value: parseFloat(ls) || 0
-                  };
                 }
 
-                // Se for objeto com unit e value
-                if (ls.unit && ls.value !== undefined) {
-                  return {
-                    unit: ls.unit.toUpperCase(),
-                    value:
-                      typeof ls.value === "number"
-                        ? ls.value
-                        : parseFloat(ls.value) || 0
-                  };
+                // Verifica tamanho da fonte
+                if (token.value.fontSize && styleProperties.fontSize) {
+                  const tokenSize = parseFloat(token.value.fontSize);
+                  const styleSize = parseFloat(
+                    styleProperties.fontSize.toString()
+                  );
+
+                  if (
+                    isNaN(tokenSize) ||
+                    isNaN(styleSize) ||
+                    Math.abs(tokenSize - styleSize) > 0.1
+                  ) {
+                    return false;
+                  }
                 }
 
-                return null;
-              };
+                // Verifica altura da linha
+                if (token.value.lineHeight && styleProperties.lineHeight) {
+                  const tokenLineHeight = token.value.lineHeight;
+                  const styleLineHeight = styleProperties.lineHeight;
 
-              const normalizedTokenLS = normalizeLetterSpacing(
-                tokenLetterSpacing
-              );
-              const normalizedStyleLS = normalizeLetterSpacing(
-                styleLetterSpacing
-              );
+                  // Função para normalizar valores de line height
+                  const normalizeLineHeight = (lh: any) => {
+                    if (!lh) return null;
+                    if (typeof lh === "number") {
+                      return { unit: "PIXELS", value: lh };
+                    }
+                    if (typeof lh === "string") {
+                      if (lh.endsWith("%")) {
+                        return {
+                          unit: "PERCENT",
+                          value: parseFloat(lh) || 0
+                        };
+                      }
+                      return {
+                        unit: "PIXELS",
+                        value: parseFloat(lh) || 0
+                      };
+                    }
+                    if (lh.unit && lh.value !== undefined) {
+                      return {
+                        unit: lh.unit.toUpperCase(),
+                        value:
+                          typeof lh.value === "number"
+                            ? lh.value
+                            : parseFloat(lh.value) || 0
+                      };
+                    }
+                    return null;
+                  };
 
-              if (!normalizedTokenLS || !normalizedStyleLS) {
-                console.log(
-                  "[isTextStyleInLibrary] Não foi possível normalizar os valores de espaçamento entre letras"
-                );
-                return false;
-              }
+                  const normalizedTokenLH = normalizeLineHeight(
+                    tokenLineHeight
+                  );
+                  const normalizedStyleLH = normalizeLineHeight(
+                    styleLineHeight
+                  );
 
-              // Se as unidades são diferentes, não correspondem
-              if (normalizedTokenLS.unit !== normalizedStyleLS.unit) {
-                console.log(
-                  `[isTextStyleInLibrary] Unidades de espaçamento entre letras não correspondem: token=${normalizedTokenLS.unit}, estilo=${normalizedStyleLS.unit}`
-                );
-                return false;
-              }
+                  if (!normalizedTokenLH || !normalizedStyleLH) {
+                    return false;
+                  }
 
-              // Compara os valores com uma pequena margem de erro
-              if (
-                Math.abs(normalizedTokenLS.value - normalizedStyleLS.value) >
-                0.1
-              ) {
-                console.log(
-                  `[isTextStyleInLibrary] Valores de espaçamento entre letras (${normalizedTokenLS.unit}) não correspondem: token=${normalizedTokenLS.value}, estilo=${normalizedStyleLS.value}`
-                );
-                return false;
-              }
+                  if (normalizedTokenLH.unit !== normalizedStyleLH.unit) {
+                    return false;
+                  }
+
+                  if (
+                    Math.abs(
+                      normalizedTokenLH.value - normalizedStyleLH.value
+                    ) > 0.1
+                  ) {
+                    return false;
+                  }
+                }
+
+                // Verifica espaçamento entre letras
+                if (
+                  token.value.letterSpacing &&
+                  styleProperties.letterSpacing
+                ) {
+                  const tokenLetterSpacing = token.value.letterSpacing;
+                  const styleLetterSpacing = styleProperties.letterSpacing;
+
+                  const normalizeLetterSpacing = (ls: any) => {
+                    if (ls === undefined || ls === null) return null;
+                    if (typeof ls === "number") {
+                      return { unit: "PIXELS", value: ls };
+                    }
+                    if (typeof ls === "string") {
+                      if (ls.endsWith("%")) {
+                        return {
+                          unit: "PERCENT",
+                          value: parseFloat(ls) || 0
+                        };
+                      }
+                      return {
+                        unit: "PIXELS",
+                        value: parseFloat(ls) || 0
+                      };
+                    }
+                    if (ls.unit && ls.value !== undefined) {
+                      return {
+                        unit: ls.unit.toUpperCase(),
+                        value:
+                          typeof ls.value === "number"
+                            ? ls.value
+                            : parseFloat(ls.value) || 0
+                      };
+                    }
+                    return null;
+                  };
+
+                  const normalizedTokenLS = normalizeLetterSpacing(
+                    tokenLetterSpacing
+                  );
+                  const normalizedStyleLS = normalizeLetterSpacing(
+                    styleLetterSpacing
+                  );
+
+                  if (!normalizedTokenLS || !normalizedStyleLS) {
+                    return false;
+                  }
+
+                  if (normalizedTokenLS.unit !== normalizedStyleLS.unit) {
+                    return false;
+                  }
+
+                  if (
+                    Math.abs(
+                      normalizedTokenLS.value - normalizedStyleLS.value
+                    ) > 0.1
+                  ) {
+                    return false;
+                  }
+                }
+
+                if (
+                  token.value.textCase !== undefined &&
+                  token.value.textCase !== styleProperties.textCase
+                ) {
+                  return false;
+                }
+
+                if (
+                  token.value.textDecoration !== undefined &&
+                  token.value.textDecoration !== styleProperties.textDecoration
+                ) {
+                  return false;
+                }
+
+                if (
+                  token.value.paragraphIndent !== undefined &&
+                  Math.abs(
+                    (token.value.paragraphIndent || 0) -
+                      (styleProperties.paragraphIndent || 0)
+                  ) > 0.1
+                ) {
+                  return false;
+                }
+
+                if (
+                  token.value.paragraphSpacing !== undefined &&
+                  Math.abs(
+                    (token.value.paragraphSpacing || 0) -
+                      (styleProperties.paragraphSpacing || 0)
+                  ) > 0.1
+                ) {
+                  return false;
+                }
+
+                return true;
+              });
             }
 
-            // Verifica propriedades adicionais se disponíveis
-            if (
-              token.value.textCase !== undefined &&
-              token.value.textCase !== styleProperties.textCase
-            ) {
-              console.log(
-                `[isTextStyleInLibrary] Caso de texto não corresponde: token=${token.value.textCase}, estilo=${styleProperties.textCase}`
-              );
-              return false;
-            }
-
-            if (
-              token.value.textDecoration !== undefined &&
-              token.value.textDecoration !== styleProperties.textDecoration
-            ) {
-              console.log(
-                `[isTextStyleInLibrary] Decoração de texto não corresponde: token=${token.value.textDecoration}, estilo=${styleProperties.textDecoration}`
-              );
-              return false;
-            }
-
-            if (
-              token.value.paragraphIndent !== undefined &&
-              Math.abs(
-                (token.value.paragraphIndent || 0) -
-                  (styleProperties.paragraphIndent || 0)
-              ) > 0.1
-            ) {
-              console.log(
-                `[isTextStyleInLibrary] Recuo de parágrafo não corresponde: token=${token.value.paragraphIndent}, estilo=${styleProperties.paragraphIndent}`
-              );
-              return false;
-            }
-
-            if (
-              token.value.paragraphSpacing !== undefined &&
-              Math.abs(
-                (token.value.paragraphSpacing || 0) -
-                  (styleProperties.paragraphSpacing || 0)
-              ) > 0.1
-            ) {
-              console.log(
-                `[isTextStyleInLibrary] Espaçamento de parágrafo não corresponde: token=${token.value.paragraphSpacing}, estilo=${styleProperties.paragraphSpacing}`
-              );
-              return false;
-            }
-
-            console.log(
-              `[isTextStyleInLibrary] Token ${index} (${token.name}) corresponde ao estilo ${style.name}`
-            );
-            return true;
+            return false;
           });
 
           if (tokenMatch) {
             console.log(
-              `[isTextStyleInLibrary] Estilo ${style.name} (${styleId}) corresponde a um token salvo`
+              `[isTextStyleInLibrary] ✓ Token encontrado nos tokens salvos`
             );
             return true;
-          } else {
-            console.log(
-              `[isTextStyleInLibrary] Nenhum token salvo corresponde ao estilo ${style.name} (${styleId})`
-            );
-
-            // Log detalhado das propriedades do estilo para depuração
-            console.log("[isTextStyleInLibrary] Propriedades do estilo:", {
-              name: style.name,
-              id: style.id,
-              fontName: style.fontName,
-              fontSize: style.fontSize,
-              lineHeight: style.lineHeight,
-              letterSpacing: style.letterSpacing,
-              textCase: style.textCase,
-              textDecoration: style.textDecoration,
-              paragraphIndent: style.paragraphIndent,
-              paragraphSpacing: style.paragraphSpacing
-            });
-
-            // Log dos tokens disponíveis para comparação
-            console.log(
-              "[isTextStyleInLibrary] Tokens disponíveis para comparação:",
-              savedTokens.map(t => ({
-                name: t.name,
-                value: t.value
-              }))
-            );
           }
         } else {
           console.log(
@@ -554,6 +500,7 @@ function isTextStyleInLibrary(
       }
     }
 
+    console.log(`[isTextStyleInLibrary] ✗ Estilo ${styleId} não encontrado`);
     return false;
   } catch (error) {
     console.error("[isTextStyleInLibrary] Erro:", error);
@@ -570,7 +517,19 @@ function isEffectStyleInLibrary(
     if (!preprocessedLibs || !preprocessedLibs.effects) {
       return false;
     }
-    return preprocessedLibs.effects.has(styleId);
+
+    // Verifica o ID completo
+    if (preprocessedLibs.effects.has(styleId)) {
+      return true;
+    }
+
+    // Verifica também apenas a parte do ID sem o sufixo (formato S:hash,nodeId)
+    const baseStyleId = styleId.split(",")[0];
+    if (baseStyleId !== styleId && preprocessedLibs.effects.has(baseStyleId)) {
+      return true;
+    }
+
+    return false;
   } catch (error) {
     console.error("[isEffectStyleInLibrary] Erro:", error);
     return false;
@@ -585,50 +544,141 @@ function isColorStyleInLibrary(
   savedTokens: any[] = []
 ): boolean {
   try {
-    // Verifica se o estilo está nas bibliotecas carregadas
+    console.log(`[isColorStyleInLibrary] Verificando estilo ${styleId}`);
+    console.log(
+      `[isColorStyleInLibrary] Bibliotecas preprocessadas:`,
+      preprocessedLibs?.fills?.size || 0
+    );
+    console.log(
+      `[isColorStyleInLibrary] Tokens salvos:`,
+      savedTokens?.length || 0
+    );
+
+    // Primeiro verifica se o estilo está nas bibliotecas carregadas
     if (preprocessedLibs?.fills?.has(styleId)) {
+      console.log(
+        `[isColorStyleInLibrary] ✓ Estilo encontrado nas bibliotecas preprocessadas`
+      );
       return true;
     }
 
-    // Se não encontrou nas bibliotecas, verifica nos tokens salvos
-    if (node && savedTokens && savedTokens.length > 0) {
+    // Verifica também apenas a parte do ID sem o sufixo (formato S:hash,nodeId)
+    const baseStyleId = styleId.split(",")[0];
+    if (baseStyleId !== styleId && preprocessedLibs?.fills?.has(baseStyleId)) {
+      console.log(
+        `[isColorStyleInLibrary] ✓ Estilo base encontrado nas bibliotecas preprocessadas: ${baseStyleId}`
+      );
+      return true;
+    }
+
+    // Verifica nos tokens salvos se houver
+    if (savedTokens && savedTokens.length > 0) {
       try {
-        // Obtém o estilo do nó para comparar com os tokens
+        // Obtém o estilo do Figma para comparar
         const style = figma.getStyleById(styleId) as PaintStyle | null;
         if (style) {
+          console.log(
+            `[isColorStyleInLibrary] Estilo do Figma encontrado: ${style.name}`
+          );
+
           // Verifica se o estilo corresponde a algum token salvo
-          return savedTokens.some(token => {
-            if (!token.value) return false;
+          const tokenMatch = savedTokens.some(tokenLib => {
+            console.log(
+              `[isColorStyleInLibrary] Verificando biblioteca de tokens:`,
+              tokenLib.name
+            );
 
-            // Verifica se o token tem uma cor para comparar
-            if (token.value.color) {
-              // Se o nó tiver preenchimento, compara as cores
-              if (node.fills && Array.isArray(node.fills)) {
-                const nodeFill = node.fills[0];
-                if (nodeFill && nodeFill.type === "SOLID") {
-                  const tokenColor = token.value.color;
-                  const nodeColor = nodeFill.color;
+            // Verifica se há tokens de fills na biblioteca
+            if (!tokenLib.tokens?.fills && !tokenLib.flattenedTokens) {
+              console.log(
+                `[isColorStyleInLibrary] Biblioteca sem tokens de fills`
+              );
+              return false;
+            }
 
-                  // Compara os componentes de cor (R, G, B) com uma pequena margem de erro
-                  const colorMatch =
-                    Math.abs(tokenColor.r - nodeColor.r) < 0.01 &&
-                    Math.abs(tokenColor.g - nodeColor.g) < 0.01 &&
-                    Math.abs(tokenColor.b - nodeColor.b) < 0.01;
-
-                  // Se houver opacidade, compara também
-                  if (tokenColor.a !== undefined && nodeColor.a !== undefined) {
-                    return (
-                      colorMatch && Math.abs(tokenColor.a - nodeColor.a) < 0.01
+            // Verifica nos tokens estruturados
+            if (tokenLib.tokens?.fills) {
+              const fillTokenMatch = tokenLib.tokens.fills.some(
+                (token: any) => {
+                  // Verificação por ID (mais precisa)
+                  if (token.id && token.id === styleId) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por ID: ${token.id}`
                     );
+                    return true;
                   }
 
-                  return colorMatch;
+                  // Verificação por key
+                  if (token.key && style.key && token.key === style.key) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por key: ${token.key}`
+                    );
+                    return true;
+                  }
+
+                  // Verificação por nome
+                  if (token.name && style.name && token.name === style.name) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por nome: ${token.name}`
+                    );
+                    return true;
+                  }
+
+                  return false;
                 }
-              }
+              );
+
+              if (fillTokenMatch) return true;
+            }
+
+            // Verifica nos tokens achatados (flattenedTokens)
+            if (tokenLib.flattenedTokens) {
+              const flatTokenMatch = tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "fills")
+                .some((token: any) => {
+                  // Verificação por ID
+                  if (token.id && token.id === styleId) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por ID (flat): ${token.id}`
+                    );
+                    return true;
+                  }
+
+                  // Verificação por key
+                  if (token.key && style.key && token.key === style.key) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por key (flat): ${token.key}`
+                    );
+                    return true;
+                  }
+
+                  // Verificação por nome
+                  if (token.name && style.name && token.name === style.name) {
+                    console.log(
+                      `[isColorStyleInLibrary] ✓ Correspondência por nome (flat): ${token.name}`
+                    );
+                    return true;
+                  }
+
+                  return false;
+                });
+
+              if (flatTokenMatch) return true;
             }
 
             return false;
           });
+
+          if (tokenMatch) {
+            console.log(
+              `[isColorStyleInLibrary] ✓ Token encontrado nos tokens salvos`
+            );
+            return true;
+          }
+        } else {
+          console.log(
+            `[isColorStyleInLibrary] Estilo ${styleId} não encontrado no Figma`
+          );
         }
       } catch (error) {
         console.error(
@@ -638,6 +688,7 @@ function isColorStyleInLibrary(
       }
     }
 
+    console.log(`[isColorStyleInLibrary] ✗ Estilo ${styleId} não encontrado`);
     return false;
   } catch (error) {
     console.error("[isColorStyleInLibrary] Erro:", error);
@@ -645,7 +696,7 @@ function isColorStyleInLibrary(
   }
 }
 
-// Função para verificar tipos de texto
+// Função para verificar estilos de texto
 export async function checkType(
   node: any,
   errors: any[],
@@ -697,14 +748,21 @@ export async function checkType(
       });
     } else {
       // Se um estilo é aplicado, verifica se ele pertence a uma biblioteca válida ou corresponde a um token salvo
-      const styleFound = isTextStyleInLibrary(
+      const styleFoundInTokens = isTextStyleInLibrary(
         node.textStyleId,
         preprocessedLibs,
         node,
         savedTokens
       );
 
-      if (!styleFound) {
+      console.log(`[checkType] Verificando estilo ${node.textStyleId}:`, {
+        styleId: node.textStyleId,
+        foundInTokens: styleFoundInTokens,
+        hasTokens: savedTokens && savedTokens.length > 0
+      });
+
+      // Se não encontrou nos tokens, mostrar erro
+      if (!styleFoundInTokens) {
         try {
           const textStyle = (await figma.getStyleById(
             node.textStyleId
@@ -744,6 +802,10 @@ export async function checkType(
             suggestions: []
           });
         }
+      } else {
+        console.log(
+          `[checkType] ✓ Estilo ${node.textStyleId} encontrado - sem erro`
+        );
       }
     }
   } catch (error) {
@@ -775,7 +837,7 @@ export async function newCheckFills(
         message: "Preenchimento com valores mistos",
         nodeId: node.id,
         nodeName: node.name,
-        value: "Múltiplos preenchimentos", // Added value for mixed fills
+        value: "Múltiplos preenchimentos",
         suggestions: []
       });
       return;
@@ -785,6 +847,7 @@ export async function newCheckFills(
 
     if (hasVisibleFills) {
       if (!node.fillStyleId || node.fillStyleId === "") {
+        // Caso 1: Não há estilo aplicado - sempre mostrar erro se não for estilo local
         const firstVisibleFill = node.fills.find(
           fill => fill.visible !== false
         );
@@ -797,8 +860,44 @@ export async function newCheckFills(
           fillValue = firstVisibleFill.type;
         }
 
-        const suggestions =
-          libraries?.flatMap(lib => lib.fills).filter(Boolean) || [];
+        const suggestions = [];
+
+        // Adicionar sugestões das bibliotecas locais
+        if (libraries && libraries.length > 0) {
+          libraries.forEach(lib => {
+            if (lib.fills && Array.isArray(lib.fills)) {
+              suggestions.push(...lib.fills.filter(Boolean));
+            }
+          });
+        }
+
+        // Adicionar sugestões dos tokens salvos
+        if (savedTokens && savedTokens.length > 0) {
+          savedTokens.forEach(tokenLib => {
+            if (tokenLib.flattenedTokens) {
+              tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "fills")
+                .forEach((token: any) => {
+                  suggestions.push({
+                    id: token.id,
+                    name: token.name,
+                    value: token.value,
+                    type: "SAVED_TOKEN",
+                    description: `Token salvo: ${token.name}`,
+                    paint: { type: "SOLID", color: token.color },
+                    key: token.key || token.id,
+                    style: {
+                      type: "SAVED_TOKEN",
+                      name: token.name,
+                      value: token.value,
+                      description: `Token salvo: ${token.name}`,
+                      id: token.id
+                    }
+                  });
+                });
+            }
+          });
+        }
 
         errors.push({
           type: "fill",
@@ -809,14 +908,28 @@ export async function newCheckFills(
           suggestions: suggestions
         });
       } else {
-        const styleFound = isColorStyleInLibrary(
+        // Caso 2: Há estilo aplicado - verificar se está na biblioteca ou tokens salvos
+        const styleFoundInLibraries =
+          preprocessedLibs?.fills?.has(node.fillStyleId) || false;
+
+        // IMPORTANTE: Usar a função isColorStyleInLibrary que já verifica tanto bibliotecas quanto tokens
+        const styleFoundInTokens = isColorStyleInLibrary(
           node.fillStyleId,
           preprocessedLibs,
           node,
           savedTokens
         );
 
-        if (!styleFound) {
+        console.log(`[newCheckFills] Verificando estilo ${node.fillStyleId}:`, {
+          styleId: node.fillStyleId,
+          foundInLibraries: styleFoundInLibraries,
+          foundInTokens: styleFoundInTokens,
+          hasTokens: savedTokens && savedTokens.length > 0,
+          preprocessedLibsSize: preprocessedLibs?.fills?.size || 0
+        });
+
+        // Se encontrou nos tokens (que já inclui verificação de bibliotecas), não mostrar erro
+        if (!styleFoundInTokens) {
           try {
             const paintStyle = (await figma.getStyleById(
               node.fillStyleId
@@ -842,8 +955,44 @@ export async function newCheckFills(
               }
             }
 
-            const suggestions =
-              libraries?.flatMap(lib => lib.fills).filter(Boolean) || [];
+            const suggestions = [];
+
+            // Adicionar sugestões das bibliotecas locais
+            if (libraries && libraries.length > 0) {
+              libraries.forEach(lib => {
+                if (lib.fills && Array.isArray(lib.fills)) {
+                  suggestions.push(...lib.fills.filter(Boolean));
+                }
+              });
+            }
+
+            // Adicionar sugestões dos tokens salvos
+            if (savedTokens && savedTokens.length > 0) {
+              savedTokens.forEach(tokenLib => {
+                if (tokenLib.flattenedTokens) {
+                  tokenLib.flattenedTokens
+                    .filter((token: any) => token.category === "fills")
+                    .forEach((token: any) => {
+                      suggestions.push({
+                        id: token.id,
+                        name: token.name,
+                        value: token.value,
+                        type: "SAVED_TOKEN",
+                        description: `Token salvo: ${token.name}`,
+                        paint: { type: "SOLID", color: token.color },
+                        key: token.key || token.id,
+                        style: {
+                          type: "SAVED_TOKEN",
+                          name: token.name,
+                          value: token.value,
+                          description: `Token salvo: ${token.name}`,
+                          id: token.id
+                        }
+                      });
+                    });
+                }
+              });
+            }
 
             errors.push({
               type: "fill",
@@ -868,6 +1017,10 @@ export async function newCheckFills(
               suggestions: []
             });
           }
+        } else {
+          console.log(
+            `[newCheckFills] ✓ Estilo ${node.fillStyleId} encontrado - sem erro`
+          );
         }
       }
     }
@@ -1085,14 +1238,25 @@ export async function newCheckStrokes(
           suggestions: suggestions
         });
       } else {
-        const styleFound = isColorStyleInLibrary(
+        // Caso 2: Há estilo aplicado - verificar se está na biblioteca ou tokens salvos
+        const styleFoundInTokens = isColorStyleInLibrary(
           node.strokeStyleId,
           preprocessedLibs,
           node,
           savedTokens
         );
 
-        if (!styleFound) {
+        console.log(
+          `[newCheckStrokes] Verificando estilo ${node.strokeStyleId}:`,
+          {
+            styleId: node.strokeStyleId,
+            foundInTokens: styleFoundInTokens,
+            hasTokens: savedTokens && savedTokens.length > 0
+          }
+        );
+
+        // Se não encontrou nos tokens, mostrar erro
+        if (!styleFoundInTokens) {
           try {
             const paintStyle = (await figma.getStyleById(
               node.strokeStyleId
@@ -1158,6 +1322,10 @@ export async function newCheckStrokes(
               suggestions: []
             });
           }
+        } else {
+          console.log(
+            `[newCheckStrokes] ✓ Estilo ${node.strokeStyleId} encontrado - sem erro`
+          );
         }
       }
     }

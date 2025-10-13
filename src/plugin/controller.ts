@@ -392,116 +392,253 @@ figma.ui.onmessage = async (msg: any) => {
     if (msg.type === "save-design-tokens") {
       try {
         const tokens = msg.tokens || {};
-        // Garantir que radius e grids existam como arrays, se presentes
-        if (tokens && typeof tokens === "object") {
-          if (tokens.radius && !Array.isArray(tokens.radius)) {
-            tokens.radius = [tokens.radius];
-          }
-          if (tokens.grid && !Array.isArray(tokens.grid)) {
-            tokens.grid = [tokens.grid];
-          }
-        }
-        await figma.clientStorage.setAsync("design-tokens", tokens);
-        figma.ui.postMessage({
-          type: "design-tokens-saved",
-          success: true,
-          tokens
+
+        console.log("[save-design-tokens] Dados recebidos para salvar:", {
+          hasFills: !!tokens.fills,
+          hasText: !!tokens.text,
+          hasEffects: !!tokens.effects,
+          fillsCount: tokens.fills?.length || 0,
+          textCount: tokens.text?.length || 0,
+          effectsCount: tokens.effects?.length || 0,
+          radiusCount: tokens.radius?.length || 0,
+          gapsCount: tokens.gaps?.length || 0,
+          gridsCount: tokens.grids?.length || 0
         });
-      } catch (e) {
-        figma.ui.postMessage({
-          type: "design-tokens-saved",
-          success: false,
-          message: String(e)
-        });
-      }
-      return;
-    }
 
-    if (msg.type === "load-saved-tokens") {
-      try {
-        const tokens =
-          (await figma.clientStorage.getAsync("design-tokens")) || {};
+        // Melhorar a estrutura dos tokens salvos para incluir ID, key e outras informações importantes
+        const enhancedTokens = {};
 
-        console.log(
-          "[Controller] Dados brutos carregados do design-tokens:",
-          tokens
-        );
-        console.log("[Controller] Tipo dos dados carregados:", typeof tokens);
-        console.log(
-          "[Controller] Chaves dos dados carregados:",
-          Object.keys(tokens)
-        );
-
-        // Converte a estrutura simples dos tokens salvos para o formato esperado pela auditoria
-        // A auditoria espera um array de objetos com estrutura { tokens: { fills: [...], ... } }
-        const formattedTokens = [];
-
-        if (tokens && typeof tokens === "object") {
-          // Se os tokens têm a estrutura de bibliotecas (com fills, text, effects, etc.)
-          if (tokens.fills || tokens.text || tokens.effects) {
-            formattedTokens.push({
-              name: "Saved Design Tokens",
-              tokens: tokens
-            });
-            console.log("[Controller] Tokens formatados como biblioteca única");
-          }
-          // Se os tokens são uma lista simples de bibliotecas
-          else if (Array.isArray(tokens)) {
-            formattedTokens.push(...tokens);
-            console.log(
-              "[Controller] Tokens formatados como array de bibliotecas"
-            );
-          } else {
-            console.log("[Controller] Estrutura de tokens não reconhecida");
-          }
+        if (tokens.fills && Array.isArray(tokens.fills)) {
+          enhancedTokens.fills = tokens.fills.map(fill => ({
+            id: fill.id || null,
+            key: fill.key || fill.id || null,
+            name: fill.name || "",
+            value: fill.value || fill.color || null,
+            paint: fill.paint || null,
+            description: fill.description || null
+          }));
+          console.log(
+            "[save-design-tokens] Fills salvos:",
+            enhancedTokens.fills.length
+          );
         }
 
-        console.log(
-          "[Controller] Tokens salvos carregados e formatados:",
-          formattedTokens.length,
-          "bibliotecas"
-        );
-        console.log(
-          "[Controller] Estrutura formatada dos tokens:",
-          JSON.stringify(formattedTokens, null, 2)
-        );
+        if (tokens.text && Array.isArray(tokens.text)) {
+          enhancedTokens.text = tokens.text.map(text => ({
+            id: text.id || null,
+            key: text.key || text.id || null,
+            name: text.name || "",
+            description: text.description || null,
+            style: text.style || null
+          }));
+          console.log(
+            "[save-design-tokens] Text styles salvos:",
+            enhancedTokens.text.length
+          );
+        }
 
-        figma.ui.postMessage({
-          type: "saved-tokens-loaded",
-          success: true,
-          tokens: formattedTokens
-        });
-      } catch (e) {
-        console.error("[Controller] Erro ao carregar tokens salvos:", e);
-        figma.ui.postMessage({
-          type: "saved-tokens-loaded",
-          success: false,
-          message: String(e)
-        });
-      }
-      return;
-    }
+        if (tokens.effects && Array.isArray(tokens.effects)) {
+          enhancedTokens.effects = tokens.effects.map(effect => ({
+            id: effect.id || null,
+            key: effect.key || effect.id || null,
+            name: effect.name || "",
+            effects: effect.effects || [],
+            description: effect.description || null
+          }));
+          console.log(
+            "[save-design-tokens] Effects salvos:",
+            enhancedTokens.effects.length
+          );
+        }
 
-    if (msg.type === "save-library-tokens") {
-      try {
-        // Figma não tem filesystem; persistimos em clientStorage
-        const libraries = msg.libraries || [];
-        const filename = msg.filename || `libraries_${Date.now()}`;
+        // Preservar outras propriedades como radius, gaps, grids
+        if (tokens.radius) enhancedTokens.radius = tokens.radius;
+        if (tokens.gaps) enhancedTokens.gaps = tokens.gaps;
+        if (tokens.grids) enhancedTokens.grids = tokens.grids;
+
+        console.log("[save-design-tokens] Estrutura final para salvar:", {
+          hasFills: !!enhancedTokens.fills,
+          hasText: !!enhancedTokens.text,
+          hasEffects: !!enhancedTokens.effects,
+          totalTokens:
+            (enhancedTokens.fills?.length || 0) +
+            (enhancedTokens.text?.length || 0) +
+            (enhancedTokens.effects?.length || 0)
+        });
+
+        const fileData = {
+          metadata: {
+            savedAt: new Date().toISOString(),
+            version: "1.0",
+            totalTokens:
+              (enhancedTokens.fills?.length || 0) +
+              (enhancedTokens.text?.length || 0) +
+              (enhancedTokens.effects?.length || 0)
+          },
+          tokens: enhancedTokens,
+          timestamp: new Date().toISOString().replace(/[:.]/g, "-"),
+          filename: "data.json"
+        };
+
         await figma.clientStorage.setAsync(
-          `library-tokens:${filename}`,
-          libraries
+          "data.json",
+          JSON.stringify(fileData)
         );
+
+        console.log(
+          "[save-design-tokens] Dados salvos com sucesso no clientStorage em data.json"
+        );
+
         figma.ui.postMessage({
-          type: "library-tokens-saved",
+          type: "design-tokens-saved",
           success: true,
-          filePath: `clientStorage:${filename}`
+          tokens: enhancedTokens // UI might still expect the raw tokens object
         });
       } catch (e) {
+        console.error("[save-design-tokens] Erro ao salvar:", e);
         figma.ui.postMessage({
-          type: "library-tokens-saved",
+          type: "design-tokens-saved",
           success: false,
           message: String(e)
         });
+      }
+      return;
+    }
+
+    if (msg.type === "get-selection") {
+      try {
+        const selectedNodes = figma.currentPage.selection;
+        console.log(
+          "[Plugin] get-selection solicitado. Nós selecionados:",
+          selectedNodes.length
+        );
+
+        if (selectedNodes.length > 0) {
+          const extractNodeData = (node: any) => {
+            const nodeData: any = {
+              id: node.id,
+              name: node.name,
+              type: node.type,
+              visible: node.visible !== false,
+              locked: node.locked === true
+            };
+
+            // Dimensões e posição
+            if (node.absoluteBoundingBox) {
+              nodeData.bounds = {
+                width: node.absoluteBoundingBox.width,
+                height: node.absoluteBoundingBox.height
+              };
+              nodeData.position = {
+                x: node.absoluteBoundingBox.x,
+                y: node.absoluteBoundingBox.y
+              };
+            }
+
+            // Layout e espaçamento
+            if (node.layoutMode) {
+              nodeData.layoutMode = node.layoutMode;
+            }
+            if (node.paddingTop !== undefined) {
+              nodeData.padding = {
+                top: node.paddingTop,
+                right: node.paddingRight || 0,
+                bottom: node.paddingBottom || 0,
+                left: node.paddingLeft || 0
+              };
+            }
+            if (node.itemSpacing !== undefined) {
+              nodeData.gap = node.itemSpacing;
+            }
+            if (node.cornerRadius !== undefined) {
+              nodeData.cornerRadius = node.cornerRadius;
+            }
+
+            // Cores e preenchimentos
+            if (node.fills && Array.isArray(node.fills)) {
+              nodeData.fills = node.fills.map((fill: any) => ({
+                type: fill.type,
+                visible: fill.visible !== false,
+                opacity: fill.opacity,
+                color:
+                  fill.type === "SOLID" && fill.color
+                    ? {
+                        r: Math.round(fill.color.r * 255),
+                        g: Math.round(fill.color.g * 255),
+                        b: Math.round(fill.color.b * 255)
+                      }
+                    : null
+              }));
+            }
+
+            // Texto
+            if (node.type === "TEXT") {
+              nodeData.characters = node.characters;
+              if (node.fontName) {
+                nodeData.fontName = node.fontName;
+              }
+              if (node.fontSize) {
+                nodeData.fontSize = node.fontSize;
+              }
+            }
+
+            return nodeData;
+          };
+
+          const nodesData = selectedNodes.map(extractNodeData);
+
+          figma.ui.postMessage({
+            type: "selection-changed",
+            selection: nodesData
+          });
+        } else {
+          figma.ui.postMessage({
+            type: "selection-changed",
+            selection: []
+          });
+        }
+      } catch (e) {
+        console.error("[Plugin] Erro ao processar get-selection:", e);
+        figma.ui.postMessage({
+          type: "selection-changed",
+          selection: []
+        });
+      }
+      return;
+    }
+    if (msg.type === "debug-client-storage") {
+      try {
+        console.log("[DEBUG] Verificando estado do clientStorage");
+
+        // Verificar todos os dados no clientStorage
+        const allKeys = await figma.clientStorage.keysAsync();
+        console.log("[DEBUG] Todas as chaves no clientStorage:", allKeys);
+
+        // Verificar especificamente design-tokens
+        const designTokens = await figma.clientStorage.getAsync(
+          "design-tokens"
+        );
+        console.log("[DEBUG] Dados de design-tokens:", designTokens);
+
+        // Verificar user-libs
+        const userLibs = await figma.clientStorage.getAsync("user-libs");
+        console.log("[DEBUG] Dados de user-libs:", userLibs);
+
+        figma.ui.postMessage({
+          type: "debug-storage-results",
+          data: {
+            allKeys,
+            designTokens,
+            userLibs,
+            hasDesignTokens:
+              !!designTokens && Object.keys(designTokens).length > 0,
+            designTokensCount: designTokens
+              ? Object.keys(designTokens).length
+              : 0
+          }
+        });
+      } catch (e) {
+        console.error("[DEBUG] Erro ao verificar clientStorage:", e);
       }
       return;
     }
@@ -628,9 +765,12 @@ function preprocessLibraries(
   for (const lib of libraries || []) {
     if (!lib) continue;
 
+    // Processa apenas bibliotecas que têm tokens salvos pelo usuário
+    // Não tenta acessar estilos locais do Figma
+
     // Estilos de preenchimento (usados também para bordas)
-    if (lib.fills && Array.isArray(lib.fills)) {
-      for (const style of lib.fills) {
+    if (lib.tokens?.fills && Array.isArray(lib.tokens.fills)) {
+      for (const style of lib.tokens.fills) {
         if (style && style.id) {
           fillStyleIds.add(style.id);
         }
@@ -638,8 +778,8 @@ function preprocessLibraries(
     }
 
     // Estilos de texto
-    if (lib.text && Array.isArray(lib.text)) {
-      for (const style of lib.text) {
+    if (lib.tokens?.text && Array.isArray(lib.tokens.text)) {
+      for (const style of lib.tokens.text) {
         if (style && style.id) {
           textStyleIds.add(style.id);
         }
@@ -647,8 +787,8 @@ function preprocessLibraries(
     }
 
     // Estilos de efeito
-    if (lib.effects && Array.isArray(lib.effects)) {
-      for (const style of lib.effects) {
+    if (lib.tokens?.effects && Array.isArray(lib.tokens.effects)) {
+      for (const style of lib.tokens.effects) {
         if (style && style.id) {
           effectStyleIds.add(style.id);
         }
@@ -795,7 +935,8 @@ async function lint(
   // Isso evita que a lógica complexa de linting interfira na detecção.
   const brokenInstanceErrors = await findBrokenInstances(nodes);
 
-  // 2. Pré-processa as bibliotecas uma vez para otimizar a busca de IDs de estilo nas outras regras.
+  // 2. Usa APENAS tokens salvos pelo usuário para auditoria
+  // Não usa estilos locais do Figma
   const preprocessedLibs = preprocessLibraries(libraries);
   const otherErrors = await lintRecursive(
     nodes,
@@ -1422,6 +1563,93 @@ async function restoreBrokenComponent(
   }
 }
 
+// Helper function to load and format tokens from clientStorage
+async function loadAndFormatSavedTokens(): Promise<any[]> {
+  try {
+    console.log(
+      "[loadAndFormatSavedTokens] Iniciando carregamento de tokens..."
+    );
+
+    // The primary storage mechanism is a single "data.json" key
+    const dataFile = await figma.clientStorage.getAsync("data.json");
+
+    if (dataFile && typeof dataFile === "string") {
+      const parsedData = JSON.parse(dataFile);
+      const tokens = parsedData.tokens; // Get the actual tokens object
+
+      console.log("[loadAndFormatSavedTokens] Dados carregados do data.json:", {
+        hasTokens: !!tokens,
+        tokenKeys: tokens ? Object.keys(tokens) : [],
+        fillsCount: tokens?.fills?.length || 0,
+        textCount: tokens?.text?.length || 0,
+        effectsCount: tokens?.effects?.length || 0
+      });
+
+      const formattedTokens = [];
+      if (
+        tokens &&
+        typeof tokens === "object" &&
+        Object.keys(tokens).length > 0
+      ) {
+        // Criar tokens achatados para facilitar a busca
+        const flattenedTokens: any[] = [];
+
+        Object.keys(tokens).forEach(category => {
+          const categoryTokens = tokens[category];
+          if (Array.isArray(categoryTokens)) {
+            categoryTokens.forEach((token: any) => {
+              flattenedTokens.push({
+                id: token.id,
+                key: token.key || token.id,
+                name: token.name,
+                value: token.value,
+                category: category,
+                type: category,
+                // Propriedades específicas por categoria
+                ...(category === "fills" && {
+                  color: token.color || token.value?.color,
+                  paint: token.paint
+                }),
+                ...(category === "text" && {
+                  fontFamily: token.fontFamily || token.value?.fontFamily,
+                  fontSize: token.fontSize || token.value?.fontSize
+                })
+              });
+            });
+          }
+        });
+
+        // Wrap the tokens object in the library structure expected by the linting functions
+        formattedTokens.push({
+          name: "Saved Design Tokens",
+          tokens: tokens,
+          flattenedTokens: flattenedTokens
+        });
+
+        console.log("[loadAndFormatSavedTokens] Tokens formatados:", {
+          librariesCount: formattedTokens.length,
+          flattenedCount: flattenedTokens.length,
+          firstLibrary: formattedTokens[0]?.name
+        });
+
+        return formattedTokens;
+      }
+    }
+
+    // Fallback or if no data.json is found
+    console.log(
+      "[loadAndFormatSavedTokens] 'data.json' not found or is empty. No saved tokens loaded."
+    );
+    return [];
+  } catch (e) {
+    console.error(
+      "[loadAndFormatSavedTokens] Error loading/formatting tokens:",
+      e
+    );
+    return []; // Return an empty array on error
+  }
+}
+
 // Importar a função addNote do measurementController
 import { addNote } from "./measurementController";
 
@@ -1682,11 +1910,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             baseLibraries
           );
 
+          // Load fresh tokens directly from storage to ensure the audit is up-to-date.
+          const savedTokens = await loadAndFormatSavedTokens();
+
           const lintResults = await lint(
             nodesToLint,
             effectiveLibraries,
             null,
-            msg.savedTokens || []
+            savedTokens
           );
           const groupedErrors = groupErrorsByNode(lintResults);
           const serializedNodes = serializeNodes(nodesToLint);
@@ -2332,14 +2563,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           effectiveLibraries = [];
         }
 
-        const effectiveLibrariesWithVariables = await getLibrariesWithLocalVariables(
-          effectiveLibraries
-        );
+        // CRÍTICA: Usar APENAS tokens salvos explicitamente pelo usuário
+        // Não adicionar estilos locais automaticamente
+        const effectiveLibrariesWithVariables = effectiveLibraries || [];
 
         console.log(
           "[Controller] Executando auditoria com",
           effectiveLibrariesWithVariables.length,
-          "bibliotecas:",
+          "bibliotecas salvas pelo usuário:",
           effectiveLibrariesWithVariables.map((lib: any) => ({
             name: lib && lib.name ? lib.name : undefined,
             id: lib && lib.id ? lib.id : undefined,
@@ -2348,36 +2579,102 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         );
 
         console.log(
-          "[Controller] DEBUG - Tokens recebidos:",
-          msg.savedTokens?.length || 0
-        );
-        console.log(
-          "[Controller] DEBUG - Estrutura dos tokens salvos:",
-          msg.savedTokens || []
+          "[Controller] DEBUG - Carregando tokens salvos para a auditoria inicial..."
         );
 
-        // Verificar se temos flattenedTokens disponíveis
-        const flattenedTokens =
-          msg.savedTokens && msg.savedTokens.length > 0
-            ? msg.savedTokens[0]?.flattenedTokens || []
-            : [];
+        // FIX: Load fresh tokens directly from storage for the initial run.
+        const savedTokensResult = await loadSavedTokens();
+        const savedTokens = savedTokensResult.success
+          ? savedTokensResult.tokens
+          : [];
+
+        // NOVO: Se não há tokens salvos, usar bibliotecas carregadas diretamente
+        let effectiveTokens = savedTokens;
+        if (
+          savedTokens.length === 0 &&
+          effectiveLibrariesWithVariables.length > 0
+        ) {
+          console.log(
+            "[Controller] Nenhum token salvo encontrado, usando bibliotecas carregadas diretamente"
+          );
+          // Converter bibliotecas para formato de tokens
+          const librariesAsTokens = effectiveLibrariesWithVariables.map(
+            (lib: any) => ({
+              name: lib?.name || "Biblioteca Ativa",
+              tokens: {
+                fills: lib?.fills || [],
+                text: lib?.text || [],
+                effects: lib?.effects || [],
+                strokes: lib?.strokes || [],
+                radius: lib?.radius || [],
+                gaps: lib?.gaps || [],
+                paddings: lib?.paddings || []
+              },
+              flattenedTokens: [
+                ...(lib?.fills || []).map((token: any) => ({
+                  ...token,
+                  category: "fills",
+                  type: "fills"
+                })),
+                ...(lib?.text || []).map((token: any) => ({
+                  ...token,
+                  category: "text",
+                  type: "text"
+                })),
+                ...(lib?.effects || []).map((token: any) => ({
+                  ...token,
+                  category: "effects",
+                  type: "effects"
+                })),
+                ...(lib?.strokes || []).map((token: any) => ({
+                  ...token,
+                  category: "strokes",
+                  type: "strokes"
+                })),
+                ...(lib?.radius || []).map((token: any) => ({
+                  ...token,
+                  category: "radius",
+                  type: "radius"
+                })),
+                ...(lib?.gaps || []).map((token: any) => ({
+                  ...token,
+                  category: "gaps",
+                  type: "gaps"
+                })),
+                ...(lib?.paddings || []).map((token: any) => ({
+                  ...token,
+                  category: "paddings",
+                  type: "paddings"
+                }))
+              ]
+            })
+          );
+          effectiveTokens = librariesAsTokens;
+        }
 
         console.log(
-          "[Controller] DEBUG - Flattened tokens para linting:",
-          flattenedTokens.length,
-          "tokens"
+          "[Controller] DEBUG - Tokens disponíveis para linting:",
+          effectiveTokens.length,
+          "conjuntos"
         );
-        console.log(
-          "[Controller] DEBUG - Exemplo de flattened token:",
-          flattenedTokens[0] || "Nenhum token encontrado"
-        );
+        if (effectiveTokens.length > 0) {
+          console.log("[Controller] DEBUG - Primeiro conjunto:", {
+            name: effectiveTokens[0]?.name,
+            hasTokens: !!effectiveTokens[0]?.tokens,
+            hasFlattenedTokens: !!effectiveTokens[0]?.flattenedTokens,
+            tokenKeys: effectiveTokens[0]?.tokens
+              ? Object.keys(effectiveTokens[0].tokens)
+              : [],
+            flattenedCount: effectiveTokens[0]?.flattenedTokens?.length || 0
+          });
+        }
 
         // Execute linting on selected nodes
         const lintResults = await lint(
           nodesToLint,
           effectiveLibrariesWithVariables,
           null,
-          flattenedTokens
+          effectiveTokens
         );
 
         // Check if processing took too long
@@ -2717,26 +3014,290 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       }
     }
 
-    if (msg.type === "list-saved-tokens") {
-      console.log("[Controller] Listando tokens salvos");
+    if (msg.type === "fetch-suggestions") {
+      console.log("[Controller] Buscando sugestões para erro:", msg.error);
       try {
-        const result = await loadSavedTokens();
+        const error = msg.error;
+        const suggestions: any[] = [];
+
+        // Buscar bibliotecas ativas para sugestões
+        const savedLibs = await figma.clientStorage.getAsync(
+          "solarops_selected_libs"
+        );
+        const libraries = Array.isArray(savedLibs) ? savedLibs : [];
+
+        console.log(
+          "[Controller] Bibliotecas disponíveis para sugestões:",
+          libraries.length
+        );
+
+        // Buscar tokens salvos também para sugestões
+        const savedTokensResult = await loadSavedTokens();
+        const savedTokens = savedTokensResult.success
+          ? savedTokensResult.tokens
+          : [];
+
+        console.log(
+          "[Controller] Tokens salvos disponíveis para sugestões:",
+          savedTokens.length
+        );
+
+        // Gerar sugestões baseadas no tipo de erro
+        if (error.type === "fill" || error.type === "color") {
+          // Sugestões de cores (fills)
+          libraries.forEach((lib: any) => {
+            if (lib.fills && Array.isArray(lib.fills)) {
+              lib.fills.forEach((fill: any) => {
+                suggestions.push({
+                  id: fill.id,
+                  name: fill.name,
+                  value: fill.color || fill.value,
+                  type: "STYLE",
+                  description: fill.description || `Cor: ${fill.name}`,
+                  paint: fill.paint || { type: "SOLID", color: fill.color },
+                  key: fill.key || fill.id,
+                  style: {
+                    type: "STYLE",
+                    name: fill.name,
+                    value: fill.color || fill.value,
+                    description: fill.description || `Cor: ${fill.name}`,
+                    id: fill.id
+                  }
+                });
+              });
+            }
+          });
+
+          // Adicionar tokens salvos de cores
+          savedTokens.forEach((tokenLib: any) => {
+            if (tokenLib.flattenedTokens) {
+              tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "fills")
+                .forEach((token: any) => {
+                  suggestions.push({
+                    id: token.id,
+                    name: token.name,
+                    value: token.value,
+                    type: "SAVED_TOKEN",
+                    description: `Token salvo: ${token.name}`,
+                    paint: { type: "SOLID", color: token.color },
+                    key: token.key || token.id,
+                    style: {
+                      type: "SAVED_TOKEN",
+                      name: token.name,
+                      value: token.value,
+                      description: `Token salvo: ${token.name}`,
+                      id: token.id
+                    }
+                  });
+                });
+            }
+          });
+        }
+
+        if (error.type === "text" || error.type === "typography") {
+          // Sugestões de tipografia
+          libraries.forEach((lib: any) => {
+            if (lib.text && Array.isArray(lib.text)) {
+              lib.text.forEach((textStyle: any) => {
+                suggestions.push({
+                  id: textStyle.id,
+                  name: textStyle.name,
+                  value: textStyle.fontSize
+                    ? `${textStyle.fontSize}px`
+                    : textStyle.name,
+                  type: "STYLE",
+                  description:
+                    textStyle.description || `Texto: ${textStyle.name}`,
+                  paint: { type: "TEXT" },
+                  key: textStyle.key || textStyle.id,
+                  style: {
+                    type: "STYLE",
+                    name: textStyle.name,
+                    value: textStyle.fontSize
+                      ? `${textStyle.fontSize}px`
+                      : textStyle.name,
+                    description:
+                      textStyle.description || `Texto: ${textStyle.name}`,
+                    id: textStyle.id,
+                    fontFamily: textStyle.fontFamily,
+                    fontSize: textStyle.fontSize,
+                    fontWeight: textStyle.fontWeight
+                  }
+                });
+              });
+            }
+          });
+
+          // Adicionar tokens salvos de texto
+          savedTokens.forEach((tokenLib: any) => {
+            if (tokenLib.flattenedTokens) {
+              tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "text")
+                .forEach((token: any) => {
+                  suggestions.push({
+                    id: token.id,
+                    name: token.name,
+                    value: token.fontSize ? `${token.fontSize}px` : token.name,
+                    type: "SAVED_TOKEN",
+                    description: `Token salvo: ${token.name}`,
+                    paint: { type: "TEXT" },
+                    key: token.key || token.id,
+                    style: {
+                      type: "SAVED_TOKEN",
+                      name: token.name,
+                      value: token.fontSize
+                        ? `${token.fontSize}px`
+                        : token.name,
+                      description: `Token salvo: ${token.name}`,
+                      id: token.id,
+                      fontFamily: token.fontFamily,
+                      fontSize: token.fontSize,
+                      fontWeight: token.fontWeight
+                    }
+                  });
+                });
+            }
+          });
+        }
+
+        if (error.type === "effects" || error.type === "effect") {
+          // Sugestões de efeitos
+          libraries.forEach((lib: any) => {
+            if (lib.effects && Array.isArray(lib.effects)) {
+              lib.effects.forEach((effectStyle: any) => {
+                suggestions.push({
+                  id: effectStyle.id,
+                  name: effectStyle.name,
+                  value: effectStyle.name,
+                  type: "STYLE",
+                  description:
+                    effectStyle.description || `Efeito: ${effectStyle.name}`,
+                  paint: { type: "EFFECT" },
+                  key: effectStyle.key || effectStyle.id,
+                  style: {
+                    type: "STYLE",
+                    name: effectStyle.name,
+                    value: effectStyle.name,
+                    description:
+                      effectStyle.description || `Efeito: ${effectStyle.name}`,
+                    id: effectStyle.id
+                  }
+                });
+              });
+            }
+          });
+
+          // Adicionar tokens salvos de efeitos
+          savedTokens.forEach((tokenLib: any) => {
+            if (tokenLib.flattenedTokens) {
+              tokenLib.flattenedTokens
+                .filter((token: any) => token.category === "effects")
+                .forEach((token: any) => {
+                  suggestions.push({
+                    id: token.id,
+                    name: token.name,
+                    value: token.name,
+                    type: "SAVED_TOKEN",
+                    description: `Token salvo: ${token.name}`,
+                    paint: { type: "EFFECT" },
+                    key: token.key || token.id,
+                    style: {
+                      type: "SAVED_TOKEN",
+                      name: token.name,
+                      value: token.name,
+                      description: `Token salvo: ${token.name}`,
+                      id: token.id
+                    }
+                  });
+                });
+            }
+          });
+        }
+
+        // Para outros tipos (radius, gaps, paddings), buscar das bibliotecas e tokens
+        if (["radius", "gap", "padding"].includes(error.type)) {
+          libraries.forEach((lib: any) => {
+            const categoryMap: Record<string, string> = {
+              radius: "radius",
+              gap: "gaps",
+              padding: "paddings"
+            };
+
+            const categoryKey = categoryMap[error.type];
+            if (lib[categoryKey] && Array.isArray(lib[categoryKey])) {
+              lib[categoryKey].forEach((item: any) => {
+                suggestions.push({
+                  id: item.id,
+                  name: item.name,
+                  value: item.value,
+                  type: "VARIABLE",
+                  description:
+                    item.description || `${error.type}: ${item.name}`,
+                  paint: { type: "VARIABLE" },
+                  key: item.key || item.id,
+                  style: {
+                    type: "VARIABLE",
+                    name: item.name,
+                    value: item.value,
+                    description:
+                      item.description || `${error.type}: ${item.name}`,
+                    id: item.id
+                  }
+                });
+              });
+            }
+          });
+
+          // Adicionar tokens salvos para essas categorias
+          savedTokens.forEach((tokenLib: any) => {
+            if (tokenLib.flattenedTokens) {
+              tokenLib.flattenedTokens
+                .filter((token: any) => token.category === error.type + "s")
+                .forEach((token: any) => {
+                  suggestions.push({
+                    id: token.id,
+                    name: token.name,
+                    value: token.value,
+                    type: "SAVED_TOKEN",
+                    description: `Token salvo: ${token.name}`,
+                    paint: { type: "VARIABLE" },
+                    key: token.key || token.id,
+                    style: {
+                      type: "SAVED_TOKEN",
+                      name: token.name,
+                      value: token.value,
+                      description: `Token salvo: ${token.name}`,
+                      id: token.id
+                    }
+                  });
+                });
+            }
+          });
+        }
+
+        console.log(
+          `[Controller] Total de sugestões encontradas: ${suggestions.length}`
+        );
+
+        // Enviar sugestões de volta para a UI
         figma.ui.postMessage({
-          type: "saved-tokens-list",
-          success: result.success,
-          tokens: result.tokens,
-          message: result.success
-            ? `${result.tokens?.length || 0} conjuntos de tokens encontrados`
-            : result.message
+          type: "fetched-suggestions",
+          error: error,
+          suggestions: suggestions,
+          success: true
         });
       } catch (error) {
-        console.error("[Controller] Erro ao listar tokens salvos:", error);
+        console.error("[Controller] Erro ao buscar sugestões:", error);
         figma.ui.postMessage({
-          type: "saved-tokens-list",
+          type: "fetched-suggestions",
+          error: error,
+          suggestions: [],
           success: false,
-          error: error instanceof Error ? error.message : String(error)
+          message: error instanceof Error ? error.message : String(error)
         });
       }
+      return;
     }
   } catch (error) {
     console.error("[Controller] Erro geral:", error);
@@ -3124,248 +3685,46 @@ figma.on("selectionchange", () => {
             visible: fill.visible !== false,
             opacity: fill.opacity,
             color:
-              fill.type === "SOLID"
-                ? getHexString(fill.color, fill.opacity)
-                : null,
-            gradientStops: fill.gradientStops || null
+              fill.type === "SOLID" && fill.color
+                ? {
+                    r: Math.round(fill.color.r * 255),
+                    g: Math.round(fill.color.g * 255),
+                    b: Math.round(fill.color.b * 255)
+                  }
+                : null
           }));
         }
 
-        // Bordas
-        if (node.strokes && Array.isArray(node.strokes)) {
-          nodeData.strokes = node.strokes.map((stroke: any) => ({
-            type: stroke.type,
-            visible: stroke.visible !== false,
-            color:
-              stroke.type === "SOLID"
-                ? getHexString(stroke.color, stroke.opacity)
-                : null,
-            strokeWeight: node.strokeWeight || 1
-          }));
-        }
-
-        // Efeitos
-        if (node.effects && Array.isArray(node.effects)) {
-          nodeData.effects = node.effects.map((effect: any) => ({
-            type: effect.type,
-            visible: effect.visible !== false,
-            color: effect.color,
-            offset: effect.offset,
-            radius: effect.radius,
-            spread: effect.spread
-          }));
-        }
-
-        // Propriedades de texto
+        // Texto
         if (node.type === "TEXT") {
-          nodeData.fontSize = node.fontSize;
-          nodeData.fontName = node.fontName;
-          nodeData.fontWeight = node.fontWeight;
-          nodeData.textAlignHorizontal = node.textAlignHorizontal;
-          nodeData.textAlignVertical = node.textAlignVertical;
-          nodeData.letterSpacing = node.letterSpacing;
-          nodeData.lineHeight = node.lineHeight;
           nodeData.characters = node.characters;
-
-          // Cor do texto (primeiro fill)
-          if (
-            node.fills &&
-            node.fills.length > 0 &&
-            node.fills[0].type === "SOLID"
-          ) {
-            nodeData.textColor = getHexString(
-              node.fills[0].color,
-              node.fills[0].opacity
-            );
+          if (node.fontName) {
+            nodeData.fontName = node.fontName;
           }
-        }
-
-        // Componentes
-        if (node.type === "INSTANCE") {
-          nodeData.componentProperties = {
-            name:
-              node.mainComponent && node.mainComponent.name
-                ? node.mainComponent.name
-                : "Sem nome",
-            key:
-              node.mainComponent && node.mainComponent.key
-                ? node.mainComponent.key
-                : undefined,
-            description:
-              node.mainComponent && node.mainComponent.description
-                ? node.mainComponent.description
-                : ""
-          };
-
-          // Adiciona todas as propriedades do componente
-          if (node.componentProperties) {
-            const uniqueProps = new Map();
-
-            // Processa as propriedades
-            for (const [key, prop] of Object.entries(
-              node.componentProperties
-            ) as [string, any][]) {
-              if (
-                !prop ||
-                prop.value === undefined ||
-                prop.value === null ||
-                prop.value === ""
-              ) {
-                continue;
-              }
-
-              // Limpa o nome da propriedade removendo sufixos de ID
-              const cleanKey = key.replace(/#[^:]+:\d+$/, "").trim();
-
-              // Processa o valor da propriedade
-              let value;
-              if (
-                prop.type === "INSTANCE_SWAP" &&
-                typeof prop.value === "string"
-              ) {
-                const instanceNode = figma.getNodeById(prop.value);
-                if (instanceNode && instanceNode.mainComponent) {
-                  value = instanceNode.mainComponent.name;
-                } else if (instanceNode) {
-                  value = instanceNode.name;
-                } else {
-                  value = prop.value; // fallback to ID
-                }
-              } else if (typeof prop.value === "boolean") {
-                value = prop.value;
-              } else if (typeof prop.value === "string") {
-                value = prop.value.trim();
-              } else if (typeof prop.value === "object") {
-                value = JSON.stringify(prop.value);
-              } else {
-                value = String(prop.value).trim();
-              }
-
-              // Adiciona ao mapa (isso automaticamente remove duplicatas)
-              uniqueProps.set(cleanKey, value);
-            }
-
-            // Cria o objeto final de propriedades
-            nodeData.componentProperties = {
-              name:
-                node.mainComponent && node.mainComponent.name
-                  ? node.mainComponent.name
-                  : "Sem nome",
-              key:
-                node.mainComponent && node.mainComponent.key
-                  ? node.mainComponent.key
-                  : undefined,
-              description:
-                node.mainComponent && node.mainComponent.description
-                  ? node.mainComponent.description
-                  : "",
-              ...Object.fromEntries(uniqueProps)
-            };
+          if (node.fontSize) {
+            nodeData.fontSize = node.fontSize;
           }
-        }
-
-        // Elementos filhos
-        if (node.children && Array.isArray(node.children)) {
-          nodeData.children = node.children.slice(0, 10).map((child: any) => ({
-            id: child.id,
-            name: child.name,
-            type: child.type
-          }));
-        }
-
-        // Ícones (verificar se é um ícone ou contém ícones)
-        if (
-          node.name &&
-          (node.name.toLowerCase().includes("icon") || node.type === "VECTOR")
-        ) {
-          nodeData.icon = {
-            name: node.name,
-            type: node.type,
-            url: node.exportAsync ? node.exportAsync({ format: "PNG" }) : null
-          };
-        }
-
-        // Tokens de estilo
-        nodeData.styleTokens = {};
-        if (node.fillStyleId && typeof node.fillStyleId === "string") {
-          const style = figma.getStyleById(node.fillStyleId);
-          nodeData.styleTokens.fillStyle = style
-            ? style.name
-            : node.fillStyleId;
-        }
-        if (node.strokeStyleId && typeof node.strokeStyleId === "string") {
-          const style = figma.getStyleById(node.strokeStyleId);
-          nodeData.styleTokens.strokeStyle = style
-            ? style.name
-            : node.strokeStyleId;
-        }
-        if (node.textStyleId && typeof node.textStyleId === "string") {
-          const style = figma.getStyleById(node.textStyleId);
-          nodeData.styleTokens.textStyle = style
-            ? style.name
-            : node.textStyleId;
-        }
-        if (node.effectStyleId && typeof node.effectStyleId === "string") {
-          const style = figma.getStyleById(node.effectStyleId);
-          nodeData.styleTokens.effectStyle = style
-            ? style.name
-            : node.effectStyleId;
         }
 
         return nodeData;
       };
 
-      // Enviar mensagem de nó selecionado com dados completos
-      figma.ui.postMessage({
-        type: "selected-node",
-        node: extractNodeData(selectedNodes[0])
-      });
+      // Extrair dados dos nós selecionados
+      const nodesData = selectedNodes.map(extractNodeData);
 
-      // For measurement tool
-      const node = selectedNodes[0];
+      // Enviar dados para a UI
       figma.ui.postMessage({
         type: "selection-changed",
-        payload: {
-          id: node.id,
-          x: node.x,
-          y: node.y,
-          width: "width" in node ? node.width : 0,
-          height: "height" in node ? node.height : 0,
-          rotation: "rotation" in node ? node.rotation : 0,
-          visible: "visible" in node ? node.visible : true,
-          measurements: {}
-        }
+        selection: nodesData
       });
     } else {
-      console.log("Nenhum nó selecionado");
-      figma.ui.postMessage({
-        type: "no-selection"
-      });
-      // For measurement tool
+      // Nenhum nó selecionado
       figma.ui.postMessage({
         type: "selection-changed",
-        payload: null
+        selection: []
       });
     }
-
-    // Manter a mensagem original para compatibilidade
-    figma.ui.postMessage({
-      type: "selection-update",
-      selectedNodeIds: selectedIds
-    });
-
-    console.log("Mensagens de seleção enviadas para a UI");
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Erro desconhecido";
-    console.error("Erro no listener de seleção:", errorMessage);
-
-    // Enviar mensagem de erro para a UI
-    figma.ui.postMessage({
-      type: "selection-error",
-      error: errorMessage
-    });
+    console.error("Erro no listener selectionchange:", error);
   }
 });
-
-// measurementController is self-contained; no explicit initialize function is needed here.

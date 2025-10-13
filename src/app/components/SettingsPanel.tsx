@@ -80,11 +80,11 @@ function SettingsPanel(props: SettingsPanelProps) {
     setSaveStatus(null);
 
     try {
-      // Usar o novo handler force-save-tokens para garantir salvamento
+      // Usar o handler save-design-tokens para garantir salvamento
       parent.postMessage(
         {
           pluginMessage: {
-            type: "force-save-tokens",
+            type: "save-design-tokens",
             tokens: props.designTokens
           }
         },
@@ -622,6 +622,70 @@ function SettingsPanel(props: SettingsPanelProps) {
             libsFromPlugin
           );
           props.onUpdateLibraries(libsFromPlugin);
+        }
+
+        // NOVO: Salvar automaticamente as bibliotecas como tokens se houver dados
+        if (libsFromPlugin.length > 0) {
+          console.log(
+            "[SettingsPanel] Salvando bibliotecas como tokens automaticamente..."
+          );
+          // Converter bibliotecas para formato de tokens
+          const tokensToSave: any = {};
+          libsFromPlugin.forEach((lib: any) => {
+            if (lib && lib.fills && Array.isArray(lib.fills)) {
+              tokensToSave.fills = [
+                ...(tokensToSave.fills || []),
+                ...lib.fills
+              ];
+            }
+            if (lib && lib.text && Array.isArray(lib.text)) {
+              tokensToSave.text = [...(tokensToSave.text || []), ...lib.text];
+            }
+            if (lib && lib.effects && Array.isArray(lib.effects)) {
+              tokensToSave.effects = [
+                ...(tokensToSave.effects || []),
+                ...lib.effects
+              ];
+            }
+            if (lib && lib.strokes && Array.isArray(lib.strokes)) {
+              tokensToSave.strokes = [
+                ...(tokensToSave.strokes || []),
+                ...lib.strokes
+              ];
+            }
+            if (lib && lib.radius && Array.isArray(lib.radius)) {
+              tokensToSave.radius = [
+                ...(tokensToSave.radius || []),
+                ...lib.radius
+              ];
+            }
+            if (lib && lib.gaps && Array.isArray(lib.gaps)) {
+              tokensToSave.gaps = [...(tokensToSave.gaps || []), ...lib.gaps];
+            }
+            if (lib && lib.paddings && Array.isArray(lib.paddings)) {
+              tokensToSave.paddings = [
+                ...(tokensToSave.paddings || []),
+                ...lib.paddings
+              ];
+            }
+          });
+
+          // Salvar automaticamente se houver tokens
+          if (Object.keys(tokensToSave).length > 0) {
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "save-design-tokens",
+                  tokens: tokensToSave
+                }
+              },
+              "*"
+            );
+            console.log(
+              "[SettingsPanel] Tokens salvos automaticamente:",
+              Object.keys(tokensToSave)
+            );
+          }
         }
 
         if (libsFromPlugin.length > 0) {
