@@ -146,10 +146,17 @@ interface UIMessage {
   type: string;
   data?: any;
   id?: string;
-  field?: string;
-  nodes?: string[];
-  nodeId?: string; // Added for restore component functionality
+  html?: string;
+  css?: string;
+  index?: number;
+  count?: number;
+  nodeId?: string;
+  property?: string;
+  styleKey?: string;
   styleId?: string;
+  nodes?: string[];
+  suggestions?: any[];
+  field?: string;
   tokens?: any;
   success?: boolean;
   message?: string;
@@ -1652,9 +1659,95 @@ async function loadAndFormatSavedTokens(): Promise<any[]> {
 
 // Importar a função addNote do measurementController
 import { addNote } from "./measurementController";
+import { importHTML } from "./htmlImporter";
+import { importRenderedDOM } from "./domImporter";
 
 // Listener para mensagens da UI
 figma.ui.onmessage = async (msg: UIMessage) => {
+  // Handle rendered DOM import (Tailwind / computed styles)
+  if (msg.type === "import-rendered-dom") {
+    try {
+      console.log("[Controller] ✓ Recebido message type=import-rendered-dom");
+      const tree = (msg as any).tree;
+      const viewport = (msg as any).viewport || { width: 1440, height: 900 };
+
+      console.log("[Controller] Tree details:", {
+        nodeType: tree?.nodeType,
+        tagName: tree?.tagName,
+        hasChildren: Array.isArray(tree?.children),
+        childrenCount: tree?.children?.length || 0
+      });
+
+      if (!tree) {
+        console.error("[Controller] ❌ Nenhuma árvore recebida");
+        figma.notify("Nenhuma árvore renderizada recebida para importar", {
+          error: true
+        });
+        return;
+      }
+
+      if (tree.nodeType !== "element") {
+        console.error("[Controller] ❌ Tipo de nó inválido:", tree.nodeType);
+        figma.notify("Estrutura de DOM inválida recebida", {
+          error: true
+        });
+        return;
+      }
+
+      console.log("[Controller] ✓ Iniciando importRenderedDOM...");
+      figma.notify("Importando layout renderizado...");
+      await importRenderedDOM(tree, viewport);
+      console.log("[Controller] ✓ importRenderedDOM completado com sucesso!");
+      figma.notify("Layout importado com sucesso!");
+    } catch (error) {
+      console.error(
+        "[Controller] ❌ Erro ao importar layout renderizado:",
+        error
+      );
+      figma.notify(
+        `Erro ao importar layout renderizado: ${error?.message || error}`,
+        {
+          error: true
+        }
+      );
+    }
+    return;
+  }
+
+  // Handle HTML/CSS import
+  if (msg.type === "import-html-css") {
+    try {
+      const { html, css } = msg;
+
+      if (!html && !css) {
+        figma.notify("Por favor, forneça HTML ou CSS para importar", {
+          error: true
+        });
+        return;
+      }
+
+      // Mostrar notificação de início
+      figma.notify("Importando HTML/CSS...");
+
+      try {
+        // Chamar a função de importação
+        await importHTML(html || "<div></div>", css || "");
+
+        // Notificar sucesso
+        figma.notify("HTML/CSS importado com sucesso!");
+      } catch (error) {
+        console.error("Erro ao importar HTML/CSS:", error);
+        figma.notify(`Erro ao importar: ${error.message}`, { error: true });
+      }
+    } catch (error) {
+      console.error("Erro ao processar importação:", error);
+      figma.notify(`Erro ao processar importação: ${error.message}`, {
+        error: true
+      });
+    }
+    return;
+  }
+
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
 
   // Verificar se é uma mensagem de adicionar nota
@@ -2979,6 +3072,29 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       return;
     }
 
+    if (msg.type === "export-node-as-svg") {
+      try {
+        const node = figma.getNodeById(msg.nodeId);
+        if (node && node.exportAsync) {
+          const svgBytes = await node.exportAsync({ format: "SVG" });
+          const svg = String.fromCharCode.apply(null, new Uint8Array(svgBytes));
+          figma.ui.postMessage({
+            type: "exported-node-svg",
+            nodeId: msg.nodeId,
+            svg: svg
+          });
+        }
+      } catch (e) {
+        console.error("Error exporting node as SVG:", e);
+        figma.ui.postMessage({
+          type: "export-error",
+          nodeId: msg.nodeId,
+          error: e.toString()
+        });
+      }
+      return;
+    }
+
     if (msg.type === "force-save-tokens") {
       console.log("[Controller] Forçando salvamento de tokens");
       try {
@@ -2995,20 +3111,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             type: "design-tokens-saved",
             success: true,
             message: "Tokens salvos com sucesso",
-            tokens: result.tokens,
-            totalTokens: result.totalTokens
+            tokens: result.tokens
           });
-        } else {
-          throw new Error(result.message);
         }
       } catch (error) {
-        console.error(
-          "[Controller] Erro ao forçar salvamento de tokens:",
-          error
-        );
+        console.error("[Controller] Erro ao salvar tokens:", error);
         figma.ui.postMessage({
           type: "design-tokens-saved",
           success: false,
+          message: "Erro ao salvar tokens",
           error: error instanceof Error ? error.message : String(error)
         });
       }

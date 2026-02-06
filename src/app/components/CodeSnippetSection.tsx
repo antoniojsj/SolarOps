@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FC, ReactElement, useMemo } from "react";
+import React, { useState, useEffect, FC, ReactElement } from "react";
 
 interface CodeSnippet {
   language: string;
@@ -13,7 +13,6 @@ interface CodeSnippetSectionProps {
 const formatNodeData = (node: any): string => {
   if (!node) return "";
 
-  // Create a clean copy of the node data without circular references
   const cleanNode = (data: any, seen = new WeakSet()): any => {
     if (typeof data !== "object" || data === null) return data;
     if (seen.has(data)) return "[Circular]";
@@ -26,7 +25,6 @@ const formatNodeData = (node: any): string => {
 
     const result: Record<string, any> = {};
     Object.keys(data).forEach(key => {
-      // Skip internal properties and functions
       if (typeof data[key] === "function") return;
       if (key.startsWith("_")) return;
 
@@ -48,14 +46,27 @@ const toKebabCase = (str: string) => {
     .toLowerCase();
 };
 
-const extractImprovedCSS = (node: any, parentClass?: string): string => {
+const extractImprovedCSS = (node: any, parentNode?: any): string => {
   if (!node) return "";
 
   const nodeName = toKebabCase(node.name || node.type || "unnamed");
-  const baseClass = parentClass ? `${parentClass}__${nodeName}` : nodeName;
+  const baseClass = parentNode
+    ? `${toKebabCase(parentNode.name || parentNode.type)}__${nodeName}`
+    : nodeName;
 
   let css = "";
   const styles: Record<string, any> = {};
+
+  // Positioning
+  if (node.absoluteBoundingBox) {
+    styles.position = "absolute";
+    styles.left = `${node.absoluteBoundingBox.x -
+      (parentNode?.absoluteBoundingBox?.x || 0)}px`;
+    styles.top = `${node.absoluteBoundingBox.y -
+      (parentNode?.absoluteBoundingBox?.y || 0)}px`;
+    styles.width = `${node.absoluteBoundingBox.width}px`;
+    styles.height = `${node.absoluteBoundingBox.height}px`;
+  }
 
   if (node.layoutMode) {
     styles.display = "flex";
@@ -63,13 +74,13 @@ const extractImprovedCSS = (node: any, parentClass?: string): string => {
     if (node.itemSpacing) styles.gap = `${node.itemSpacing}px`;
   }
 
-  if (node.fills && Array.isArray(node.fills)) {
-    const fill = node.fills.find((f: any) => f.type === "SOLID");
+  if (node.fills && Array.isArray(node.fills) && node.fills.length > 0) {
+    const fill = node.fills.find((f: any) => f.type === "SOLID" && f.visible);
     if (fill && fill.color) {
       const { r, g, b, a } = fill.color;
       styles.backgroundColor = `rgba(${Math.round(r * 255)}, ${Math.round(
         g * 255
-      )}, ${Math.round(b * 255)}, ${a || 1})`;
+      )}, ${Math.round(b * 255)}, ${fill.opacity ?? a ?? 1})`;
     }
   }
 
@@ -86,8 +97,30 @@ const extractImprovedCSS = (node: any, parentClass?: string): string => {
   if (node.cornerRadius) styles.borderRadius = `${node.cornerRadius}px`;
 
   if (node.padding) {
-    const { top = 0, right = 0, bottom = 0, left = 0 } = node.padding;
-    styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+    styles.padding = `${node.padding.top || 0}px ${node.padding.right ||
+      0}px ${node.padding.bottom || 0}px ${node.padding.left || 0}px`;
+  }
+
+  if (node.effects && node.effects.length > 0) {
+    const shadows = node.effects
+      .filter((e: any) => e.type === "DROP_SHADOW" && e.visible)
+      .map((e: any) => {
+        const { color, offset, radius } = e;
+        const { r, g, b, a } = color;
+        return `${offset.x}px ${offset.y}px ${radius}px rgba(${Math.round(
+          r * 255
+        )}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+      })
+      .join(", ");
+
+    if (shadows) styles.boxShadow = shadows;
+
+    const blurs = node.effects
+      .filter((e: any) => e.type === "LAYER_BLUR" && e.visible)
+      .map((e: any) => `blur(${e.radius}px)`)
+      .join(" ");
+
+    if (blurs) styles.filter = blurs;
   }
 
   if (node.type === "TEXT") {
@@ -115,7 +148,8 @@ const extractImprovedCSS = (node: any, parentClass?: string): string => {
   }
 
   if (Object.keys(styles).length > 0) {
-    css += `.${baseClass} {\n`;
+    css += `.${baseClass} {
+`;
     for (const [prop, value] of Object.entries(styles)) {
       css += `  ${prop.replace(/([A-Z])/g, "-$1").toLowerCase()}: ${value};
 `;
@@ -127,7 +161,7 @@ const extractImprovedCSS = (node: any, parentClass?: string): string => {
 
   if (node.children && Array.isArray(node.children)) {
     for (const child of node.children) {
-      css += extractImprovedCSS(child, baseClass);
+      css += extractImprovedCSS(child, node);
     }
   }
 
@@ -136,42 +170,32 @@ const extractImprovedCSS = (node: any, parentClass?: string): string => {
 
 const generateImprovedHTML = (
   node: any,
+  svgCode: string | null,
   indent = 0,
-  parentClass?: string
+  parentNode?: any
 ): string => {
   if (!node) return "";
 
   const indentStr = "  ".repeat(indent);
   const nodeName = toKebabCase(node.name || node.type || "unnamed");
-  const baseClass = parentClass ? `${parentClass}__${nodeName}` : nodeName;
+  const baseClass = parentNode
+    ? `${toKebabCase(parentNode.name || parentNode.type)}__${nodeName}`
+    : nodeName;
 
   let tagName = "div";
   const attributes = [`class="${baseClass}"`];
   let textContent = "";
 
-  const isButton =
-    (node.name || "").toLowerCase().includes("button") ||
-    (node.name || "").toLowerCase().includes("btn");
-  const isLink = (node.name || "").toLowerCase().includes("link");
-  const isImage =
+  if (
     node.type === "VECTOR" ||
-    node.type === "IMAGE" ||
-    (node.name || "").toLowerCase().includes("icon");
+    node.type === "INSTANCE" ||
+    node.type === "COMPONENT" ||
+    (node.type === "FRAME" && svgCode)
+  ) {
+    return indentStr + svgCode;
+  }
 
-  if (isButton) {
-    tagName = "button";
-    attributes.push('type="button"');
-    attributes.push(`aria-label="${node.name || "button"}"`);
-  } else if (isLink) {
-    tagName = "a";
-    attributes.push('href="#"', `aria-label="${node.name || "link"}"`);
-  } else if (isImage) {
-    tagName = "img";
-    attributes.push(
-      `src="./assets/${nodeName}.svg"`,
-      `alt="${node.name || "image"}"`
-    );
-  } else if (node.type === "TEXT") {
+  if (node.type === "TEXT") {
     tagName = "p";
     textContent = node.characters || "";
   }
@@ -179,7 +203,7 @@ const generateImprovedHTML = (
   let childrenContent = "";
   if (node.children && Array.isArray(node.children)) {
     childrenContent = node.children
-      .map((child: any) => generateImprovedHTML(child, indent + 1, baseClass))
+      .map((child: any) => generateImprovedHTML(child, null, indent + 1, node))
       .filter(Boolean)
       .join("\n");
   }
@@ -191,10 +215,14 @@ const generateImprovedHTML = (
 
   if (childrenContent.trim() || textContent) {
     return `${indentStr}<${tagName} ${attributes.join(" ")}>
-${textContent}${
+${
+  textContent
+    ? `${indentStr}  ${textContent}
+`
+    : ""
+}${
       childrenContent
-        ? `
-${childrenContent}
+        ? `${childrenContent}
 ${indentStr}`
         : ""
     }</${tagName}>`;
@@ -210,7 +238,6 @@ const generateTypeScriptTypes = (node: any): string => {
   const properties: string[] = [];
   const imports = new Set<string>();
 
-  // Add common properties
   if (node.id)
     properties.push(
       `  /** Unique identifier for the component */\n  id: string;`
@@ -224,47 +251,12 @@ const generateTypeScriptTypes = (node: any): string => {
     properties.push(`  /** Type of the component */\n  type: '${node.type}';`);
   }
 
-  // Add styles with detailed type information
-  const styles = node.styles || node.style || {};
-  if (Object.keys(styles).length > 0) {
-    imports.add(`import { CSSProperties } from 'react';`);
-
-    const styleProperties = Object.entries(styles)
-      .filter(
-        ([_, value]) => value !== undefined && value !== null && value !== ""
-      )
-      .map(([key]) => {
-        const propName = key.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
-        return `    /** CSS property: ${propName} */\n    ${key}?: string | number;`;
-      });
-
-    if (styleProperties.length > 0) {
-      properties.push(
-        "  /** Component styles */",
-        "  style?: CSSProperties & {",
-        ...styleProperties,
-        "  } & React.CSSProperties;"
-      );
-    }
-  }
-
-  // Add children if node has children
   if (node.children && node.children.length > 0) {
     imports.add(`import { ReactNode } from 'react';`);
     properties.unshift("  /** Child components */\n  children?: ReactNode;");
   }
 
-  // Add className prop
   properties.unshift("  /** CSS class name */\n  className?: string;");
-
-  // Add event handlers if needed
-  if (node.onClick || node.onHover) {
-    properties.push(
-      "  /** Click event handler */\n  onClick?: (event: React.MouseEvent<HTMLElement>) => void;",
-      "  /** Hover event handler */\n  onMouseEnter?: (event: React.MouseEvent<HTMLElement>) => void;",
-      "  /** Mouse leave event handler */\n  onMouseLeave?: (event: React.MouseEvent<HTMLElement>) => void;"
-    );
-  }
 
   const importStatements = Array.from(imports).join("\n");
 
@@ -280,12 +272,22 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [svgCode, setSvgCode] = useState<string | null>(null);
 
-  // Get unique languages from snippets
-  const languages = Array.from(new Set(snippets.map(s => s.language)));
-  const filteredSnippets = selectedLanguage
-    ? snippets.filter(s => s.language === selectedLanguage)
-    : snippets;
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const { type, nodeId, svg } = event.data.pluginMessage;
+      if (type === "exported-node-svg" && nodeId === selectedNode?.id) {
+        setSvgCode(svg);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [selectedNode]);
 
   const loadSnippets = async (): Promise<void> => {
     if (!selectedNode) {
@@ -311,7 +313,8 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
           title: "HTML",
           language: "html",
           code:
-            generateImprovedHTML(selectedNode) || "<!-- No HTML available -->"
+            generateImprovedHTML(selectedNode, svgCode) ||
+            "<!-- No HTML available -->"
         },
         {
           title: "TypeScript Types",
@@ -319,7 +322,6 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
           code: generateTypeScriptTypes(selectedNode)
         }
       ].filter(snippet => {
-        // Only include snippets that have actual content
         return (
           snippet.code &&
           snippet.code.trim() !== "" &&
@@ -339,10 +341,36 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
     }
   };
 
-  // Carrega os snippets quando o nó selecionado mudar
   useEffect(() => {
-    loadSnippets();
-  }, [selectedNode]);
+    if (selectedNode) {
+      const exportableTypes = [
+        "VECTOR",
+        "INSTANCE",
+        "COMPONENT",
+        "FRAME",
+        "RECTANGLE",
+        "ELLIPSE",
+        "POLYGON",
+        "STAR",
+        "LINE",
+        "TEXT"
+      ];
+      if (exportableTypes.includes(selectedNode.type)) {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "export-node-as-svg",
+              nodeId: selectedNode.id
+            }
+          },
+          "*"
+        );
+      }
+      loadSnippets();
+    } else {
+      setSnippets([]);
+    }
+  }, [selectedNode, svgCode]);
 
   if (!selectedNode) {
     return (
@@ -362,6 +390,11 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
       </div>
     );
   }
+
+  const languages = Array.from(new Set(snippets.map(s => s.language)));
+  const filteredSnippets = snippets.filter(
+    s => !selectedLanguage || s.language === selectedLanguage
+  );
 
   return (
     <div

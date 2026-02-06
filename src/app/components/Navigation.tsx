@@ -7,8 +7,6 @@ function Navigation(props) {
   let activePage = props.activePage;
 
   const layersClick = () => {
-    // Antes de navegar para a página de camadas, verificamos se os dados estão disponíveis
-    // Se não estiverem, solicitamos uma atualização dos dados
     parent.postMessage(
       {
         pluginMessage: {
@@ -25,17 +23,26 @@ function Navigation(props) {
     props.onPageSelection("bulk");
   };
 
-  // Funções removidas pois as abas correspondentes foram removidas:
-  // - stylesClick
-  // - Funções relacionadas a abas que não estão mais sendo usadas
+  const stylesClick = () => {
+    props.onPageSelection("styles");
+    parent.postMessage({ pluginMessage: { type: "update-styles-page" } }, "*");
+  };
+
+  const componentsClick = () => {
+    props.onPageSelection("components");
+    parent.postMessage(
+      { pluginMessage: { type: "fetch-active-libraries" } },
+      "*"
+    );
+  };
+
+  const documentationClick = () => {
+    props.onPageSelection("documentation");
+  };
 
   const handlePanelVisible = boolean => {
     setPanelVisible(boolean);
   };
-
-  // const handleRefreshSelection = () => {
-  //   props.onRefreshSelection();
-  // };
 
   return (
     <div key="nav">
@@ -86,6 +93,34 @@ function Navigation(props) {
             style={{ cursor: "pointer" }}
           >
             Camadas
+          </motion.div>
+          <motion.div
+            className={`nav-item ${activePage === "styles" ? "active" : ""}`}
+            onClick={stylesClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Estilos
+          </motion.div>
+          <motion.div
+            className={`nav-item ${
+              activePage === "components" ? "active" : ""
+            }`}
+            onClick={componentsClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Bibliotecas
+          </motion.div>
+          <motion.div
+            className={`nav-item ${
+              activePage === "documentation" ? "active" : ""
+            }`}
+            onClick={documentationClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Documentação
           </motion.div>
 
           <div className="nav-icon-wrapper" style={{ paddingRight: 16 }}>

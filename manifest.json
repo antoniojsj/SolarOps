@@ -9,6 +9,11 @@
     "teamlibrary"
   ],
   "networkAccess": {
-    "allowedDomains": ["none"]
+    "allowedDomains": [
+      "https://cdn.tailwindcss.com",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://lh3.googleusercontent.com"
+    ]
   }
 }

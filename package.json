@@ -5,6 +5,7 @@
 	"license": "ISC",
 	"scripts": {
 		"build": "NODE_OPTIONS='--openssl-legacy-provider' /usr/local/bin/node node_modules/.bin/webpack --mode=production",
+		"dev": "NODE_OPTIONS='--openssl-legacy-provider' /usr/local/bin/node node_modules/.bin/webpack --mode=development --watch",
 		"build:watch": "NODE_OPTIONS='--openssl-legacy-provider' /usr/local/bin/node node_modules/.bin/webpack --mode=development --watch",
 		"prettier:format": "prettier --write 'src/**/*.{js,jsx,ts,tsx,css,json}' "
 	},

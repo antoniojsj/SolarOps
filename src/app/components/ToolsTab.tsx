@@ -3,6 +3,7 @@ import styled from "styled-components";
 import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
+import ImportDesignTab from "./ImportDesignTab";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -53,7 +54,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
   selectedNode,
   onInspectClick
 }) => {
-  const [activeTab, setActiveTab] = useState("inspect"); // 'inspect' or 'measure'
+  const [activeTab, setActiveTab] = useState("inspect"); // 'inspect', 'measure', or 'import'
   const [animationData, setAnimationData] = useState(null);
 
   useEffect(() => {
@@ -98,7 +99,9 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
             borderRadius: 4,
             padding: "2px",
             margin: "0",
-            boxSizing: "border-box"
+            boxSizing: "border-box",
+            width: "100%",
+            maxWidth: "100%"
           }}
         >
           <button
@@ -111,7 +114,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
               fontWeight: 500,
               fontSize: 12,
               color: activeTab === "inspect" ? "#fff" : "#fff",
-              padding: "6px 18px",
+              padding: "6px 12px",
               boxShadow: "none",
               transition: "background 0.2s, color 0.2s",
               cursor: "pointer"
@@ -129,13 +132,34 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
               fontWeight: 500,
               fontSize: 12,
               color: activeTab === "measure" ? "#fff" : "#fff",
-              padding: "6px 18px",
+              padding: "6px 12px",
               boxShadow: "none",
               transition: "background 0.2s, color 0.2s",
               cursor: "pointer"
             }}
           >
             Mensurar
+          </button>
+          <button
+            onClick={() => setActiveTab("import")}
+            style={{
+              flex: 1,
+              background: activeTab === "import" ? "#3b82f6" : "transparent",
+              border: "none",
+              borderRadius: 4,
+              fontWeight: 500,
+              fontSize: 12,
+              color: activeTab === "import" ? "#fff" : "#fff",
+              padding: "6px 8px",
+              boxShadow: "none",
+              transition: "background 0.2s, color 0.2s",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            Importar Design
           </button>
         </div>
       </div>
@@ -150,6 +174,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           backgroundColor: "transparent"
         }}
       >
+        {activeTab === "import" && <ImportDesignTab />}
         {activeTab === "inspect" && (
           <>
             {selectedNode ? (

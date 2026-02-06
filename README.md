@@ -28,7 +28,8 @@ Um conjunto de recursos para ajudar a criar projetos mais inclusivos.
 
 Recursos para acelerar o fluxo de trabalho e a comunicação entre design e desenvolvimento.
 
-- **Inspeção de Elementos**: Selecione qualquer elemento no canvas para gerar automaticamente snippets de código em **HTML**, **CSS**, **TypeScript (tipos)** e **JSON (dados do nó)**.
+- **Inspeção de Elementos**: Selecione qualquer elemento no canvas para gerar automaticamente snippets de código em **HTML**, **CSS**, **TypeScript (tipos)** e **JSON (dados do nó)**. A geração de código foi aprimorada para fornecer um snippet de HTML e CSS que representa fielmente o design do Figma. O código gerado inclui posicionamento absoluto, layout flexbox, estilos de preenchimento, bordas, sombras, e blurs. Para elementos vetoriais, o código SVG é exportado e embutido diretamente no HTML.
+- **Importar Design**: Cole código HTML e CSS para convertê-lo em um design no Figma. Esta funcionalidade permite que você traga designs de páginas da web existentes ou protótipos de código para o Figma, acelerando o processo de design e garantindo a consistência entre o código e o design.
 - **Ferramenta de Medição**: Adicione anotações visuais diretamente no canvas.
   - **Anotações**: Crie balões de texto para deixar comentários e especificações.
   - **Medidas de Distância**: Adicione linhas de cota para indicar espaçamentos e dimensões.
