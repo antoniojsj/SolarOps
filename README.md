@@ -36,8 +36,7 @@ Recursos para acelerar o fluxo de trabalho e a comunicação entre design e dese
     2. Cole seu código HTML na caixa de entrada do HTML
     3. Cole suas regras CSS (se houver) na caixa de entrada do CSS
     4. Ajuste o tamanho do viewport (largura e altura) conforme necessário
-    5. Clique em **Renderizar** para visualizar como ficará o design
-    6. Clique em **Importar** para criar os componentes no Figma
+    5. Clique em **Importar** para criar a interface no Figma
   
   - **Recursos Suportados**:
     - Elementos HTML semânticos (div, span, p, h1-h6, button, etc.)
@@ -134,8 +133,7 @@ Os arquivos de build serão armazenados no diretório `dist/`.
       - Cola na caixa **HTML**
       - Adicione o CSS necessário na caixa **CSS** 
       - Ajuste o tamanho do viewport (largura x altura em pixels)
-      - Clique em **Renderizar** para visualizar a conversão
-      - Clique em **Importar para o Figma** para criar os componentes
+      - Clique em **Importar para o Figma** para criar a interface
       - Os elementos serão importados respeitando cores, tipografia, espaçamentos e estilos
     
     - **Mensurar**:
