@@ -29,7 +29,30 @@ Um conjunto de recursos para ajudar a criar projetos mais inclusivos.
 Recursos para acelerar o fluxo de trabalho e a comunicação entre design e desenvolvimento.
 
 - **Inspeção de Elementos**: Selecione qualquer elemento no canvas para gerar automaticamente snippets de código em **HTML**, **CSS**, **TypeScript (tipos)** e **JSON (dados do nó)**. A geração de código foi aprimorada para fornecer um snippet de HTML e CSS que representa fielmente o design do Figma. O código gerado inclui posicionamento absoluto, layout flexbox, estilos de preenchimento, bordas, sombras, e blurs. Para elementos vetoriais, o código SVG é exportado e embutido diretamente no HTML.
+
 - **Importar Design**: Cole código HTML e CSS para convertê-lo em um design no Figma. Esta funcionalidade permite que você traga designs de páginas da web existentes ou protótipos de código para o Figma, acelerando o processo de design e garantindo a consistência entre o código e o design.
+  - **Como Usar**:
+    1. Na aba **Ferramentas**, selecione a sub-aba **Importar Design**
+    2. Cole seu código HTML na caixa de entrada do HTML
+    3. Cole suas regras CSS (se houver) na caixa de entrada do CSS
+    4. Ajuste o tamanho do viewport (largura e altura) conforme necessário
+    5. Clique em **Renderizar** para visualizar como ficará o design
+    6. Clique em **Importar** para criar os componentes no Figma
+  
+  - **Recursos Suportados**:
+    - Elementos HTML semânticos (div, span, p, h1-h6, button, etc.)
+    - Estilos CSS completos (margin, padding, display, flexbox, grid, cores, tipografia, etc.)
+    - Ícones Material Symbols (detectados automaticamente e rasterizados com cores preservadas)
+    - Imagens e SVG embutidos
+    - Bordas, sombras, efeitos de blur e gradientes
+    - Responsive design com ajuste de viewport
+  
+  - **Dicas Úteis**:
+    - Use um viewport menor para protótipos de mobile e maior para desktop
+    - Certifique-se de que o CSS está bem formatado para melhor importação
+    - Ícones Material Symbols precisam estar com as classes `material-symbols-outlined`, `material-symbols-rounded` ou `material-icons`
+    - O plugin preservará cores, tamanhos e estilos exatos do seu código
+
 - **Ferramenta de Medição**: Adicione anotações visuais diretamente no canvas.
   - **Anotações**: Crie balões de texto para deixar comentários e especificações.
   - **Medidas de Distância**: Adicione linhas de cota para indicar espaçamentos e dimensões.
@@ -99,9 +122,25 @@ Os arquivos de build serão armazenados no diretório `dist/`.
     - Use a sub-aba **Documentações** para pesquisar e consultar os critérios da WCAG.
 
 3.  **Ferramentas**:
-    - Abra a aba **Tools**.
-    - **Inspecionar**: Selecione um elemento no canvas para ver seus snippets de código gerados automaticamente.
-    - **Mensurar**: Use os controles para adicionar anotações e medidas de distância no seu design.
+    - Abra a aba **Ferramentas**.
+    
+    - **Inspecionar**: 
+      - Selecione um elemento no canvas
+      - Visualize automaticamente seus snippets de código em HTML, CSS, TypeScript e JSON
+      - Copie o código para usar em seus projetos
+    
+    - **Importar Design**:
+      - Copie código HTML de uma página da web ou protótipo
+      - Cola na caixa **HTML**
+      - Adicione o CSS necessário na caixa **CSS** 
+      - Ajuste o tamanho do viewport (largura x altura em pixels)
+      - Clique em **Renderizar** para visualizar a conversão
+      - Clique em **Importar para o Figma** para criar os componentes
+      - Os elementos serão importados respeitando cores, tipografia, espaçamentos e estilos
+    
+    - **Mensurar**:
+      - Use os controles para adicionar anotações e medidas de distância no seu design.
+      - Crie balões de texto para deixar comentários e especificações
 
 ## 📦 Instalação no Figma
 
