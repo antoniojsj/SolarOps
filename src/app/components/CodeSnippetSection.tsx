@@ -231,6 +231,55 @@ ${indentStr}`
   return `${indentStr}<${tagName} ${attributes.join(" ")}></${tagName}>`;
 };
 
+const generateCompleteHTML = (
+  node: any,
+  svgCode: string | null = null
+): string => {
+  if (!node) return "";
+
+  const bodyHTML = generateImprovedHTML(node, svgCode);
+  const cssStyles = extractImprovedCSS(node);
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${node.name || "Design"}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+${cssStyles}
+  </style>
+</head>
+<body>
+${bodyHTML}
+</body>
+</html>`;
+
+  return html;
+};
+
 const generateTypeScriptTypes = (node: any): string => {
   if (!node) return "// No node selected";
 
@@ -310,10 +359,10 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
           code: extractImprovedCSS(selectedNode)
         },
         {
-          title: "HTML",
+          title: "HTML & CSS (Standalone)",
           language: "html",
           code:
-            generateImprovedHTML(selectedNode, svgCode) ||
+            generateCompleteHTML(selectedNode, svgCode) ||
             "<!-- No HTML available -->"
         },
         {
