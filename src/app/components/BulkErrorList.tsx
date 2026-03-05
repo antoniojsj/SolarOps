@@ -280,22 +280,26 @@ function BulkErrorList(props) {
       activeErrors.map(e => getErrorNodeId(e))
     );
 
-    // Métrica do card de não conformes (mantida): maior entre erros e nós únicos
-    const totalNonConformElements = Math.max(
-      nodesWithActiveErrors.size,
-      activeErrors.length
-    );
-    // Métrica de elementos conformes: baseada APENAS em nós únicos com erro
+    // Cálculo consistente baseado em nós únicos
+    const uniqueNodesWithErrors = nodesWithActiveErrors.size;
+    const totalNonConformElements = uniqueNodesWithErrors;
     const totalConformElements = Math.max(
       0,
-      totalScannedElements - nodesWithActiveErrors.size
+      totalScannedElements - uniqueNodesWithErrors
     );
 
     console.log("=== RESUMO FINAL ===");
     console.log("Total de elementos escaneados:", totalScannedElements);
     console.log("Total de erros ativos:", activeErrors.length);
+    console.log("Nós únicos com erro:", uniqueNodesWithErrors);
     console.log("Elementos não conformes:", totalNonConformElements);
     console.log("Elementos conformes:", totalConformElements);
+    console.log(
+      "Validação:",
+      totalConformElements + totalNonConformElements,
+      "=",
+      totalScannedElements
+    );
 
     // NOVO: Passo 6.5: Calcular detalhamento de conformidade por cor
     const simpleRgba = (color: any, opacity?: number) => {
@@ -1129,7 +1133,8 @@ function BulkErrorList(props) {
             >
               <ConformityScoreBar
                 totalElements={totalElements}
-                nonConformElements={nonConformElements}
+                nonConformElements={filteredFlatErrors.length}
+                conformElements={conformElements}
               />
             </div>
             {/* Resumo - Cards de métricas */}
@@ -1156,7 +1161,7 @@ function BulkErrorList(props) {
                   Conformes
                 </span>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                  {conformElements}
+                  {nonConformElements}
                 </span>
               </div>
               <div
@@ -1174,7 +1179,7 @@ function BulkErrorList(props) {
                   Não conformes
                 </span>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                  {nonConformElements}
+                  {filteredFlatErrors.length}
                 </span>
               </div>
               <div
@@ -1195,6 +1200,18 @@ function BulkErrorList(props) {
                   {detachCount}
                 </span>
               </div>
+            </div>
+
+            {/* Nota de análise */}
+            <div
+              style={{
+                fontSize: 12,
+                color: "rgba(255, 255, 255, 0.7)",
+                marginBottom: 12,
+                paddingLeft: 16
+              }}
+            >
+              Análise baseada em {totalElements} itens verificados
             </div>
 
             {/* Erros por categoria */}
@@ -1222,21 +1239,47 @@ function BulkErrorList(props) {
                 component: "component",
                 "restore-component": "component"
               };
-              const counts = (filteredFlatErrors || []).reduce(
-                (acc: Record<string, number>, err: any) => {
-                  const orig = (err.type ||
-                    err.errorType ||
-                    err.category) as string;
-                  const norm = errorTypeMap[orig] || orig || "outros";
-                  acc[norm] = (acc[norm] || 0) + 1;
-                  return acc;
-                },
-                {} as Record<string, number>
+              // Contar nós únicos por tipo de erro (não erros por tipo)
+              const nodeTypes = new Map<string, Set<string>>();
+              (filteredFlatErrors || []).forEach(err => {
+                const orig = (err.type ||
+                  err.errorType ||
+                  err.category) as string;
+                const norm = errorTypeMap[orig] || orig || "outros";
+                const nodeId = err.nodeId || getErrorNodeId(err);
+
+                if (!nodeTypes.has(norm)) {
+                  nodeTypes.set(norm, new Set());
+                }
+                nodeTypes.get(norm)!.add(nodeId);
+              });
+
+              const counts: Record<string, number> = {};
+              nodeTypes.forEach((nodes, type) => {
+                counts[type] = nodes.size;
+              });
+
+              // Debug para verificar os cálculos
+              console.log("=== GRÁFICO POR CATEGORIA ===");
+              console.log("Nós únicos por tipo:");
+              nodeTypes.forEach((nodes, type) => {
+                console.log(
+                  `- ${type}: ${nodes.size} nós (${Array.from(nodes).join(
+                    ", "
+                  )})`
+                );
+              });
+              console.log("Counts finais:", counts);
+              console.log(
+                "Total de nós únicos com erro:",
+                Object.values(counts).reduce((sum, count) => sum + count, 0)
               );
               const entries = Object.entries(counts).sort(
                 (a, b) => Number(b[1]) - Number(a[1])
               );
-              const totalErr = (filteredFlatErrors || []).length || 1;
+              const totalErr =
+                Object.values(counts).reduce((sum, count) => sum + count, 0) ||
+                1;
               return (
                 <div
                   className="system-card"
@@ -1580,14 +1623,30 @@ function BulkErrorList(props) {
                 const frameNonConformNodeIds = new Set(
                   frameErrors.map(e => getErrorNodeId(e))
                 );
-                // Alinha com a lógica do card geral: considerar o maior entre nós únicos e total de erros
-                const frameNonConformElements = Math.max(
-                  frameNonConformNodeIds.size,
-                  frameErrors.length
-                );
+                // Cálculo consistente baseado em nós únicos (alinhado com o card geral)
+                const frameNonConformElements = frameNonConformNodeIds.size;
                 const frameConformElements = Math.max(
                   totalElements - frameNonConformNodeIds.size,
                   0
+                );
+
+                // Total para cálculo: conformes + não conformes (mesma lógica da auditoria principal)
+                const frameTotalForCalculation =
+                  frameConformElements + frameNonConformElements;
+
+                // Debug para frame
+                console.log(`=== DEBUG FRAME: ${frame.name} ===`);
+                console.log("Total de elementos no frame:", totalElements);
+                console.log("Erros no frame:", frameErrors.length);
+                console.log(
+                  "Nós únicos não conformes:",
+                  frameNonConformElements
+                );
+                console.log("Elementos conformes:", frameConformElements);
+                console.log("Total para cálculo:", frameTotalForCalculation);
+                console.log(
+                  "Nós não conformes:",
+                  Array.from(frameNonConformNodeIds)
                 );
                 const frameDetachCount = frameErrors.filter(
                   e => getErrorType(e) === "restore-component"
@@ -1612,7 +1671,8 @@ function BulkErrorList(props) {
                     >
                       <ConformityScoreBar
                         totalElements={totalElements}
-                        nonConformElements={frameNonConformElements}
+                        nonConformElements={frameErrors.length}
+                        conformElements={frameConformElements}
                       />
                     </div>
                     <div style={{ height: 16 }} />
@@ -1715,6 +1775,20 @@ function BulkErrorList(props) {
                         </span>
                       </div>
                     </div>
+
+                    {/* Nota de análise do frame */}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "rgba(255, 255, 255, 0.7)",
+                        marginBottom: 12,
+                        paddingLeft: 0
+                      }}
+                    >
+                      Análise baseada em {totalElements} itens verificados neste
+                      frame
+                    </div>
+
                     <ul
                       style={{
                         listStyle: "none",

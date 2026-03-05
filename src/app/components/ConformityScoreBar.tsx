@@ -3,6 +3,7 @@ import * as React from "react";
 interface ConformityScoreBarProps {
   totalElements: number;
   nonConformElements: number;
+  conformElements?: number;
 }
 
 function getScoreColor(score: number) {
@@ -23,24 +24,32 @@ function getScoreStatus(score: number) {
 
 const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
   totalElements,
-  nonConformElements
+  nonConformElements,
+  conformElements: propConformElements
 }) => {
-  // Denominador é o total de elementos escaneados (alinha com os cards)
-  const effectiveTotal = Math.max(totalElements, 1);
-  // Elementos conformes: total - nós não conformes (nunca negativo)
-  const conformElements = Math.max(totalElements - nonConformElements, 0);
-  // Porcentagem de conformidade baseada no total de elementos
-  const score = Math.round((conformElements / effectiveTotal) * 100);
+  // Calcular elementos conformes se não fornecido
+  const calculatedConformElements =
+    propConformElements ?? Math.max(totalElements - nonConformElements, 0);
+
+  // Total para cálculo: conformes + não conformes
+  const effectiveTotal = calculatedConformElements + nonConformElements;
+
+  // Porcentagem de conformidade baseada no total real
+  const score =
+    effectiveTotal > 0
+      ? Math.round((calculatedConformElements / effectiveTotal) * 100)
+      : 0;
   const { bg, color } = getScoreColor(score);
   const status = getScoreStatus(score);
 
   console.log("[ConformityScoreBar] Dados recebidos:", {
     totalElements,
-    nonConformElements
+    nonConformElements,
+    conformElements: propConformElements
   });
   console.log("[ConformityScoreBar] Cálculo:", {
+    calculatedConformElements,
     effectiveTotal,
-    conformElements,
     score
   });
 
@@ -52,7 +61,7 @@ const ConformityScoreBar: React.FC<ConformityScoreBarProps> = ({
             Score de Conformidade
           </div>
           <div className="conformity-score-desc" style={{ fontSize: 12 }}>
-            {conformElements} de {effectiveTotal} elementos
+            {calculatedConformElements} de {effectiveTotal} elementos
           </div>
         </div>
         <div
