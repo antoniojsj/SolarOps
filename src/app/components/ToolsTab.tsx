@@ -4,6 +4,7 @@ import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
 import ImportDesignTab from "./ImportDesignTab";
+import CollapsibleSection from "./CollapsibleSection";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -355,208 +356,9 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
 
                 {/* Component Properties Section */}
                 {selectedNode.componentProperties && (
-                  <div
-                    style={{
-                      background: "#252526",
-                      borderRadius: "6px",
-                      border: "1px solid #333",
-                      overflow: "hidden",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                      marginBottom: "16px"
-                    }}
-                  >
-                    <div
-                      style={{
-                        padding: "8px 12px",
-                        borderBottom: "1px solid #333",
-                        backgroundColor: "#2D2D2D",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center"
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          color: "#9CDCFE",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.5px"
-                        }}
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                        </svg>
-                        Propriedades do Componente
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        maxHeight: "300px",
-                        overflowY: "auto",
-                        fontSize: "12px"
-                      }}
-                    >
-                      <table
-                        style={{
-                          width: "100%",
-                          borderCollapse: "collapse",
-                          color: "#D4D4D4"
-                        }}
-                      >
-                        <thead>
-                          <tr
-                            style={{
-                              backgroundColor: "#2A2D2E",
-                              fontSize: "11px",
-                              textAlign: "left",
-                              color: "#9CDCFE",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px"
-                            }}
-                          >
-                            <th
-                              style={{
-                                padding: "8px 12px",
-                                borderBottom: "1px solid #333"
-                              }}
-                            >
-                              Propriedade
-                            </th>
-                            <th
-                              style={{
-                                padding: "8px 12px",
-                                borderBottom: "1px solid #333"
-                              }}
-                            >
-                              Valor
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(selectedNode.componentProperties)
-                            .filter(
-                              ([key]) =>
-                                !["name", "key", "description"].includes(key)
-                            )
-                            .map(([key, value]) => {
-                              // Converter valor para exibição
-                              let displayValue = value;
-
-                              // Tratar diferentes tipos de valor
-                              if (typeof value === "object") {
-                                displayValue = JSON.stringify(value);
-                              }
-
-                              return (
-                                <tr
-                                  key={key}
-                                  style={{
-                                    borderBottom: "1px solid #252526",
-                                    transition: "background-color 0.2s"
-                                  }}
-                                  onMouseEnter={e => {
-                                    (e.currentTarget as HTMLElement).style.backgroundColor =
-                                      "rgba(255, 255, 255, 0.03)";
-                                  }}
-                                  onMouseLeave={e => {
-                                    (e.currentTarget as HTMLElement).style.backgroundColor =
-                                      "transparent";
-                                  }}
-                                >
-                                  <td
-                                    style={{
-                                      padding: "8px 12px",
-                                      fontFamily: "monospace",
-                                      color: "#9CDCFE",
-                                      verticalAlign: "top",
-                                      borderRight: "1px solid #252526",
-                                      whiteSpace: "nowrap"
-                                    }}
-                                  >
-                                    {key}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px 12px",
-                                      fontFamily: "monospace",
-                                      color: "#CE9178",
-                                      wordBreak: "break-word"
-                                    }}
-                                  >
-                                    {typeof displayValue === "string"
-                                      ? displayValue
-                                      : JSON.stringify(displayValue)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Code Snippets Section */}
-                {console.log(
-                  "Renderizando CodeSnippetSection com nó:",
-                  selectedNode?.id
-                )}
-                <CodeSnippetSection
-                  selectedNode={selectedNode}
-                  key={selectedNode?.id}
-                />
-
-                {/* Animation Snippets Section */}
-                {animationData && (
-                  <AnimationSnippetSection animationData={animationData} />
-                )}
-
-                {/* Other Properties Section */}
-                <div
-                  style={{
-                    background: "#252526",
-                    borderRadius: "6px",
-                    border: "1px solid #333",
-                    overflow: "hidden",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "8px 12px",
-                      borderBottom: "1px solid #333",
-                      backgroundColor: "#2D2D2D",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center"
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        color: "#9CDCFE",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px"
-                      }}
-                    >
+                  <CollapsibleSection
+                    title="Propriedades do Componente"
+                    icon={
                       <svg
                         width="12"
                         height="12"
@@ -567,95 +369,193 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
                       </svg>
-                      Outras Propriedades
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      maxHeight: "200px",
-                      overflowY: "auto",
-                      fontSize: "12px"
-                    }}
+                    }
+                    defaultOpen={false}
+                    maxHeight="300px"
                   >
-                    {Object.entries(selectedNode)
-                      .filter(
-                        ([key]) =>
-                          ![
-                            "bounds",
-                            "padding",
-                            "name",
-                            "type",
-                            "styles",
-                            "children",
-                            "componentProperties",
-                            // Skip properties that are already shown in the component properties section
-                            ...(selectedNode.componentProperties
-                              ? Object.keys(selectedNode.componentProperties)
-                              : [])
-                          ].includes(key)
-                      )
-                      .map(([key, value]) => {
-                        let displayValue = value;
-                        if (value === null || value === undefined) {
-                          displayValue = "null";
-                        } else if (typeof value === "boolean") {
-                          displayValue = value ? "true" : "false";
-                        } else if (Array.isArray(value)) {
-                          displayValue = `[${value.join(", ")}]`;
-                        } else if (typeof value === "object") {
-                          displayValue = JSON.stringify(value, null, 2);
-                        }
-
-                        return (
-                          <div
-                            key={key}
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        color: "#D4D4D4"
+                      }}
+                    >
+                      <thead>
+                        <tr
+                          style={{
+                            backgroundColor: "#2A2D2E",
+                            fontSize: "11px",
+                            textAlign: "left",
+                            color: "#9CDCFE",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px"
+                          }}
+                        >
+                          <th
                             style={{
-                              display: "flex",
-                              padding: "6px 12px",
-                              borderBottom: "1px solid #252526",
-                              cursor: "default",
-                              transition: "background-color 0.2s"
-                            }}
-                            onMouseEnter={e => {
-                              (e.currentTarget as HTMLElement).style.backgroundColor =
-                                "rgba(255, 255, 255, 0.03)";
-                            }}
-                            onMouseLeave={e => {
-                              (e.currentTarget as HTMLElement).style.backgroundColor =
-                                "transparent";
+                              padding: "8px 12px",
+                              borderBottom: "1px solid #333"
                             }}
                           >
-                            <div
-                              style={{
-                                flex: "0 0 140px",
-                                color: "#9CDCFE",
-                                fontFamily: "monospace",
-                                paddingRight: "12px",
-                                wordBreak: "break-word"
-                              }}
-                            >
-                              {key}
-                            </div>
-                            <div
-                              style={{
-                                flex: 1,
-                                color: "#CE9178",
-                                fontFamily: "monospace",
-                                whiteSpace: "pre-wrap",
-                                wordBreak: "break-word"
-                              }}
-                            >
-                              {String(displayValue)}
-                            </div>
-                          </div>
-                        );
-                      })}
+                            Propriedade
+                          </th>
+                          <th
+                            style={{
+                              padding: "8px 12px",
+                              borderBottom: "1px solid #333"
+                            }}
+                          >
+                            Valor
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(selectedNode.componentProperties)
+                          .filter(
+                            ([key]) =>
+                              !["name", "key", "description"].includes(key)
+                          )
+                          .map(([key, value]) => {
+                            // Converter valor para exibição
+                            let displayValue = value;
 
-                    {Object.keys(selectedNode).filter(
-                      key =>
+                            // Tratar diferentes tipos de valor
+                            if (typeof value === "object") {
+                              displayValue = JSON.stringify(value);
+                            }
+
+                            return (
+                              <tr
+                                key={key}
+                                style={{
+                                  borderBottom: "1px solid #252526",
+                                  transition: "background-color 0.2s"
+                                }}
+                                onMouseEnter={e => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                                    "rgba(255, 255, 255, 0.03)";
+                                }}
+                                onMouseLeave={e => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor =
+                                    "transparent";
+                                }}
+                              >
+                                <td
+                                  style={{
+                                    padding: "8px 12px",
+                                    fontFamily: "monospace",
+                                    color: "#9CDCFE",
+                                    verticalAlign: "top",
+                                    borderRight: "1px solid #252526",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                >
+                                  {key}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "8px 12px",
+                                    fontFamily: "monospace",
+                                    color: "#CE9178",
+                                    wordBreak: "break-word"
+                                  }}
+                                >
+                                  {typeof displayValue === "string"
+                                    ? displayValue
+                                    : JSON.stringify(displayValue)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </CollapsibleSection>
+                )}
+
+                {/* Code Snippets Section */}
+                {console.log(
+                  "Renderizando CodeSnippetSection com nó:",
+                  selectedNode?.id
+                )}
+                <CollapsibleSection
+                  title="Snippets de Código"
+                  icon={
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M16 18l6-6-6-6"></path>
+                      <path d="M8 6l-6 6 6 6"></path>
+                    </svg>
+                  }
+                  defaultOpen={false}
+                  maxHeight="400px"
+                  noPadding={true}
+                >
+                  <CodeSnippetSection
+                    selectedNode={selectedNode}
+                    key={selectedNode?.id}
+                  />
+                </CollapsibleSection>
+
+                {/* Animation Snippets Section */}
+                {animationData && (
+                  <CollapsibleSection
+                    title="Animação"
+                    icon={
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        <path d="M5.63 12.63L9 16l1.37-1.37"></path>
+                      </svg>
+                    }
+                    defaultOpen={false}
+                    maxHeight="300px"
+                    noPadding={true}
+                  >
+                    <AnimationSnippetSection animationData={animationData} />
+                  </CollapsibleSection>
+                )}
+
+                {/* Other Properties Section */}
+                <CollapsibleSection
+                  title="Outras Propriedades"
+                  icon={
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                    </svg>
+                  }
+                  defaultOpen={false}
+                  maxHeight="200px"
+                >
+                  {Object.entries(selectedNode)
+                    .filter(
+                      ([key]) =>
                         ![
                           "bounds",
                           "padding",
@@ -663,23 +563,95 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                           "type",
                           "styles",
                           "children",
-                          "componentProperties"
+                          "componentProperties",
+                          // Skip properties that are already shown in component properties section
+                          ...(selectedNode.componentProperties
+                            ? Object.keys(selectedNode.componentProperties)
+                            : [])
                         ].includes(key)
-                    ).length === 0 && (
-                      <div
-                        style={{
-                          padding: "16px",
-                          textAlign: "center",
-                          color: "#888",
-                          fontSize: "11px",
-                          fontStyle: "italic"
-                        }}
-                      >
-                        Nenhuma propriedade adicional disponível
-                      </div>
-                    )}
-                  </div>
-                </div>
+                    )
+                    .map(([key, value]) => {
+                      let displayValue = value;
+                      if (value === null || value === undefined) {
+                        displayValue = "null";
+                      } else if (typeof value === "boolean") {
+                        displayValue = value ? "true" : "false";
+                      } else if (Array.isArray(value)) {
+                        displayValue = `[${value.join(", ")}]`;
+                      } else if (typeof value === "object") {
+                        displayValue = JSON.stringify(value, null, 2);
+                      }
+
+                      return (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex",
+                            padding: "6px 12px",
+                            borderBottom: "1px solid #252526",
+                            cursor: "default",
+                            transition: "background-color 0.2s"
+                          }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLElement).style.backgroundColor =
+                              "rgba(255, 255, 255, 0.03)";
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLElement).style.backgroundColor =
+                              "transparent";
+                          }}
+                        >
+                          <div
+                            style={{
+                              flex: "0 0 140px",
+                              color: "#9CDCFE",
+                              fontFamily: "monospace",
+                              paddingRight: "12px",
+                              wordBreak: "break-word"
+                            }}
+                          >
+                            {key}
+                          </div>
+                          <div
+                            style={{
+                              flex: 1,
+                              color: "#CE9178",
+                              fontFamily: "monospace",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word"
+                            }}
+                          >
+                            {String(displayValue)}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  {Object.keys(selectedNode).filter(
+                    key =>
+                      ![
+                        "bounds",
+                        "padding",
+                        "name",
+                        "type",
+                        "styles",
+                        "children",
+                        "componentProperties"
+                      ].includes(key)
+                  ).length === 0 && (
+                    <div
+                      style={{
+                        padding: "16px",
+                        textAlign: "center",
+                        color: "#888",
+                        fontSize: "11px",
+                        fontStyle: "italic"
+                      }}
+                    >
+                      Nenhuma propriedade adicional disponível
+                    </div>
+                  )}
+                </CollapsibleSection>
               </div>
             ) : (
               <div

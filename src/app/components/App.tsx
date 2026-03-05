@@ -406,7 +406,13 @@ const App = ({}) => {
         console.log("[UI] setEmptyState(true) - show-empty-state");
       } else if (type === "step-1") {
         console.log("[LOG] step-1", { t: performance.now() - t0 });
-        let nodeObject = JSON.parse(message);
+        let nodeObject;
+        try {
+          nodeObject = JSON.parse(message);
+        } catch (error) {
+          console.log("[App] Erro ao fazer parse de message no step-1:", error);
+          nodeObject = [];
+        }
         setNodeArray(nodeObject);
         updateErrorArray(errors);
         setSelectedListItem(selectedListItems => {
@@ -427,7 +433,17 @@ const App = ({}) => {
           "*"
         );
       } else if (type === "step-2-complete") {
-        setSelectedNode(() => JSON.parse(message));
+        setSelectedNode(() => {
+          try {
+            return JSON.parse(message);
+          } catch (error) {
+            console.log(
+              "[App] Erro ao fazer parse de message no step-2-complete:",
+              error
+            );
+            return null;
+          }
+        });
         parent.postMessage(
           {
             pluginMessage: {
@@ -520,7 +536,13 @@ const App = ({}) => {
         }
       } else if (type === "fetched storage") {
         if (storage) {
-          let clientStorage = JSON.parse(storage);
+          let clientStorage;
+          try {
+            clientStorage = JSON.parse(storage);
+          } catch (error) {
+            console.log("[App] Erro ao fazer parse de storage:", error);
+            clientStorage = [];
+          }
           setIgnoreErrorArray(ignoredErrorArray => [
             ...ignoredErrorArray,
             ...clientStorage
@@ -529,7 +551,16 @@ const App = ({}) => {
       } else if (type === "fetched active page") {
         console.log("[LOG] fetched active page", { t: performance.now() - t0 });
         if (storage) {
-          let clientStorage = JSON.parse(storage);
+          let clientStorage;
+          try {
+            clientStorage = JSON.parse(storage);
+          } catch (error) {
+            console.log(
+              "[App] Erro ao fazer parse de storage (active page):",
+              error
+            );
+            clientStorage = null;
+          }
           setActivePage(clientStorage);
         }
       } else if (type === "fetched border radius") {
@@ -538,10 +569,19 @@ const App = ({}) => {
         });
         // Update border radius values from storage
         if (storage) {
-          let clientStorage = JSON.parse(storage);
-          // Sort the array first
-          clientStorage = clientStorage.sort((a, b) => a - b);
-          setBorderRadiusValues([...clientStorage]);
+          let clientStorage;
+          try {
+            clientStorage = JSON.parse(storage);
+            // Sort the array first
+            clientStorage = clientStorage.sort((a, b) => a - b);
+            setBorderRadiusValues([...clientStorage]);
+          } catch (error) {
+            console.log(
+              "[App] Erro ao fazer parse de storage (border radius):",
+              error
+            );
+            setBorderRadiusValues([]);
+          }
         }
       } else if (type === "reset storage") {
         console.log("[LOG] reset storage", { t: performance.now() - t0 });
@@ -557,7 +597,17 @@ const App = ({}) => {
           "*"
         );
       } else if (type === "fetched layer") {
-        setSelectedNode(() => JSON.parse(message));
+        setSelectedNode(() => {
+          try {
+            return JSON.parse(message);
+          } catch (error) {
+            console.log(
+              "[App] Erro ao fazer parse de message no fetched layer:",
+              error
+            );
+            return null;
+          }
+        });
 
         // Ask the controller to lint the layers for errors.
         parent.postMessage(

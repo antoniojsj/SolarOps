@@ -12,6 +12,112 @@ function InitialContent(props) {
   const [selectedNode, setSelectedNode] = React.useState<any>(null);
   const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
 
+  // Verificar se há bibliotecas/tokens importados
+  const hasTokensImported = React.useMemo(() => {
+    if (!props.libraries || props.libraries.length === 0) {
+      console.log("[InitialContent] Sem bibliotecas recebidas");
+      return false;
+    }
+
+    const hasValidLibrary = props.libraries.some(lib => {
+      // Verificar diferentes estruturas possíveis de tokens
+      const hasFills =
+        (lib.fills && lib.fills.length > 0) ||
+        (lib.paints && lib.paints.length > 0);
+      const hasText =
+        (lib.text && lib.text.length > 0) ||
+        (lib.textStyles && lib.textStyles.length > 0);
+      const hasEffects =
+        (lib.effects && lib.effects.length > 0) ||
+        (lib.effectStyles && lib.effectStyles.length > 0);
+
+      // Verificar outras propriedades que podem conter tokens
+      const hasStrokes = lib.strokes && lib.strokes.length > 0;
+      const hasGaps = lib.gaps && lib.gaps.length > 0;
+      const hasPaddings = lib.paddings && lib.paddings.length > 0;
+      const hasRadius = lib.radius && lib.radius.length > 0;
+
+      // Verificar se a biblioteca tem qualquer propriedade com tokens
+      const hasAnyTokens =
+        hasFills ||
+        hasText ||
+        hasEffects ||
+        hasStrokes ||
+        hasGaps ||
+        hasPaddings ||
+        hasRadius;
+
+      // Verificar também se há tokens em propriedades aninhadas
+      const hasNestedTokens = Object.keys(lib).some(key => {
+        const value = lib[key];
+        return Array.isArray(value) && value.length > 0;
+      });
+
+      const hasTokens = hasAnyTokens || hasNestedTokens;
+
+      console.log("[InitialContent] Verificando biblioteca:", {
+        name: lib.name,
+        hasFills,
+        hasText,
+        hasEffects,
+        hasStrokes,
+        hasGaps,
+        hasPaddings,
+        hasRadius,
+        hasAnyTokens,
+        hasNestedTokens,
+        hasTokens,
+        fillsCount: lib.fills?.length || lib.paints?.length || 0,
+        textCount: lib.text?.length || lib.textStyles?.length || 0,
+        effectsCount: lib.effects?.length || lib.effectStyles?.length || 0,
+        strokesCount: lib.strokes?.length || 0,
+        gapsCount: lib.gaps?.length || 0,
+        paddingsCount: lib.paddings?.length || 0,
+        // Verificar estrutura completa
+        structure: Object.keys(lib),
+        // Verificar todas as propriedades com seus valores
+        allProps: Object.keys(lib).reduce((acc, key) => {
+          acc[key] = Array.isArray(lib[key])
+            ? lib[key].length
+            : typeof lib[key];
+          return acc;
+        }, {})
+      });
+
+      return hasTokens;
+    });
+
+    console.log(
+      "[InitialContent] Resultado hasTokensImported:",
+      hasValidLibrary
+    );
+    return hasValidLibrary;
+  }, [props.libraries]);
+
+  // Verificar se o botão de auditoria deve estar habilitado
+  const canStartAudit = hasTokensImported && selectedNode;
+
+  // Debug logs
+  React.useEffect(() => {
+    console.log("[InitialContent] Debug - Bibliotecas:", props.libraries);
+    console.log(
+      "[InitialContent] Debug - hasTokensImported:",
+      hasTokensImported
+    );
+    console.log("[InitialContent] Debug - selectedNode:", selectedNode);
+    console.log("[InitialContent] Debug - canStartAudit:", canStartAudit);
+  }, [props.libraries, hasTokensImported, selectedNode, canStartAudit]);
+
+  // Log específico para mudanças nas bibliotecas
+  React.useEffect(() => {
+    console.log("[InitialContent] Bibliotecas atualizadas:", {
+      libraries: props.libraries,
+      length: props.libraries?.length || 0,
+      hasTokensImported,
+      timestamp: new Date().toISOString()
+    });
+  }, [props.libraries]);
+
   // Adicionar logs para rastrear mudanças no selectedNode
   React.useEffect(() => {
     console.log("selectedNode atualizado:", selectedNode);
@@ -449,13 +555,64 @@ function InitialContent(props) {
                 </div>
               </div>
             </div>
-            <div className="tip-card">
-              <div className="tip-icon">💡</div>
-              <div className="tip-content">
-                <h4 className="tip-title">Importante</h4>
-                <p className="tip-text">
-                  Selecione um ou mais frames e depois clique no botão "iniciar
-                  análise" para gerar o relatório.
+            <div
+              className={`tip-card ${
+                hasTokensImported ? "tip-card-success" : "tip-card-info"
+              }`}
+              style={{
+                background: hasTokensImported
+                  ? "rgba(34, 197, 94, 0.1)"
+                  : "rgba(59, 130, 246, 0.1)",
+                border: hasTokensImported
+                  ? "1px solid rgba(34, 197, 94, 0.2)"
+                  : "1px solid rgba(59, 130, 246, 0.2)",
+                borderRadius: "8px",
+                padding: "16px",
+                marginTop: "24px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "12px"
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "20px",
+                  opacity: hasTokensImported ? 0.8 : 1
+                }}
+              >
+                {hasTokensImported ? "✅" : "💡"}
+              </div>
+              <div style={{ flex: 1 }}>
+                <h4
+                  className="tip-title"
+                  style={{
+                    color: hasTokensImported ? "#22C55E" : "#3B82F6",
+                    margin: "0 0 8px 0",
+                    fontSize: "14px",
+                    fontWeight: 600
+                  }}
+                >
+                  {hasTokensImported ? "Biblioteca Importada" : "Importante"}
+                </h4>
+                <p
+                  className="tip-text"
+                  style={{
+                    color: hasTokensImported
+                      ? "rgba(34, 197, 94, 0.9)"
+                      : "rgba(255, 255, 255, 0.8)",
+                    margin: 0,
+                    fontSize: "13px",
+                    lineHeight: "1.4"
+                  }}
+                >
+                  {hasTokensImported
+                    ? `Biblioteca "${props.libraries[0]?.name ||
+                        "Importada"}' está pronta para uso. ${
+                        selectedNode
+                          ? 'Clique em "Realizar auditoria" para começar.'
+                          : "Selecione um objeto para habilitar a auditoria."
+                      }`
+                    : 'Importe uma biblioteca de tokens primeiro. Selecione um ou mais objetos e depois clique no botão "iniciar análise" para gerar o relatório.'}
                 </p>
               </div>
             </div>
@@ -590,17 +747,21 @@ function InitialContent(props) {
             <button
               className="button button--primary"
               onClick={props.onHandleRunApp}
-              disabled={!selectedNode}
+              disabled={!canStartAudit}
               style={{
-                background: selectedNode ? "#18A0FB" : "#4A4A4A",
+                background: canStartAudit
+                  ? "#18A0FB"
+                  : hasTokensImported
+                  ? "#4A4A4A"
+                  : "#4A4A4A",
                 color: "#fff",
                 border: "none",
                 borderRadius: "4px",
                 padding: "12px 16px",
                 fontSize: "14px",
                 fontWeight: 500,
-                cursor: selectedNode ? "pointer" : "not-allowed",
-                opacity: 1,
+                cursor: canStartAudit ? "pointer" : "not-allowed",
+                opacity: canStartAudit ? 1 : 0.6,
                 transition: "background 0.2s, opacity 0.2s",
                 display: "flex",
                 alignItems: "center",
@@ -611,7 +772,11 @@ function InitialContent(props) {
                 boxSizing: "border-box"
               }}
             >
-              Iniciar auditoria
+              {hasTokensImported
+                ? selectedNode
+                  ? "Realizar auditoria"
+                  : "Selecione um objeto"
+                : "Importe biblioteca primeiro"}
             </button>
           </div>
         </footer>

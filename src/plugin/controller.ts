@@ -613,6 +613,162 @@ figma.ui.onmessage = async (msg: any) => {
       }
       return;
     }
+
+    // NEW: Get full node data with all children and properties
+    if (msg.type === "get-full-node-data") {
+      try {
+        const nodeId = msg.nodeId;
+        if (!nodeId) {
+          figma.ui.postMessage({
+            type: "full-node-data",
+            data: null,
+            error: "No nodeId provided"
+          });
+          return;
+        }
+
+        // Use async version for dynamic page access
+        figma
+          .getNodeByIdAsync(nodeId)
+          .then(node => {
+            if (!node) {
+              figma.ui.postMessage({
+                type: "full-node-data",
+                data: null,
+                error: "Node not found"
+              });
+              return;
+            }
+
+            const extractFullNodeData = (n: any, depth = 0): any => {
+              if (depth > 20) return null; // Prevent infinite recursion
+
+              const data: any = {
+                id: n.id,
+                name: n.name,
+                type: n.type,
+                visible: n.visible !== false,
+                locked: n.locked === true
+              };
+
+              // Text content
+              if (n.type === "TEXT" && n.characters) {
+                data.characters = n.characters;
+                data.fontSize = n.fontSize;
+                data.fontWeight = n.fontWeight;
+                data.lineHeight = n.lineHeight;
+                data.letterSpacing = n.letterSpacing;
+                data.textAlignHorizontal = n.textAlignHorizontal;
+                data.textDecoration = n.textDecoration;
+              }
+
+              // Dimensions and position
+              if (n.absoluteBoundingBox) {
+                data.absoluteBoundingBox = {
+                  x: n.absoluteBoundingBox.x,
+                  y: n.absoluteBoundingBox.y,
+                  width: n.absoluteBoundingBox.width,
+                  height: n.absoluteBoundingBox.height
+                };
+              }
+
+              // Layout
+              if (n.layoutMode) {
+                data.layoutMode = n.layoutMode;
+                data.itemSpacing = n.itemSpacing;
+                data.paddingTop = n.paddingTop;
+                data.paddingRight = n.paddingRight;
+                data.paddingBottom = n.paddingBottom;
+                data.paddingLeft = n.paddingLeft;
+                data.layoutAlign = n.layoutAlign;
+                data.counterAxisAlignItems = n.counterAxisAlignItems;
+                data.layoutWrap = n.layoutWrap;
+              }
+
+              // Colors and fills
+              if (n.fills && Array.isArray(n.fills)) {
+                data.fills = n.fills.map((f: any) => ({
+                  type: f.type,
+                  color: f.color
+                    ? { r: f.color.r, g: f.color.g, b: f.color.b }
+                    : undefined,
+                  opacity: f.opacity,
+                  visible: f.visible
+                }));
+              }
+
+              // Strokes
+              if (n.strokes && Array.isArray(n.strokes)) {
+                data.strokes = n.strokes.map((s: any) => ({
+                  type: s.type,
+                  color: s.color
+                    ? { r: s.color.r, g: s.color.g, b: s.color.b }
+                    : undefined,
+                  opacity: s.opacity,
+                  weight: n.strokeWeight,
+                  visible: s.visible
+                }));
+                data.strokeWeight = n.strokeWeight;
+              }
+
+              // Border radius
+              if (n.cornerRadius !== undefined) {
+                data.cornerRadius = n.cornerRadius;
+              }
+
+              // Opacity
+              if (n.opacity !== undefined) {
+                data.opacity = n.opacity;
+              }
+
+              // Effects
+              if (n.effects && Array.isArray(n.effects)) {
+                data.effects = n.effects.map((e: any) => ({
+                  type: e.type,
+                  visible: e.visible
+                }));
+              }
+
+              // Children recursively
+              if (
+                "children" in n &&
+                Array.isArray(n.children) &&
+                n.children.length > 0
+              ) {
+                data.children = n.children
+                  .map((child: any) => extractFullNodeData(child, depth + 1))
+                  .filter(Boolean);
+              }
+
+              return data;
+            };
+
+            const fullData = extractFullNodeData(node);
+
+            figma.ui.postMessage({
+              type: "full-node-data",
+              data: fullData
+            });
+          })
+          .catch(err => {
+            console.error("[Plugin] Erro ao buscar node async:", err);
+            figma.ui.postMessage({
+              type: "full-node-data",
+              data: null,
+              error: err.message
+            });
+          });
+      } catch (e) {
+        console.error("[Plugin] Erro na requisição full-node-data:", e);
+        figma.ui.postMessage({
+          type: "full-node-data",
+          data: null,
+          error: e.message
+        });
+      }
+      return;
+    }
+
     if (msg.type === "debug-client-storage") {
       try {
         console.log("[DEBUG] Verificando estado do clientStorage");
@@ -657,6 +813,7 @@ figma.ui.onmessage = async (msg: any) => {
 // Debounce selection updates to avoid flooding and UI jank
 let selectionTimer: number | undefined;
 figma.on("selectionchange", () => {
+  console.log("[DEBUG] Selection change event fired");
   if (selectionTimer) {
     // @ts-ignore
     clearTimeout(selectionTimer);
@@ -675,34 +832,130 @@ figma.on("selectionchange", () => {
 
       if (selLen > 0) {
         const selectedNode = figma.currentPage.selection[0];
+        console.log(
+          "[DEBUG] Nó selecionado:",
+          selectedNode.name,
+          selectedNode.type
+        );
+        console.log("[DEBUG] ID completo do nó:", selectedNode.id);
+        console.log(
+          "[DEBUG] Propriedades completas do nó:",
+          Object.keys(selectedNode)
+        );
+        console.log("[DEBUG] Reactions do nó:", selectedNode.reactions);
+        console.log(
+          "[DEBUG] Tem reactions?",
+          !!selectedNode.reactions,
+          "Quantidade:",
+          selectedNode.reactions?.length || 0
+        );
+
+        // Verifica se o nó tem prototype-related properties
+        if ("prototypeNode" in selectedNode) {
+          console.log("[DEBUG] prototypeNode:", selectedNode.prototypeNode);
+        }
+        if ("prototypeStart" in selectedNode) {
+          console.log("[DEBUG] prototypeStart:", selectedNode.prototypeStart);
+        }
+
+        // Tenta acessar reactions de forma diferente
+        try {
+          const nodeWithReactions = selectedNode as any;
+          console.log(
+            "[DEBUG] Acessando reactions como any:",
+            nodeWithReactions.reactions
+          );
+          console.log(
+            "[DEBUG] Tipo de reactions:",
+            typeof nodeWithReactions.reactions
+          );
+          console.log(
+            "[DEBUG] Array de reactions?",
+            Array.isArray(nodeWithReactions.reactions)
+          );
+
+          // Verifica se há reactions em propriedades aninhadas
+          console.log("[DEBUG] Verificando propriedades aninhadas:");
+          for (const key in nodeWithReactions) {
+            if (
+              key.includes("react") ||
+              key.includes("prototype") ||
+              key.includes("animation")
+            ) {
+              console.log(`[DEBUG] ${key}:`, nodeWithReactions[key]);
+            }
+          }
+
+          if (
+            nodeWithReactions.reactions &&
+            Array.isArray(nodeWithReactions.reactions)
+          ) {
+            console.log("[DEBUG] Detalhes das reactions:");
+            nodeWithReactions.reactions.forEach(
+              (reaction: any, index: number) => {
+                console.log(`[DEBUG] Reaction ${index}:`, reaction);
+                console.log(`[DEBUG] Action ${index}:`, reaction.action);
+                console.log(`[DEBUG] Trigger ${index}:`, reaction.trigger);
+              }
+            );
+          }
+        } catch (e) {
+          console.error("[DEBUG] Erro ao acessar reactions:", e);
+        }
+
         if (selectedNode.reactions && selectedNode.reactions.length > 0) {
+          console.log(
+            "[DEBUG] Processando reactions:",
+            selectedNode.reactions.length
+          );
           const animations = selectedNode.reactions
             .map(reaction => {
               const action = reaction.action;
-              if (action.type === "NODE" && action.transition) {
-                const destinationNode = figma.getNodeById(action.destinationId);
-                return {
+              console.log("[DEBUG] Reaction:", reaction);
+              if (action.type === "NODE") {
+                let destinationNode = null;
+                try {
+                  // Tentar obter o nó de destino com tratamento de erro
+                  destinationNode = figma.getNodeById(action.destinationId);
+                } catch (e) {
+                  console.error("[DEBUG] Erro ao obter nó de destino:", e);
+                  destinationNode = null;
+                }
+
+                const animationData = {
                   fromNode: selectedNode.name,
-                  toNode: destinationNode ? destinationNode.name : "Unknown",
+                  toNode: destinationNode
+                    ? destinationNode.name
+                    : action.destinationId,
                   trigger: reaction.trigger.type,
-                  transition: {
-                    type: action.transition.type,
-                    duration: action.transition.duration,
-                    easing: action.transition.easing.type
-                  }
+                  navigation: action.navigation || null,
+                  transition: action.transition
+                    ? {
+                        type: action.transition.type,
+                        duration: action.transition.duration,
+                        easing: action.transition.easing.type
+                      }
+                    : null
                 };
+                console.log("[DEBUG] Animation data criada:", animationData);
+                return animationData;
               }
               return null;
             })
             .filter(Boolean);
 
           if (animations.length > 0) {
+            console.log("[DEBUG] Enviando animações:", animations);
             figma.ui.postMessage({
               type: "animation-data",
               payload: {
                 animations: animations
               }
             });
+          } else {
+            console.log(
+              "[DEBUG] Nenhuma animação encontrada após processamento"
+            );
           }
         }
       }
@@ -1767,6 +2020,59 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     return;
   }
 
+  // Handler para recuperar dados serializados do DOM
+  if (msg.type === "get-serialized-dom") {
+    try {
+      const sel = figma.currentPage.selection;
+      if (!sel || sel.length === 0) {
+        figma.ui.postMessage({
+          type: "serialized-dom-response",
+          data: null,
+          error: "Nenhum elemento selecionado"
+        });
+        return;
+      }
+
+      const selectedNode = sel[0];
+      const serializedData = selectedNode.getPluginData("serialized-dom-tree");
+      const viewportData = selectedNode.getPluginData("viewport-size");
+
+      if (serializedData) {
+        try {
+          const tree = JSON.parse(serializedData);
+          const viewport = viewportData ? JSON.parse(viewportData) : null;
+          figma.ui.postMessage({
+            type: "serialized-dom-response",
+            data: { tree, viewport }
+          });
+          console.log(
+            "[Controller] ✓ Dados serializados recuperados com sucesso"
+          );
+        } catch (e) {
+          figma.ui.postMessage({
+            type: "serialized-dom-response",
+            data: null,
+            error: "Erro ao parsear dados serializados"
+          });
+        }
+      } else {
+        figma.ui.postMessage({
+          type: "serialized-dom-response",
+          data: null,
+          error:
+            "Nenhum dado serializado encontrado. Elemento não foi importado com Import Design."
+        });
+      }
+    } catch (error) {
+      figma.ui.postMessage({
+        type: "serialized-dom-response",
+        data: null,
+        error: "Erro ao recuperar dados: " + (error?.message || error)
+      });
+    }
+    return;
+  }
+
   try {
     // ===== Handlers do Medidor (canvas) =====
     if (msg.type === "init-measurement-tool") {
@@ -2220,7 +2526,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         const selectedNodes = figma.currentPage.selection;
         if (selectedNodes.length === 0) {
           figma.notify(
-            "Por favor, selecione um frame para verificar o contraste",
+            "Por favor, selecione um objeto para verificar o contraste",
             { timeout: 3000 }
           );
           return;
@@ -2435,7 +2741,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         });
       } catch (error) {
         console.error("[Controller] Erro ao processar nó selecionado:", error);
-        figma.notify("Erro ao processar o frame selecionado", { error: true });
+        figma.notify("Erro ao processar o objeto selecionado", { error: true });
       }
     }
 
@@ -2860,11 +3166,57 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     }
 
     if (msg.type === "fetch-layer-data" && msg.id) {
-      const node = figma.getNodeById(msg.id);
-      if (node) {
-        figma.currentPage.selection = [node];
-        figma.viewport.scrollAndZoomIntoView([node]);
-      }
+      console.log("[Controller] fetch-layer-data recebido para o nó:", msg.id);
+
+      // Tentar usar a API assíncrona para compatibilidade com dynamic-page
+      (async () => {
+        try {
+          const node = await figma.getNodeByIdAsync(msg.id);
+          if (node) {
+            console.log(
+              "[Controller] Nó encontrado, focando e fazendo zoom:",
+              node.name
+            );
+            // Primeiro seleciona o nó
+            figma.currentPage.selection = [node];
+            // Depois faz o zoom e scroll para o nó
+            figma.viewport.scrollAndZoomIntoView([node]);
+            console.log("[Controller] Foco e zoom aplicados com sucesso");
+          } else {
+            console.log("[Controller] Nó não encontrado:", msg.id);
+          }
+        } catch (error) {
+          console.log(
+            "[Controller] Erro ao buscar nó com getNodeByIdAsync, tentando método síncrono:",
+            error
+          );
+          // Fallback para o método síncrono se o assíncrono falhar
+          try {
+            const node = figma.getNodeById(msg.id);
+            if (node) {
+              console.log(
+                "[Controller] Nó encontrado (método síncrono), focando e fazendo zoom:",
+                node.name
+              );
+              figma.currentPage.selection = [node];
+              figma.viewport.scrollAndZoomIntoView([node]);
+              console.log(
+                "[Controller] Foco e zoom aplicados com sucesso (método síncrono)"
+              );
+            } else {
+              console.log(
+                "[Controller] Nó não encontrado (método síncrono):",
+                msg.id
+              );
+            }
+          } catch (syncError) {
+            console.log(
+              "[Controller] Erro ao buscar nó (método síncrono):",
+              syncError
+            );
+          }
+        }
+      })();
     }
 
     if (msg.type === "get-project-name") {

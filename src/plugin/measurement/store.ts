@@ -1,8 +1,15 @@
 import EventEmitter from "../shared/EventEmitter";
 import { STORAGE_KEY } from "../shared/constants";
 
-export const getState = async () =>
-  JSON.parse(await figma.clientStorage.getAsync(STORAGE_KEY));
+export const getState = async () => {
+  try {
+    const data = await figma.clientStorage.getAsync(STORAGE_KEY);
+    return data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.log("[store] Erro ao obter estado:", error);
+    return {};
+  }
+};
 
 EventEmitter.on("storage", async (key, send) => {
   try {

@@ -656,6 +656,14 @@ export async function importRenderedDOM(
 
   figma.currentPage.appendChild(root);
 
+  // Store the serialized tree as plugin data for later retrieval
+  try {
+    root.setPluginData("serialized-dom-tree", JSON.stringify(tree));
+    root.setPluginData("viewport-size", JSON.stringify(viewport));
+  } catch (e) {
+    console.warn("[domImporter] Failed to store plugin data:", e);
+  }
+
   await importNode(tree, root, { x: 0, y: 0 }, false);
 
   // Select
