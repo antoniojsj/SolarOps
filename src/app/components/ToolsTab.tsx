@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
+import { motion, AnimatePresence } from "framer-motion/dist/framer-motion";
 import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
 import ImportDesignTab from "./ImportDesignTab";
 import CollapsibleSection from "./CollapsibleSection";
+import ToolsSubPageHeader from "./ToolsSubPageHeader";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -55,8 +57,38 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
   selectedNode,
   onInspectClick
 }) => {
-  const [activeTab, setActiveTab] = useState("inspect"); // 'inspect', 'measure', or 'import'
+  const [activeSubPage, setActiveSubPage] = useState<
+    "main" | "inspect" | "measure" | "import"
+  >("main");
   const [animationData, setAnimationData] = useState(null);
+
+  // Função para mudar de subpágina e comunicar com App.tsx
+  const changeSubPage = (page: "main" | "inspect" | "measure" | "import") => {
+    console.log("[ToolsTab] Mudando para subpágina:", page);
+    setActiveSubPage(page);
+
+    // Comunicar com App.tsx via window (não parent)
+    const isSubPage = page !== "main";
+    const title =
+      page === "inspect"
+        ? "Inspecionar"
+        : page === "measure"
+        ? "Mensurar"
+        : page === "import"
+        ? "Importar Design"
+        : "";
+
+    // Enviar mensagem diretamente para a janela atual
+    window.postMessage(
+      {
+        type: "tools-subpage-changed",
+        payload: { isSubPage, title }
+      },
+      "*"
+    );
+
+    console.log("[ToolsTab] Mensagem enviada para UI:", { isSubPage, title });
+  };
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -68,14 +100,31 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
       }
     };
 
+    const handleDirectMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "tools-back-to-main") {
+        console.log(
+          "[ToolsTab] Recebido comando para voltar à página principal"
+        );
+        setActiveSubPage("main");
+      }
+    };
+
     window.addEventListener("message", handleMessage);
+    window.addEventListener("message", handleDirectMessage);
 
     return () => {
       window.removeEventListener("message", handleMessage);
+      window.removeEventListener("message", handleDirectMessage);
     };
   }, []);
 
-  return (
+  // Função para voltar para a página principal
+  const handleBack = () => {
+    changeSubPage("main");
+  };
+
+  // Renderiza o conteúdo principal com os cards
+  const renderMainContent = () => (
     <div
       style={{
         display: "flex",
@@ -84,100 +133,276 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
         width: "100%"
       }}
     >
-      {/* Tab Navigation */}
+      {/* Cards de ferramentas */}
       <div
         style={{
-          padding: "0 0 16px 0",
-          margin: "0",
-          width: "100%",
-          boxSizing: "border-box"
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          padding: "16px",
+          flex: 1
         }}
       >
-        <div
+        {/* Card Inspecionar */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => changeSubPage("inspect")}
           style={{
-            display: "inline-flex",
-            background: "rgba(255,255,255,0.04)",
-            borderRadius: 4,
-            padding: "2px",
-            margin: "0",
-            boxSizing: "border-box",
-            width: "100%",
-            maxWidth: "100%"
+            background: "rgba(59, 130, 246, 0.12)",
+            border: "1px solid rgba(59, 130, 246, 0.30)",
+            borderRadius: 8,
+            padding: 20,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
           }}
         >
-          <button
-            onClick={() => setActiveTab("inspect")}
+          <div
             style={{
-              flex: 1,
-              background: activeTab === "inspect" ? "#3b82f6" : "transparent",
-              border: "none",
-              borderRadius: 4,
-              fontWeight: 500,
-              fontSize: 12,
-              color: activeTab === "inspect" ? "#fff" : "#fff",
-              padding: "6px 12px",
-              boxShadow: "none",
-              transition: "background 0.2s, color 0.2s",
-              cursor: "pointer"
+              width: 48,
+              height: 48,
+              background: "rgba(59, 130, 246, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
             }}
           >
-            Inspecionar
-          </button>
-          <button
-            onClick={() => setActiveTab("measure")}
-            style={{
-              flex: 1,
-              background: activeTab === "measure" ? "#3b82f6" : "transparent",
-              border: "none",
-              borderRadius: 4,
-              fontWeight: 500,
-              fontSize: 12,
-              color: activeTab === "measure" ? "#fff" : "#fff",
-              padding: "6px 12px",
-              boxShadow: "none",
-              transition: "background 0.2s, color 0.2s",
-              cursor: "pointer"
-            }}
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#3b82f6" }}
+            >
+              <path d="M1 14L7.14645 7.85355C7.34171 7.65829 7.34171 7.34171 7.14645 7.14645L1 1M5.5 14.5H12.5"></path>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Inspecionar
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Analise e inspecione elementos selecionados no canvas
+            </p>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255, 255, 255, 0.5)" }}
           >
-            Mensurar
-          </button>
-          <button
-            onClick={() => setActiveTab("import")}
-            style={{
-              flex: 1,
-              background: activeTab === "import" ? "#3b82f6" : "transparent",
-              border: "none",
-              borderRadius: 4,
-              fontWeight: 500,
-              fontSize: 12,
-              color: activeTab === "import" ? "#fff" : "#fff",
-              padding: "6px 8px",
-              boxShadow: "none",
-              transition: "background 0.2s, color 0.2s",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}
-          >
-            Importar Design
-          </button>
-        </div>
-      </div>
+            <path d="M9 18l6-6-6-6"></path>
+          </svg>
+        </motion.div>
 
-      {/* Tab Content */}
-      <div
-        className="scrollable-content"
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "0 0 16px 0",
-          backgroundColor: "transparent"
-        }}
-      >
-        {activeTab === "import" && <ImportDesignTab />}
-        {activeTab === "inspect" && (
-          <>
+        {/* Card Mensurar */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => changeSubPage("measure")}
+          style={{
+            background: "rgba(34, 197, 94, 0.12)",
+            border: "1px solid rgba(34, 197, 94, 0.30)",
+            borderRadius: 8,
+            padding: 20,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              background: "rgba(34, 197, 94, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#22c55e" }}
+            >
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Mensurar
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Meça distâncias e dimensões entre elementos
+            </p>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255, 255, 255, 0.5)" }}
+          >
+            <path d="M9 18l6-6-6-6"></path>
+          </svg>
+        </motion.div>
+
+        {/* Card Importar Design */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => changeSubPage("import")}
+          style={{
+            background: "rgba(168, 85, 247, 0.12)",
+            border: "1px solid rgba(168, 85, 247, 0.30)",
+            borderRadius: 8,
+            padding: 20,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              background: "rgba(168, 85, 247, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#a855f7" }}
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Importar Design
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Importe designs e tokens de outras fontes
+            </p>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255, 255, 255, 0.5)" }}
+          >
+            <path d="M9 18l6-6-6-6"></path>
+          </svg>
+        </motion.div>
+      </div>
+    </div>
+  );
+
+  // Renderiza o conteúdo das subpáginas
+  const renderSubPageContent = () => {
+    switch (activeSubPage) {
+      case "inspect":
+        return (
+          <div
+            className="scrollable-content"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              backgroundColor: "transparent"
+            }}
+          >
             {selectedNode ? (
               <div
                 style={{
@@ -701,15 +926,57 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                 </p>
               </div>
             )}
-          </>
-        )}
+          </div>
+        );
 
-        {activeTab === "measure" && (
+      case "measure":
+        return (
           <div style={{ height: "100%" }}>
             <MeasurementTool />
           </div>
-        )}
-      </div>
+        );
+
+      case "import":
+        return (
+          <div
+            className="scrollable-content"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              backgroundColor: "transparent"
+            }}
+          >
+            <ImportDesignTab />
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "100%"
+      }}
+    >
+      {activeSubPage === "main" ? (
+        <div style={{ height: "100%" }}>{renderMainContent()}</div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%"
+          }}
+        >
+          {renderSubPageContent()}
+        </div>
+      )}
     </div>
   );
 };

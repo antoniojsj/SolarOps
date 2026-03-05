@@ -1,5 +1,6 @@
 import * as React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion/dist/framer-motion";
 
 import Navigation from "./Navigation";
 import NodeList from "./NodeList";
@@ -9,6 +10,9 @@ import BulkErrorList from "./BulkErrorList";
 import InfoPanel from "./InfoPanel";
 import SettingsPanel from "./SettingsPanel";
 import Tools from "./ToolsTab";
+import ToolsSubPageHeader from "./ToolsSubPageHeader";
+import ToolsMainHeader from "./ToolsMainHeader";
+import ToolsNavigation from "./ToolsNavigation";
 
 import "../styles/figma.ds.css";
 import "../styles/ui.css";
@@ -99,7 +103,11 @@ const App = ({}) => {
   // Interface ErrorItem movida para o escopo global para ser reutilizada
 
   const [errorArray, setErrorArray] = useState<ErrorItem[]>([]);
-  const [activePage, setActivePage] = useState("page");
+  const [activePage, setActivePage] = useState("initial");
+  const [toolsSubPageInfo, setToolsSubPageInfo] = useState({
+    isSubPage: false,
+    title: ""
+  });
   const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
   const [activeError, setActiveError] = React.useState<any>({});
   const [selectedNode, setSelectedNode] = React.useState<any>({});
@@ -143,6 +151,7 @@ const App = ({}) => {
   const activeComponentLibrariesRef = React.useRef<ComponentLibrary[]>([]);
   const activePageRef = React.useRef(activePage);
   const [auditStarted, setAuditStarted] = useState(false);
+  const [toolsStarted, setToolsStarted] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [infoPanelVisible, setInfoPanelVisible] = useState(false);
   // Definição do tipo para o resultado da análise
@@ -172,6 +181,76 @@ const App = ({}) => {
     setActiveNodeIds(ids);
   };
 
+  // Adicionar estado para controlar subpáginas de Tools
+  const [isToolsSubPage, setIsToolsSubPage] = useState(false);
+  const [toolsSubPageTitle, setToolsSubPageTitle] = useState("");
+
+  // Controlar toolsStarted baseado na página ativa
+  useEffect(() => {
+    if (activePage === "tools") {
+      console.log("[UI] Ativando toolsStarted = true (página ativa é tools)");
+      setToolsStarted(true);
+    } else {
+      console.log(
+        "[UI] Desativando toolsStarted = false (página ativa não é tools)"
+      );
+      setToolsStarted(false);
+    }
+  }, [activePage]);
+
+  // Escutar mensagens do ToolsTab
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      console.log("[App.tsx] Mensagem recebida:", event.data);
+
+      // Verificar se é mensagem do ToolsTab (direta, não pluginMessage)
+      if (event.data && event.data.type === "tools-subpage-changed") {
+        const payload = event.data.payload;
+        console.log("[App.tsx] Recebendo mudança de subpágina:", payload);
+        setIsToolsSubPage(payload.isSubPage);
+        setToolsSubPageTitle(payload.title || "");
+        console.log(
+          "[App.tsx] Estado atualizado - isToolsSubPage:",
+          payload.isSubPage,
+          "toolsSubPageTitle:",
+          payload.title
+        );
+      }
+
+      // Verificar se é mensagem do plugin (formato antigo)
+      const { type, payload } = event.data.pluginMessage || {};
+      if (type === "tools-subpage-changed") {
+        console.log(
+          "[App.tsx] Recebendo mudança de subpágina (plugin):",
+          payload
+        );
+        setIsToolsSubPage(payload.isSubPage);
+        setToolsSubPageTitle(payload.title || "");
+        console.log(
+          "[App.tsx] Estado atualizado (plugin) - isToolsSubPage:",
+          payload.isSubPage,
+          "toolsSubPageTitle:",
+          payload.title
+        );
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  const handleToolsSubPageChange = (isSubPage: boolean, title?: string) => {
+    console.log("[App.tsx] Recebendo notificação do ToolsTab:", {
+      isSubPage,
+      title
+    });
+    setToolsSubPageInfo({ isSubPage, title: title || "" });
+  };
+
+  const handleToolsBackToMain = () => {
+    setToolsSubPageInfo({ isSubPage: false, title: "" });
+  };
+
   const updateNavigation = (page: string) => {
     console.log(
       "[UI] Navegando para página:",
@@ -180,6 +259,15 @@ const App = ({}) => {
       activeNodeIds.length
     );
     setActivePage(page);
+
+    // Controlar toolsStarted
+    if (page === "tools") {
+      console.log("[UI] Ativando toolsStarted = true");
+      setToolsStarted(true);
+    } else {
+      console.log("[UI] Desativando toolsStarted = false");
+      setToolsStarted(false);
+    }
 
     parent.postMessage(
       {
@@ -1134,8 +1222,16 @@ const App = ({}) => {
 
   return (
     <div className="container">
-      {/* Renderizar Navigation quando a auditoria foi iniciada */}
-      {auditStarted && (
+      {/* Debug para verificar qual página está ativa */}
+      {console.log(
+        "[App] Renderizando - activePage:",
+        activePage,
+        "auditStarted:",
+        auditStarted
+      )}
+
+      {/* Renderizar Navigation quando a auditoria foi iniciada E não estiver na página Tools */}
+      {auditStarted && activePage !== "tools" && (
         <Navigation
           onPageSelection={updateNavigation}
           activePage={activePage}
@@ -1151,7 +1247,61 @@ const App = ({}) => {
           libraries={activeComponentLibraries}
           onUpdateLibraries={handleUpdateLibraries}
           localStyles={localStyles}
+          designTokens={designTokens}
         />
+      )}
+
+      {/* Renderizar ToolsNavigation quando estiver na página Tools E não estiver em subpágina */}
+      {toolsStarted && !isToolsSubPage && (
+        <ToolsNavigation
+          onPageSelection={updateNavigation}
+          activePage={activePage}
+          onBackToInitialContent={() => {
+            setToolsStarted(false);
+            setActivePage("initial");
+          }}
+        />
+      )}
+
+      {/* Header de subpágina Tools - aparece quando está em subpágina (independente de toolsStarted) */}
+      {console.log(
+        "[App.tsx] Renderizando header - activePage:",
+        activePage,
+        "toolsStarted:",
+        toolsStarted,
+        "isToolsSubPage:",
+        isToolsSubPage,
+        "toolsSubPageTitle:",
+        toolsSubPageTitle
+      )}
+      {isToolsSubPage && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            background: "#2d2d2d"
+          }}
+        >
+          <ToolsSubPageHeader
+            title={toolsSubPageTitle}
+            onBack={() => {
+              console.log("[App.tsx] Botão voltar clicado");
+              setIsToolsSubPage(false);
+              setToolsSubPageTitle("");
+              // Enviar mensagem para o ToolsTab voltar para página principal
+              window.postMessage(
+                {
+                  type: "tools-back-to-main",
+                  payload: {}
+                },
+                "*"
+              );
+            }}
+          />
+        </div>
       )}
 
       {/* Se estiver na página de settings, renderize só o painel de settings */}
