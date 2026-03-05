@@ -3,8 +3,6 @@ import { useState } from "react";
 
 import Navigation from "./Navigation";
 import NodeList from "./NodeList";
-import LibraryPage from "./LibraryPage";
-import StylesPage from "./StylesPage";
 import InitialContent from "./InitialContent";
 import Panel from "./Panel";
 import BulkErrorList from "./BulkErrorList";
@@ -105,6 +103,7 @@ const App = ({}) => {
   const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
   const [activeError, setActiveError] = React.useState<any>({});
   const [selectedNode, setSelectedNode] = React.useState<any>({});
+  const [fullNodeData, setFullNodeData] = React.useState<any>(null);
   const [isVisible, setIsVisible] = React.useState(false);
   // Usa a interface NodeItem que é mais completa e permite todas as propriedades necessárias.
   const [nodeArray, setNodeArray] = useState<NodeItem[] | null>(null);
@@ -124,15 +123,16 @@ const App = ({}) => {
   const [initialLoad, setInitialLoad] = React.useState(false);
   const [emptyState, setEmptyState] = React.useState(false);
   const [localStyles, setLocalStyles] = useState({});
-  const [stylesInUse, setStylesInUse] = useState({});
   // Tipos para as bibliotecas de componentes
   interface ComponentLibrary {
     id: string;
     name: string;
-    tokens?: any;
     fillsCount?: number;
     textCount?: number;
     effectsCount?: number;
+    fills?: any[];
+    text?: any[];
+    effects?: any[];
   }
 
   const librariesRef = React.useRef<ComponentLibrary[]>([]);
@@ -519,25 +519,30 @@ const App = ({}) => {
           setActiveComponentLibraries(formattedLibraries);
         }
       } else if (type === "fetched storage") {
-        let clientStorage = JSON.parse(storage);
-
-        setIgnoreErrorArray(ignoredErrorArray => [
-          ...ignoredErrorArray,
-          ...clientStorage
-        ]);
+        if (storage) {
+          let clientStorage = JSON.parse(storage);
+          setIgnoreErrorArray(ignoredErrorArray => [
+            ...ignoredErrorArray,
+            ...clientStorage
+          ]);
+        }
       } else if (type === "fetched active page") {
         console.log("[LOG] fetched active page", { t: performance.now() - t0 });
-        let clientStorage = JSON.parse(storage);
-        setActivePage(clientStorage);
+        if (storage) {
+          let clientStorage = JSON.parse(storage);
+          setActivePage(clientStorage);
+        }
       } else if (type === "fetched border radius") {
         console.log("[LOG] fetched border radius", {
           t: performance.now() - t0
         });
         // Update border radius values from storage
-        let clientStorage = JSON.parse(storage);
-        // Sort the array first
-        clientStorage = clientStorage.sort((a, b) => a - b);
-        setBorderRadiusValues([...clientStorage]);
+        if (storage) {
+          let clientStorage = JSON.parse(storage);
+          // Sort the array first
+          clientStorage = clientStorage.sort((a, b) => a - b);
+          setBorderRadiusValues([...clientStorage]);
+        }
       } else if (type === "reset storage") {
         console.log("[LOG] reset storage", { t: performance.now() - t0 });
         // let clientStorage = JSON.parse(storage);
@@ -555,6 +560,27 @@ const App = ({}) => {
         setSelectedNode(() => JSON.parse(message));
 
         // Ask the controller to lint the layers for errors.
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "step-3",
+              libraries: librariesRef.current
+            }
+          },
+          "*"
+        );
+      } else if (type === "full-node-data") {
+        // Update selectedNode with full, detailed data from plugin
+        const fullNodeData = pluginMessage.data;
+        if (fullNodeData) {
+          console.log(
+            "[App] Full node data received from plugin:",
+            fullNodeData
+          );
+          setSelectedNode(() => fullNodeData);
+        }
+      } else if (type === "user-libs-saved") {
+        console.log("[App] user-libs-saved recebido. Success:", success);
         parent.postMessage(
           {
             pluginMessage: {
@@ -654,7 +680,7 @@ const App = ({}) => {
         console.log("[LOG] remote-styles-imported", {
           t: performance.now() - t0
         });
-        setStylesInUse(message);
+        // Removido setStylesInUse pois a página de estilos foi removida
       } else if (type === "selection-update") {
         console.log("[LOG] selection-update", { t: performance.now() - t0 });
         setActiveNodeIds(selectedNodeIds || []);
@@ -1055,10 +1081,6 @@ const App = ({}) => {
     "[App] Passando activeComponentLibraries para SettingsPanel:",
     activeComponentLibraries
   );
-  console.log(
-    "[App] Passando activeComponentLibraries para LibraryPage:",
-    activeComponentLibraries
-  );
 
   return (
     <div className="container">
@@ -1098,18 +1120,8 @@ const App = ({}) => {
           activeComponentLibraries={activeComponentLibraries}
         />
       )}
-      {activePage === "library" && (
-        <LibraryPage
-          libraries={activeComponentLibraries}
-          onUpdateLibraries={handleUpdateLibraries}
-          localStyles={localStyles}
-          activeComponentLibraries={activeComponentLibraries}
-        />
-      )}
       {activePage === "tools" ? (
         <Tools selectedNode={selectedNode} onInspectClick={() => {}} />
-      ) : activePage === "styles" ? (
-        <StylesPage stylesInUse={stylesInUse} />
       ) : activePage === "layers" ? (
         (() => {
           console.log("[DEBUG] Renderizando NodeList", {
@@ -1256,8 +1268,6 @@ const App = ({}) => {
       {/* Fallback para evitar tela branca */}
       {![
         "settings",
-        "library",
-        "styles",
         "bulk",
         "initial",
         "layers",
