@@ -10,6 +10,7 @@ const ImportContainer = styled.div`
   height: 100%;
   overflow: hidden;
   padding: 0;
+  position: relative;
 `;
 
 const CodeInputContainer = styled.div`
@@ -144,13 +145,22 @@ const SettingInput = styled.input`
   }
 `;
 
+const Divider = styled.div`
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  position: absolute;
+  bottom: 70px;
+  left: 0;
+  right: 0;
+`;
+
 const CreateButton = styled.button`
   background: #3b82f6;
   color: white;
   border: none;
   border-radius: 6px;
-  padding: 10px 16px;
-  font-size: 13px;
+  padding: 12px 16px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
@@ -158,7 +168,11 @@ const CreateButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: calc(100% - 20px);
+  position: absolute;
+  bottom: 16px;
+  left: 10px;
+  right: 10px;
 
   &:hover:not(:disabled) {
     background: #2563eb;
@@ -863,11 +877,13 @@ const ImportDesignTab = () => {
         </SettingItem>
       </SettingsBox>
 
+      <Divider />
+
       <CreateButton
         onClick={handleImport}
         disabled={isLoading || (!html.trim() && !css.trim())}
       >
-        {isLoading ? "⏳ Importando..." : "Create"}
+        {isLoading ? "⏳ Importando..." : "Importar"}
       </CreateButton>
     </ImportContainer>
   );

@@ -139,31 +139,36 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           display: "flex",
           flexDirection: "column",
           gap: 12,
-          padding: "16px",
           flex: 1
         }}
       >
         {/* Card Inspecionar */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+        <div
           onClick={() => changeSubPage("inspect")}
           style={{
             background: "rgba(59, 130, 246, 0.12)",
             border: "1px solid rgba(59, 130, 246, 0.30)",
             borderRadius: 8,
-            padding: 20,
+            padding: 16,
             cursor: "pointer",
             transition: "all 0.2s ease",
             display: "flex",
             alignItems: "center",
             gap: 16
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(59, 130, 246, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.30)";
+          }}
         >
           <div
             style={{
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               background: "rgba(59, 130, 246, 0.2)",
               borderRadius: 8,
               display: "flex",
@@ -173,8 +178,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
             }}
           >
             <svg
-              width="24"
-              height="24"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -205,7 +210,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                 lineHeight: 1.4
               }}
             >
-              Analise e inspecione elementos selecionados no canvas
+              Analise elementos no canvas
             </p>
           </div>
           <svg
@@ -221,29 +226,35 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           >
             <path d="M9 18l6-6-6-6"></path>
           </svg>
-        </motion.div>
+        </div>
 
         {/* Card Mensurar */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+        <div
           onClick={() => changeSubPage("measure")}
           style={{
             background: "rgba(34, 197, 94, 0.12)",
             border: "1px solid rgba(34, 197, 94, 0.30)",
             borderRadius: 8,
-            padding: 20,
+            padding: 16,
             cursor: "pointer",
             transition: "all 0.2s ease",
             display: "flex",
             alignItems: "center",
             gap: 16
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(34, 197, 94, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(34, 197, 94, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.30)";
+          }}
         >
           <div
             style={{
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               background: "rgba(34, 197, 94, 0.2)",
               borderRadius: 8,
               display: "flex",
@@ -253,8 +264,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
             }}
           >
             <svg
-              width="24"
-              height="24"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -303,29 +314,35 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           >
             <path d="M9 18l6-6-6-6"></path>
           </svg>
-        </motion.div>
+        </div>
 
         {/* Card Importar Design */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+        <div
           onClick={() => changeSubPage("import")}
           style={{
             background: "rgba(168, 85, 247, 0.12)",
             border: "1px solid rgba(168, 85, 247, 0.30)",
             borderRadius: 8,
-            padding: 20,
+            padding: 16,
             cursor: "pointer",
             transition: "all 0.2s ease",
             display: "flex",
             alignItems: "center",
             gap: 16
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(168, 85, 247, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(168, 85, 247, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.30)";
+          }}
         >
           <div
             style={{
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               background: "rgba(168, 85, 247, 0.2)",
               borderRadius: 8,
               display: "flex",
@@ -335,8 +352,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
             }}
           >
             <svg
-              width="24"
-              height="24"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -385,7 +402,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           >
             <path d="M9 18l6-6-6-6"></path>
           </svg>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
