@@ -6,7 +6,6 @@ import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
 import ImportDesignTab from "./ImportDesignTab";
 import CollapsibleSection from "./CollapsibleSection";
-import ToolsSubPageHeader from "./ToolsSubPageHeader";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `

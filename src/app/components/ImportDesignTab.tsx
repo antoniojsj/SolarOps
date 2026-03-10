@@ -150,40 +150,42 @@ const Divider = styled.div`
   background: rgba(255, 255, 255, 0.1);
   position: absolute;
   bottom: 70px;
-  left: 0;
-  right: 0;
+  left: -32px;
+  width: calc(100% + 64px);
 `;
 
 const CreateButton = styled.button`
-  background: #3b82f6;
-  color: white;
+  background: #18a0fb;
+  color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 12px 16px;
-  font-size: 14px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-family: "Inter", sans-serif;
+  font-size: 16px !important;
+  line-height: 1;
+  letter-spacing: 0.01em;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
-  height: 38px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: calc(100% - 20px);
   position: absolute;
   bottom: 16px;
-  left: 10px;
-  right: 10px;
+  left: 0;
+  right: 0;
 
   &:hover:not(:disabled) {
-    background: #2563eb;
+    background: #0f86d9;
   }
 
   &:active:not(:disabled) {
-    background: #1d4ed8;
+    background: #0c74c2;
   }
 
   &:disabled {
-    background: #6b7280;
+    background: rgba(255, 255, 255, 0.16);
     cursor: not-allowed;
     opacity: 0.6;
   }

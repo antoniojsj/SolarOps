@@ -4,11 +4,11 @@ import DocumentationSearch from "./DocumentationSearch";
 import ContrastChecker from "./ContrastChecker";
 import Tools from "./ToolsTab";
 import WCAGContent from "./WCAGContent";
+import AccessibilityTab from "./AccessibilityTab";
 
 function InitialContent(props) {
   const [settingsPanelVisible, setSettingsPanelVisible] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("auditoria"); // 'auditoria', 'acessibilidade' ou 'tools'
-  const [accessibilityTab, setAccessibilityTab] = React.useState("contrast"); // 'contrast' ou 'docs'
   const [selectedNode, setSelectedNode] = React.useState<any>(null);
   const [isCheckingContrast, setIsCheckingContrast] = React.useState(false);
 
@@ -187,19 +187,6 @@ function InitialContent(props) {
       nodeType: selectedNode?.type
     });
   }, [selectedNode]);
-
-  // Iniciar checagem de contraste somente quando a aba de acessibilidade estiver ativa
-  React.useEffect(() => {
-    if (activeTab === "acessibilidade") {
-      // garantir sub-aba contrast ativa
-      if (accessibilityTab === "contrast") {
-        setIsCheckingContrast(true);
-      }
-    } else if (activeTab !== "acessibilidade") {
-      // ao sair da aba de acessibilidade, interromper checagem
-      setIsCheckingContrast(false);
-    }
-  }, [activeTab, accessibilityTab]);
 
   return (
     <div
@@ -623,107 +610,15 @@ function InitialContent(props) {
             style={{
               width: "100%",
               height: "100%",
-              padding: "0 16px",
-              margin: "0",
+              padding: "24px 16px 0",
+              margin: 0,
               boxSizing: "border-box",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden"
             }}
           >
-            {/* Tabs */}
-            <div
-              style={{
-                padding: "24px 0 16px 0",
-                margin: "0",
-                width: "100%",
-                boxSizing: "border-box"
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 4,
-                  padding: "2px",
-                  margin: "0",
-                  boxSizing: "border-box"
-                }}
-              >
-                <button
-                  onClick={() => setAccessibilityTab("contrast")}
-                  style={{
-                    flex: 1,
-                    background:
-                      accessibilityTab === "contrast"
-                        ? "#3b82f6"
-                        : "transparent",
-                    border: "none",
-                    borderRadius: 4,
-                    fontWeight: 500,
-                    fontSize: 12,
-                    color: "#fff",
-                    padding: "6px 18px",
-                    boxShadow: "none",
-                    transition: "background 0.2s, color 0.2s",
-                    cursor: "pointer"
-                  }}
-                >
-                  Contraste
-                </button>
-                <button
-                  onClick={() => setAccessibilityTab("docs")}
-                  style={{
-                    flex: 1,
-                    background:
-                      accessibilityTab === "docs" ? "#3b82f6" : "transparent",
-                    border: "none",
-                    borderRadius: 4,
-                    fontWeight: 500,
-                    fontSize: 12,
-                    color: "#fff",
-                    padding: "6px 18px",
-                    boxShadow: "none",
-                    transition: "background 0.2s, color 0.2s",
-                    cursor: "pointer"
-                  }}
-                >
-                  Documentações
-                </button>
-                {null}
-              </div>
-            </div>
-
-            {/* Content */}
-            <div
-              style={{
-                flex: 1,
-                width: "100%",
-                padding: "0",
-                margin: "0",
-                boxSizing: "border-box",
-                overflowY: "auto"
-              }}
-            >
-              {accessibilityTab === "contrast" && (
-                <ContrastChecker
-                  isVisible={true}
-                  selectedNode={selectedNode}
-                  onBack={() => setIsCheckingContrast(false)}
-                />
-              )}
-
-              {accessibilityTab === "docs" && (
-                <WCAGContent
-                  onSearch={query => {
-                    console.log("Buscar documento:", query);
-                  }}
-                  onDocumentSelect={docId => {
-                    console.log("Documento selecionado:", docId);
-                  }}
-                />
-              )}
-            </div>
+            <AccessibilityTab selectedNode={selectedNode} />
           </div>
         )}
       </div>

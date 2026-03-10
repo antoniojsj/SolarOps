@@ -104,10 +104,6 @@ const App = ({}) => {
 
   const [errorArray, setErrorArray] = useState<ErrorItem[]>([]);
   const [activePage, setActivePage] = useState("initial");
-  const [toolsSubPageInfo, setToolsSubPageInfo] = useState({
-    isSubPage: false,
-    title: ""
-  });
   const [ignoredErrorArray, setIgnoreErrorArray] = useState<ErrorItem[]>([]);
   const [activeError, setActiveError] = React.useState<any>({});
   const [selectedNode, setSelectedNode] = React.useState<any>({});
@@ -181,9 +177,12 @@ const App = ({}) => {
     setActiveNodeIds(ids);
   };
 
-  // Adicionar estado para controlar subpáginas de Tools
-  const [isToolsSubPage, setIsToolsSubPage] = useState(false);
-  const [toolsSubPageTitle, setToolsSubPageTitle] = useState("");
+  // Estado para controlar subpáginas (Tools, Acessibilidade, etc.)
+  const [isSubPage, setIsSubPage] = useState(false);
+  const [subPageTitle, setSubPageTitle] = useState("");
+  const [subPageContext, setSubPageContext] = useState<
+    "tools" | "accessibility" | null
+  >(null);
 
   // Controlar toolsStarted baseado na página ativa
   useEffect(() => {
@@ -198,23 +197,32 @@ const App = ({}) => {
     }
   }, [activePage]);
 
-  // Escutar mensagens do ToolsTab
+  // Escutar mensagens de mudança para subpáginas (Tools e Acessibilidade)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       console.log("[App.tsx] Mensagem recebida:", event.data);
 
-      // Verificar se é mensagem do ToolsTab (direta, não pluginMessage)
+      // Verificar se é mensagem de subpágina vinda do ToolsTab ou AccessibilityTab (direta, não pluginMessage)
       if (event.data && event.data.type === "tools-subpage-changed") {
         const payload = event.data.payload;
-        console.log("[App.tsx] Recebendo mudança de subpágina:", payload);
-        setIsToolsSubPage(payload.isSubPage);
-        setToolsSubPageTitle(payload.title || "");
         console.log(
-          "[App.tsx] Estado atualizado - isToolsSubPage:",
-          payload.isSubPage,
-          "toolsSubPageTitle:",
-          payload.title
+          "[App.tsx] Recebendo mudança de subpágina (tools):",
+          payload
         );
+        setIsSubPage(payload.isSubPage);
+        setSubPageTitle(payload.title || "");
+        setSubPageContext(payload.isSubPage ? "tools" : null);
+      }
+
+      if (event.data && event.data.type === "accessibility-subpage-changed") {
+        const payload = event.data.payload;
+        console.log(
+          "[App.tsx] Recebendo mudança de subpágina (accessibility):",
+          payload
+        );
+        setIsSubPage(payload.isSubPage);
+        setSubPageTitle(payload.title || "");
+        setSubPageContext(payload.isSubPage ? "accessibility" : null);
       }
 
       // Verificar se é mensagem do plugin (formato antigo)
@@ -224,32 +232,15 @@ const App = ({}) => {
           "[App.tsx] Recebendo mudança de subpágina (plugin):",
           payload
         );
-        setIsToolsSubPage(payload.isSubPage);
-        setToolsSubPageTitle(payload.title || "");
-        console.log(
-          "[App.tsx] Estado atualizado (plugin) - isToolsSubPage:",
-          payload.isSubPage,
-          "toolsSubPageTitle:",
-          payload.title
-        );
+        setIsSubPage(payload.isSubPage);
+        setSubPageTitle(payload.title || "");
+        setSubPageContext(payload.isSubPage ? "tools" : null);
       }
     };
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
-
-  const handleToolsSubPageChange = (isSubPage: boolean, title?: string) => {
-    console.log("[App.tsx] Recebendo notificação do ToolsTab:", {
-      isSubPage,
-      title
-    });
-    setToolsSubPageInfo({ isSubPage, title: title || "" });
-  };
-
-  const handleToolsBackToMain = () => {
-    setToolsSubPageInfo({ isSubPage: false, title: "" });
-  };
 
   const updateNavigation = (page: string) => {
     console.log(
@@ -1251,8 +1242,8 @@ const App = ({}) => {
         />
       )}
 
-      {/* Renderizar ToolsNavigation quando estiver na página Tools E não estiver em subpágina */}
-      {toolsStarted && !isToolsSubPage && (
+      {/* Renderizar ToolsNavigation quando estiver na página Tools e não estiver em subpágina */}
+      {toolsStarted && !(subPageContext === "tools" && isSubPage) && (
         <ToolsNavigation
           onPageSelection={updateNavigation}
           activePage={activePage}
@@ -1263,18 +1254,8 @@ const App = ({}) => {
         />
       )}
 
-      {/* Header de subpágina Tools - aparece quando está em subpágina (independente de toolsStarted) */}
-      {console.log(
-        "[App.tsx] Renderizando header - activePage:",
-        activePage,
-        "toolsStarted:",
-        toolsStarted,
-        "isToolsSubPage:",
-        isToolsSubPage,
-        "toolsSubPageTitle:",
-        toolsSubPageTitle
-      )}
-      {isToolsSubPage && (
+      {/* Header de subpágina (Tools e Acessibilidade) */}
+      {isSubPage && (
         <div
           style={{
             position: "absolute",
@@ -1286,15 +1267,22 @@ const App = ({}) => {
           }}
         >
           <ToolsSubPageHeader
-            title={toolsSubPageTitle}
+            title={subPageTitle}
             onBack={() => {
               console.log("[App.tsx] Botão voltar clicado");
-              setIsToolsSubPage(false);
-              setToolsSubPageTitle("");
-              // Enviar mensagem para o ToolsTab voltar para página principal
+              setIsSubPage(false);
+              setSubPageTitle("");
+              setSubPageContext(null);
+
+              // Enviar mensagem para a aba correta voltar para a página principal
+              const messageType =
+                subPageContext === "tools"
+                  ? "tools-back-to-main"
+                  : "accessibility-back-to-main";
+
               window.postMessage(
                 {
-                  type: "tools-back-to-main",
+                  type: messageType,
                   payload: {}
                 },
                 "*"

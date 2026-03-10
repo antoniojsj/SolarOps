@@ -11,7 +11,15 @@ const ToolsSubPageHeader: React.FC<ToolsSubPageHeaderProps> = ({
   onBack
 }) => {
   return (
-    <div className="navigation-wrapper">
+    <div
+      className="navigation-wrapper"
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 1000,
+        background: "#2d2d2d"
+      }}
+    >
       <nav className="nav">
         <motion.button
           className="icon icon--button info-panel-icon back-button"
