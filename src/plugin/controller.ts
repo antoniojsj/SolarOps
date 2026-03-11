@@ -2001,6 +2001,15 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     return;
   }
 
+  // Análise de contraste - Acessibilidade (deve estar no handler principal que recebe as mensagens)
+  if (msg.type === "color-contrast-scan") {
+    console.log(
+      "[Controller] Recebido color-contrast-scan, iniciando análise..."
+    );
+    analyzeSelectedContrast(msg);
+    return;
+  }
+
   console.log("[Controller] Mensagem recebida da UI:", msg.type);
 
   // Verificar se é uma mensagem de adicionar nota
@@ -4181,7 +4190,7 @@ figma.on("selectionchange", () => {
         selection: nodesData
       });
     } else {
-      // Nenhum nó selecionado
+      // Nenhum nó selecionado - enviar array vazio
       figma.ui.postMessage({
         type: "selection-changed",
         selection: []
@@ -4191,3 +4200,425 @@ figma.on("selectionchange", () => {
     console.error("Erro no listener selectionchange:", error);
   }
 });
+
+// Função para analisar contraste dos elementos selecionados (implementação idêntica ao accessibility)
+const analyzeSelectedContrast = async (msg?: any) => {
+  try {
+    // Extrair page da mensagem se disponível, igual ao plugin accessibility
+    let page;
+    if (msg && msg.page) {
+      page = msg.page;
+    } else {
+      // Usar a página atual como fallback
+      page = figma.currentPage;
+    }
+
+    // Resolver o frame a analisar: seleção atual ou primeiro frame da página (igual ao accessibility)
+    let frameNode: SceneNode | PageNode | null = null;
+    const currentSelection = figma.currentPage.selection;
+    for (const node of currentSelection) {
+      if (
+        node.type === "FRAME" ||
+        node.type === "COMPONENT" ||
+        node.type === "INSTANCE"
+      ) {
+        frameNode = node;
+        break;
+      }
+    }
+    if (!frameNode && figma.currentPage.children.length > 0) {
+      const first = figma.currentPage.children[0];
+      if (
+        first.type === "FRAME" ||
+        first.type === "COMPONENT" ||
+        first.type === "INSTANCE"
+      ) {
+        frameNode = first;
+      }
+    }
+    if (!frameNode) {
+      frameNode = figma.currentPage;
+    }
+
+    // Funções auxiliares para análise de contraste (idênticas ao accessibility)
+    const walk = (node, fn, context) => {
+      const passdown = fn(node, context);
+      if (passdown === "skipchildren") {
+        return;
+      }
+
+      if (node.children) {
+        node.children.forEach(child => walk(child, fn, passdown));
+      }
+    };
+
+    const mapNodeIds = (original, dup) => {
+      const map = new Map();
+      const fromIds = [];
+      const toIds = [];
+
+      // walking original and duplicate should always return corresponding nodes in same order
+      walk(original, node => fromIds.push(node.id));
+      walk(dup, node => toIds.push(node.id));
+
+      if (fromIds.length !== toIds.length) {
+        // TODO: can this ever happen?
+        return map;
+      }
+
+      toIds.forEach((id, idx) => {
+        map.set(id, fromIds[idx]);
+      });
+
+      return map;
+    };
+
+    const rgbToCssColor = ({ r, g, b }) =>
+      `rgb(${r * 255},${g * 255},${b * 255})`;
+
+    const flattenColors = (fg, bg) => {
+      // https://en.wikipedia.org/wiki/Alpha_compositing
+      const a = fg.a + bg.a * (1 - fg.a);
+
+      if (a === 0) {
+        return { r: 0, g: 0, b: 0, a: 0 };
+      }
+
+      return {
+        r: (fg.r * fg.a + bg.r * bg.a * (1 - fg.a)) / a,
+        g: (fg.g * fg.a + bg.g * bg.a * (1 - fg.a)) / a,
+        b: (fg.b * fg.a + bg.b * bg.a * (1 - fg.a)) / a,
+        a
+      };
+    };
+
+    const formatContrastRatio = contrastRatio =>
+      isNaN(contrastRatio) ? "NA" : `${contrastRatio.toFixed(2)}:1`;
+
+    const detailFor = (numFail, numPass, minCR, maxCR) => {
+      const note =
+        minCR === maxCR
+          ? formatContrastRatio(minCR)
+          : `${formatContrastRatio(minCR)} - ${formatContrastRatio(maxCR)}`;
+
+      if (numFail > 0 && numPass > 0) {
+        return {
+          status: "mixed",
+          contrastRatio: minCR,
+          note
+        };
+      }
+
+      if (numFail > 0) {
+        return {
+          status: "fail",
+          contrastRatio: minCR,
+          note
+        };
+      }
+
+      if (numPass > 0) {
+        return {
+          status: "pass",
+          contrastRatio: minCR,
+          note
+        };
+      }
+
+      return { status: "unknown", contrastRatio: 0 };
+    };
+
+    const srgbLuminance = ({ r, g, b }) => {
+      // from tinycolor
+      // http://www.w3.org/TR/2008/REC-WCAG20-20081211/#relativeluminancedef
+      let R;
+      let G;
+      let B;
+
+      if (r <= 0.03928) {
+        R = r / 12.92;
+      } else {
+        R = Math.pow((r + 0.055) / 1.055, 2.4);
+      }
+
+      if (g <= 0.03928) {
+        G = g / 12.92;
+      } else {
+        G = Math.pow((g + 0.055) / 1.055, 2.4);
+      }
+
+      if (b <= 0.03928) {
+        B = b / 12.92;
+      } else {
+        B = Math.pow((b + 0.055) / 1.055, 2.4);
+      }
+
+      return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    };
+
+    const pageContainingNode = node => {
+      while (node?.type !== "PAGE") {
+        node = node.parent;
+      }
+      return node.type === "PAGE" ? node : null;
+    };
+
+    const computeTypeContrast = (textNodeInfo, bgImageData) => {
+      const { r, g, b } = bgImageData;
+      const bgLuminance = srgbLuminance({ r, g, b });
+
+      let numPass = 0;
+      let numFail = 0;
+      let minCR = 0;
+      let maxCR = 0;
+
+      for (const { color, textSize, isBold } of textNodeInfo.textStyleSamples) {
+        const { r, g, b } = color;
+        const textLuminance = srgbLuminance({ r, g, b });
+        const contrastRatio = (bgLuminance + 0.05) / (textLuminance + 0.05);
+
+        if (textSize >= 18 || (isBold && textSize >= 14)) {
+          // Large text: 3:1 ratio required
+          if (contrastRatio >= 3) {
+            numPass++;
+          } else {
+            numFail++;
+          }
+        } else {
+          // Small text: 4.5:1 ratio required
+          if (contrastRatio >= 4.5) {
+            numPass++;
+          } else {
+            numFail++;
+          }
+        }
+
+        minCR = Math.min(minCR || 999, contrastRatio);
+        maxCR = Math.max(maxCR || 0, contrastRatio);
+      }
+
+      return detailFor(numFail, numPass, minCR, maxCR);
+    };
+
+    const contrast = {
+      walk,
+      mapNodeIds,
+      rgbToCssColor,
+      flattenColors,
+      formatContrastRatio,
+      detailFor,
+      srgbLuminance,
+      pageContainingNode,
+      computeTypeContrast
+    };
+
+    console.log("[Controller] Iniciando análise de contraste completa...");
+
+    // Resolver o nó a analisar: se a UI enviou um id válido de frame, usar; senão usar seleção/primeiro frame
+    const pageId = page && typeof page === "object" && page.id;
+    let frameNodeToAnalyze: BaseNode | null = null;
+    if (pageId && pageId !== "current-page") {
+      frameNodeToAnalyze = await figma.getNodeByIdAsync(pageId);
+    }
+    if (!frameNodeToAnalyze) {
+      frameNodeToAnalyze = frameNode;
+    }
+    if (!frameNodeToAnalyze) {
+      figma.ui.postMessage({
+        type: "color-contrast-result",
+        data: {
+          result: null,
+          error: "Nenhum frame ou página disponível para análise."
+        }
+      });
+      return;
+    }
+
+    const EXPORT_SETTINGS = {
+      format: "PNG",
+      contentsOnly: false,
+      constraint: {
+        type: "SCALE",
+        value: 1
+      }
+    };
+
+    const duplicate = (frameNodeToAnalyze as SceneNode).clone();
+    const nodeIdMap = mapNodeIds(frameNodeToAnalyze as SceneNode, duplicate);
+
+    console.log("[Controller] Frame clonado, exportando imagem com texto...");
+
+    const imageWithTextLayers = await duplicate.exportAsync(EXPORT_SETTINGS);
+
+    console.log(
+      "[Controller] Imagem com texto exportada, processando nós de texto..."
+    );
+
+    const textNodes = [];
+
+    contrast.walk(
+      duplicate,
+      (node, { opacity }) => {
+        let newOpacity = opacity;
+        if ("opacity" in node && node.opacity) {
+          newOpacity *= node.opacity;
+        }
+
+        if (node.type === "TEXT" && !!node.visible) {
+          textNodes.push({
+            textNode: node,
+            effectiveOpacity: newOpacity * node.opacity
+          });
+        }
+
+        if (!("visible" in node) || !node.visible) {
+          return "skipchildren";
+        }
+
+        return { opacity: newOpacity };
+      },
+      { opacity: 1 }
+    );
+
+    console.log(`[Controller] ${textNodes.length} nós de texto encontrados`);
+
+    const textNodeInfos = textNodes
+      .map(({ textNode, effectiveOpacity }) => {
+        let textStyleSamples = [];
+
+        const colorsForPaint = paint => {
+          switch (paint.type) {
+            case "SOLID":
+              return [
+                {
+                  ...paint.color,
+                  a: paint.opacity === undefined ? 1 : paint.opacity
+                }
+              ];
+            case "GRADIENT_LINEAR":
+            case "GRADIENT_RADIAL":
+            case "GRADIENT_ANGULAR":
+            case "GRADIENT_DIAMOND":
+              return paint.gradientStops.map(stop => stop.color);
+            case "IMAGE":
+            default:
+              return [];
+          }
+        };
+
+        const isBold = ({ style }) => !!style.match(/medium|bold|black/i);
+        const { fills, fontName, fontSize } = textNode;
+        const { mixed } = figma;
+
+        if (fontName === mixed || fontSize === mixed || fills === mixed) {
+          const samples = new Set();
+          for (let i = textNode.characters.length - 1; i >= 0; i -= 1) {
+            const colors = Array.from(
+              textNode.getRangeFills(i, i + 1)
+            ).flatMap(paint => colorsForPaint(paint));
+            colors.forEach(color => {
+              samples.add(
+                JSON.stringify({
+                  isBold: isBold(textNode.getRangeFontName(i, i + 1)),
+                  textSize: textNode.getRangeFontSize(i, i + 1),
+                  color
+                })
+              );
+            });
+          }
+          textStyleSamples = [...samples].map(s => JSON.parse(s));
+        } else {
+          textStyleSamples = fills
+            .flatMap(paint => colorsForPaint(paint))
+            .map(color => ({
+              isBold: isBold(fontName),
+              textSize: fontSize,
+              color
+            }));
+        }
+
+        const textNodeInfo = {
+          x:
+            textNode.absoluteTransform[0][2] -
+            duplicate.absoluteTransform[0][2],
+          y:
+            textNode.absoluteTransform[1][2] -
+            duplicate.absoluteTransform[1][2],
+          w: textNode.width,
+          h: textNode.height,
+          name: textNode.name,
+          value: textNode.characters,
+          nodeId: nodeIdMap.get(textNode.id),
+          textStyleSamples,
+          effectiveOpacity
+        };
+
+        textNode.opacity = 0;
+        return textNodeInfo;
+      })
+      .filter(x => !!x);
+
+    console.log(
+      `[Controller] ${textNodeInfos.length} infos de texto processadas`
+    );
+
+    // Exportar o frame SEM texto (opacidade dos textos já está em 0) ANTES de remover o clone
+    const imageWithoutTextLayers = await duplicate.exportAsync(EXPORT_SETTINGS);
+    duplicate.remove();
+
+    console.log(
+      "[Controller] Imagem sem texto exportada, calculando cores de fundo..."
+    );
+
+    // Obter cor de fundo da página (objeto 0-1 para a UI e string CSS para compatibilidade)
+    let pageBgColor: string | null = null;
+    let pageBgColorRgb: { r: number; g: number; b: number } | null = null;
+    const pageBgNode = pageContainingNode(frameNodeToAnalyze as SceneNode);
+    if (pageBgNode?.backgrounds?.[0]) {
+      const bgColor = pageBgNode.backgrounds[0];
+      if (bgColor.type === "SOLID" && bgColor.color) {
+        const c = bgColor.color;
+        pageBgColor = rgbToCssColor(c);
+        pageBgColorRgb = { r: c.r, g: c.g, b: c.b };
+      }
+    }
+    if (!pageBgColorRgb) {
+      pageBgColorRgb = { r: 1, g: 1, b: 1 };
+    }
+
+    console.log(
+      `[Controller] Cor de fundo detectada:`,
+      pageBgColor || pageBgColorRgb
+    );
+
+    const result = {
+      name: (frameNodeToAnalyze as any).name,
+      imageWithTextLayers,
+      imageWithoutTextLayers,
+      textNodeInfos,
+      pageBgColor,
+      pageBgColorRgb,
+      nodeId: frameNodeToAnalyze.id,
+      width: (frameNodeToAnalyze as any).width ?? 0,
+      height: (frameNodeToAnalyze as any).height ?? 0
+    };
+
+    console.log("[Controller] Enviando resultado da análise de contraste...");
+
+    figma.ui.postMessage({
+      type: "color-contrast-result",
+      data: {
+        result
+      }
+    });
+  } catch (error) {
+    console.error("[Controller] Erro na análise de contraste:", error);
+    figma.ui.postMessage({
+      type: "color-contrast-result",
+      data: {
+        result: null,
+        error: error.message || "Erro desconhecido"
+      }
+    });
+  }
+};

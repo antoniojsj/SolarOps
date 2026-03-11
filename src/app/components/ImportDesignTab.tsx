@@ -1,6 +1,24 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useImperativeHandle,
+  forwardRef
+} from "react";
 import html2canvas from "html2canvas";
 import styled from "styled-components";
+
+interface ImportDesignTabProps {
+  hideButton?: boolean;
+  onStateChange?: (canImport: boolean, isLoading: boolean) => void;
+}
+
+export interface ImportDesignTabRef {
+  handleImport: () => void;
+  canImport: boolean;
+  isLoading: boolean;
+}
 
 const ImportContainer = styled.div`
   display: flex;
@@ -593,217 +611,237 @@ async function renderHtmlInIframeAndSerialize(
   }
 }
 
-const ImportDesignTab = () => {
-  const [url, setUrl] = useState("");
-  const [html, setHtml] = useState("");
-  const [css, setCss] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
-  const [viewportWidth, setViewportWidth] = useState(1440);
-  const [viewportHeight, setViewportHeight] = useState(900);
-  const lastImportErrorRef = useRef<string | null>(null);
+const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
+  ({ hideButton = false, onStateChange }, ref) => {
+    const [url, setUrl] = useState("");
+    const [html, setHtml] = useState("");
+    const [css, setCss] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+    const [viewportWidth, setViewportWidth] = useState(1440);
+    const [viewportHeight, setViewportHeight] = useState(900);
+    const lastImportErrorRef = useRef<string | null>(null);
 
-  const hasTailwindCdn = useMemo(() => /cdn\.tailwindcss\.com/i.test(html), [
-    html
-  ]);
+    const hasTailwindCdn = useMemo(() => /cdn\.tailwindcss\.com/i.test(html), [
+      html
+    ]);
 
-  const handleLoadFromUrl = async () => {
-    if (!url.trim()) {
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "notify",
-            message: "Por favor, insira uma URL válida"
-          }
-        },
-        "*"
+    // Notificar quando o estado muda
+    useEffect(() => {
+      onStateChange?.(
+        html.trim().length > 0 || css.trim().length > 0,
+        isLoading
       );
-      return;
-    }
+    }, [html, css, isLoading, onStateChange]);
 
-    setIsLoadingUrl(true);
-    console.log("[ImportDesignTab] Carregando URL:", url);
-
-    try {
-      // Usar CORS proxy para sites que bloqueiam CORS
-      let fetchUrl = url;
-
-      // Se a URL não começar com http, adicionar https://
-      if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        fetchUrl = "https://" + url;
-      }
-
-      console.log("[ImportDesignTab] Fazendo fetch de:", fetchUrl);
-
-      const response = await fetch(fetchUrl, {
-        method: "GET",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-        }
-      });
-
-      console.log("[ImportDesignTab] Response status:", response.status);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const htmlContent = await response.text();
-      console.log(
-        "[ImportDesignTab] HTML carregado, tamanho:",
-        htmlContent.length
-      );
-
-      setHtml(htmlContent);
-
-      // Focar no textarea do HTML após carregar
-      setTimeout(() => {
-        const htmlTextarea = document.querySelector("textarea");
-        if (htmlTextarea) htmlTextarea.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "notify",
-            message: `✅ HTML carregado com sucesso de: ${
-              new URL(fetchUrl).hostname
-            }`
-          }
-        },
-        "*"
-      );
-    } catch (error) {
-      console.error("[ImportDesignTab] Erro ao carregar URL:", error);
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "notify",
-            message: `❌ Erro ao carregar: ${errorMsg}. Tente colar o HTML diretamente.`
-          }
-        },
-        "*"
-      );
-    } finally {
-      setIsLoadingUrl(false);
-    }
-  };
-
-  const handleImport = () => {
-    if (!html.trim() && !css.trim()) {
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: "notify",
-            message: "Por favor, insira HTML ou CSS"
-          }
-        },
-        "*"
-      );
-      return;
-    }
-
-    console.log(
-      "[ImportDesignTab] ✓ Iniciando import com HTML:",
-      html.length,
-      "chars, CSS:",
-      css.length,
-      "chars"
-    );
-    setIsLoading(true);
-    lastImportErrorRef.current = null;
-
-    (async () => {
-      try {
-        // If Tailwind CDN is present (or CSS is empty), we need rendered import.
-        const shouldRender = hasTailwindCdn || !css.trim();
-        console.log(
-          "[ImportDesignTab] shouldRender:",
-          shouldRender,
-          "hasTailwindCdn:",
-          hasTailwindCdn
-        );
-
-        if (shouldRender) {
-          console.log("[ImportDesignTab] ✓ Usando rendering (Tailwind)");
-          const tree = await renderHtmlInIframeAndSerialize(html, {
-            width: viewportWidth,
-            height: viewportHeight
-          });
-          console.log("[ImportDesignTab] ✓ Tree criada:", {
-            nodeType: tree.nodeType,
-            tagName: tree.tagName,
-            childrenCount: tree.children?.length || 0,
-            hasRect: !!tree.rect,
-            rectSize: `${tree.rect.width}x${tree.rect.height}`
-          });
-
-          if (!tree || tree.nodeType !== "element") {
-            throw new Error(
-              "Árvore de DOM inválida - elementos não foram encontrados"
-            );
-          }
-
-          console.log(
-            "[ImportDesignTab] ✓ Enviando postMessage type=import-rendered-dom"
-          );
-          parent.postMessage(
-            {
-              pluginMessage: {
-                type: "import-rendered-dom",
-                tree,
-                viewport: { width: viewportWidth, height: viewportHeight }
-              }
-            },
-            "*"
-          );
-          console.log(
-            "[ImportDesignTab] ✓ Mensagem postMessage enviada com sucesso"
-          );
-        } else {
-          // Fallback to legacy importer for raw HTML+CSS
-          console.log("[ImportDesignTab] ✓ Usando HTML+CSS legacy");
-          parent.postMessage(
-            {
-              pluginMessage: {
-                type: "import-html-css",
-                html,
-                css
-              }
-            },
-            "*"
-          );
-          console.log(
-            "[ImportDesignTab] ✓ Mensagem postMessage enviada (legacy)"
-          );
-        }
-      } catch (e) {
-        console.error("[ImportDesignTab] ❌ Erro ao importar:", e);
-        lastImportErrorRef.current = e?.message || String(e);
+    const handleLoadFromUrl = async () => {
+      if (!url.trim()) {
         parent.postMessage(
           {
             pluginMessage: {
               type: "notify",
-              message: `❌ Falha ao processar: ${lastImportErrorRef.current}`
+              message: "Por favor, insira uma URL válida"
+            }
+          },
+          "*"
+        );
+        return;
+      }
+
+      setIsLoadingUrl(true);
+      console.log("[ImportDesignTab] Carregando URL:", url);
+
+      try {
+        // Usar CORS proxy para sites que bloqueiam CORS
+        let fetchUrl = url;
+
+        // Se a URL não começar com http, adicionar https://
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+          fetchUrl = "https://" + url;
+        }
+
+        console.log("[ImportDesignTab] Fazendo fetch de:", fetchUrl);
+
+        const response = await fetch(fetchUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+          }
+        });
+
+        console.log("[ImportDesignTab] Response status:", response.status);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const htmlContent = await response.text();
+        console.log(
+          "[ImportDesignTab] HTML carregado, tamanho:",
+          htmlContent.length
+        );
+
+        setHtml(htmlContent);
+
+        // Focar no textarea do HTML após carregar
+        setTimeout(() => {
+          const htmlTextarea = document.querySelector("textarea");
+          if (htmlTextarea) htmlTextarea.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "notify",
+              message: `✅ HTML carregado com sucesso de: ${
+                new URL(fetchUrl).hostname
+              }`
+            }
+          },
+          "*"
+        );
+      } catch (error) {
+        console.error("[ImportDesignTab] Erro ao carregar URL:", error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "notify",
+              message: `❌ Erro ao carregar: ${errorMsg}. Tente colar o HTML diretamente.`
             }
           },
           "*"
         );
       } finally {
-        // Reset after import attempt
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 200);
+        setIsLoadingUrl(false);
       }
-    })();
-  };
+    };
 
-  return (
-    <ImportContainer>
-      {/* URL loader disabled due to Figma's Content Security Policy restrictions */}
-      {/* 
+    const handleImport = () => {
+      if (!html.trim() && !css.trim()) {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "notify",
+              message: "Por favor, insira HTML ou CSS"
+            }
+          },
+          "*"
+        );
+        return;
+      }
+
+      console.log(
+        "[ImportDesignTab] ✓ Iniciando import com HTML:",
+        html.length,
+        "chars, CSS:",
+        css.length,
+        "chars"
+      );
+      setIsLoading(true);
+      lastImportErrorRef.current = null;
+
+      (async () => {
+        try {
+          // If Tailwind CDN is present (or CSS is empty), we need rendered import.
+          const shouldRender = hasTailwindCdn || !css.trim();
+          console.log(
+            "[ImportDesignTab] shouldRender:",
+            shouldRender,
+            "hasTailwindCdn:",
+            hasTailwindCdn
+          );
+
+          if (shouldRender) {
+            console.log("[ImportDesignTab] ✓ Usando rendering (Tailwind)");
+            const tree = await renderHtmlInIframeAndSerialize(html, {
+              width: viewportWidth,
+              height: viewportHeight
+            });
+            console.log("[ImportDesignTab] ✓ Tree criada:", {
+              nodeType: tree.nodeType,
+              tagName: tree.tagName,
+              childrenCount: tree.children?.length || 0,
+              hasRect: !!tree.rect,
+              rectSize: `${tree.rect.width}x${tree.rect.height}`
+            });
+
+            if (!tree || tree.nodeType !== "element") {
+              throw new Error(
+                "Árvore de DOM inválida - elementos não foram encontrados"
+              );
+            }
+
+            console.log(
+              "[ImportDesignTab] ✓ Enviando postMessage type=import-rendered-dom"
+            );
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "import-rendered-dom",
+                  tree,
+                  viewport: { width: viewportWidth, height: viewportHeight }
+                }
+              },
+              "*"
+            );
+            console.log(
+              "[ImportDesignTab] ✓ Mensagem postMessage enviada com sucesso"
+            );
+          } else {
+            // Fallback to legacy importer for raw HTML+CSS
+            console.log("[ImportDesignTab] ✓ Usando HTML+CSS legacy");
+            parent.postMessage(
+              {
+                pluginMessage: {
+                  type: "import-html-css",
+                  html,
+                  css
+                }
+              },
+              "*"
+            );
+            console.log(
+              "[ImportDesignTab] ✓ Mensagem postMessage enviada (legacy)"
+            );
+          }
+        } catch (e) {
+          console.error("[ImportDesignTab] ❌ Erro ao importar:", e);
+          lastImportErrorRef.current = e?.message || String(e);
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "notify",
+                message: `❌ Falha ao processar: ${lastImportErrorRef.current}`
+              }
+            },
+            "*"
+          );
+        } finally {
+          // Reset after import attempt
+          setTimeout(() => {
+            setIsLoading(false);
+          }, 200);
+        }
+      })();
+    };
+
+    // Expor a ref com a função e estado
+    useImperativeHandle(
+      ref,
+      () => ({
+        handleImport,
+        canImport: html.trim().length > 0 || css.trim().length > 0,
+        isLoading
+      }),
+      [html, css, isLoading]
+    );
+
+    return (
+      <ImportContainer>
+        {/* URL loader disabled due to Figma's Content Security Policy restrictions */}
+        {/* 
       <CodeInputContainer>
         <CodeLabel color="#2196F3">Link do Site</CodeLabel>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -828,67 +866,72 @@ const ImportDesignTab = () => {
       </CodeInputContainer>
       */}
 
-      <CodeInputContainer>
-        <CodeLabel color="#FF7043">HTML</CodeLabel>
-        <CodeTextArea
-          value={html}
-          onChange={e => setHtml(e.target.value)}
-          placeholder="Paste your HTML code here..."
-          spellCheck="false"
-        />
-      </CodeInputContainer>
+        <CodeInputContainer>
+          <CodeLabel color="#FF7043">HTML</CodeLabel>
+          <CodeTextArea
+            value={html}
+            onChange={e => setHtml(e.target.value)}
+            placeholder="Paste your HTML code here..."
+            spellCheck="false"
+          />
+        </CodeInputContainer>
 
-      <CodeInputContainer>
-        <CodeLabel color="#9C27B0">CSS</CodeLabel>
-        <CodeTextArea
-          value={css}
-          onChange={e => setCss(e.target.value)}
-          placeholder="Paste your CSS code here..."
-          spellCheck="false"
-        />
-      </CodeInputContainer>
+        <CodeInputContainer>
+          <CodeLabel color="#9C27B0">CSS</CodeLabel>
+          <CodeTextArea
+            value={css}
+            onChange={e => setCss(e.target.value)}
+            placeholder="Paste your CSS code here..."
+            spellCheck="false"
+          />
+        </CodeInputContainer>
 
-      <SettingsBox>
-        <SettingItem>
-          <span>Viewport (W × H)</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <SettingInput
-              type="number"
-              min={320}
-              max={3840}
-              value={viewportWidth}
-              onChange={e =>
-                setViewportWidth(parseInt(e.target.value || "0", 10) || 1440)
-              }
-            />
-            <span style={{ color: "rgba(255,255,255,0.6)" }}>×</span>
-            <SettingInput
-              type="number"
-              min={320}
-              max={2160}
-              value={viewportHeight}
-              onChange={e =>
-                setViewportHeight(parseInt(e.target.value || "0", 10) || 900)
-              }
-            />
-          </div>
-        </SettingItem>
-        <SettingItem>
-          <span>Theme</span>
-          <SettingValue>Light</SettingValue>
-        </SettingItem>
-      </SettingsBox>
+        <SettingsBox>
+          <SettingItem>
+            <span>Viewport (W × H)</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <SettingInput
+                type="number"
+                min={320}
+                max={3840}
+                value={viewportWidth}
+                onChange={e =>
+                  setViewportWidth(parseInt(e.target.value || "0", 10) || 1440)
+                }
+              />
+              <span style={{ color: "rgba(255,255,255,0.6)" }}>×</span>
+              <SettingInput
+                type="number"
+                min={320}
+                max={2160}
+                value={viewportHeight}
+                onChange={e =>
+                  setViewportHeight(parseInt(e.target.value || "0", 10) || 900)
+                }
+              />
+            </div>
+          </SettingItem>
+          <SettingItem>
+            <span>Theme</span>
+            <SettingValue>Light</SettingValue>
+          </SettingItem>
+        </SettingsBox>
 
-      <Divider />
+        {!hideButton && <Divider />}
 
-      <CreateButton
-        onClick={handleImport}
-        disabled={isLoading || (!html.trim() && !css.trim())}
-      >
-        {isLoading ? "⏳ Importando..." : "Importar"}
-      </CreateButton>
-    </ImportContainer>
-  );
-};
+        {!hideButton && (
+          <CreateButton
+            onClick={handleImport}
+            disabled={isLoading || (!html.trim() && !css.trim())}
+          >
+            {isLoading ? "⏳ Importando..." : "Importar"}
+          </CreateButton>
+        )}
+      </ImportContainer>
+    );
+  }
+);
+
+ImportDesignTab.displayName = "ImportDesignTab";
 
 export default ImportDesignTab;

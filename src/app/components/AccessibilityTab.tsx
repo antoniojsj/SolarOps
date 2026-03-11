@@ -81,6 +81,15 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   const [autoAnalysisError, setAutoAnalysisError] = useState<string | null>(
     null
   );
+  // Screenshot do frame analisado (como no plugin accessibility)
+  const [contrastPreviewImageUrl, setContrastPreviewImageUrl] = useState<
+    string | null
+  >(null);
+  const [contrastPreviewSize, setContrastPreviewSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [showContrastPreview, setShowContrastPreview] = useState(false);
 
   // Funções auxiliares para análise de contraste
   const rgbToHex = (color: { r: number; g: number; b: number }): string => {
@@ -133,14 +142,22 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     setAutoAnalysisLoading(true);
     setAutoAnalysisError(null);
     setAutoAnalysisResults([]);
+    if (contrastPreviewImageUrl) {
+      URL.revokeObjectURL(contrastPreviewImageUrl);
+      setContrastPreviewImageUrl(null);
+    }
+    setContrastPreviewSize(null);
+    setShowContrastPreview(false);
 
     try {
-      // Enviar mensagem ao plugin para obter todos os elementos de texto
+      // Enviar mensagem para analisar contraste usando o mesmo formato do plugin accessibility
       parent.postMessage(
         {
           pluginMessage: {
-            type: "analyze-all-contrast",
-            data: {}
+            type: "color-contrast-scan",
+            page: {
+              id: "current-page"
+            }
           }
         },
         "*"
@@ -156,21 +173,237 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   // Ouvir mensagem com resultados de análise automática
   useEffect(() => {
     const handleAnalysisResults = (event: MessageEvent) => {
-      if (event.data && event.data.type === "auto-analysis-results") {
-        const { results, error } = event.data.payload;
+      try {
+        // Acessar dados corretamente do plugin Figma
+        const pluginMessage = event.data?.pluginMessage || event.data || {};
 
-        if (error) {
-          setAutoAnalysisError(error);
-        } else {
-          setAutoAnalysisResults(results || []);
+        if (pluginMessage.type === "color-contrast-result") {
+          console.log(
+            "[AccessibilityTab] Recebido color-contrast-result:",
+            pluginMessage
+          );
+
+          const result = pluginMessage.data?.result ?? pluginMessage.result;
+          const errorMsg = pluginMessage.data?.error ?? pluginMessage.error;
+
+          if (!result || !result.textNodeInfos) {
+            console.warn(
+              "[AccessibilityTab] Estrutura de resultado inválida:",
+              result,
+              errorMsg
+            );
+            setAutoAnalysisError(
+              errorMsg && typeof errorMsg === "string"
+                ? errorMsg
+                : "Nenhum texto encontrado para análise. Selecione um frame com texto."
+            );
+            setAutoAnalysisResults([]);
+            setAutoAnalysisLoading(false);
+            return;
+          }
+
+          // Função auxiliar para converter cores 0-1 para HEX
+          const colorToHex = (color: {
+            r: number;
+            g: number;
+            b: number;
+          }): string => {
+            const toHexComponent = (v: number) => {
+              const val = Math.round(Math.max(0, Math.min(1, v)) * 255);
+              return Math.round(val)
+                .toString(16)
+                .padStart(2, "0");
+            };
+            return `#${toHexComponent(color.r)}${toHexComponent(
+              color.g
+            )}${toHexComponent(color.b)}`.toUpperCase();
+          };
+
+          // Função auxiliar para calcular luminância WCAG
+          const getLuminance = (color: {
+            r: number;
+            g: number;
+            b: number;
+          }): number => {
+            const normalize = (v: number) =>
+              Math.max(0, Math.min(1, v <= 1 ? v : v / 255));
+            const [r, g, b] = [color.r, color.g, color.b].map(normalize);
+
+            let R, G, B;
+            if (r <= 0.03928) R = r / 12.92;
+            else R = ((r + 0.055) / 1.055) ** 2.4;
+
+            if (g <= 0.03928) G = g / 12.92;
+            else G = ((g + 0.055) / 1.055) ** 2.4;
+
+            if (b <= 0.03928) B = b / 12.92;
+            else B = ((b + 0.055) / 1.055) ** 2.4;
+
+            return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+          };
+
+          // Função auxiliar para calcular razão de contraste
+          const getContrastRatio = (
+            color1: { r: number; g: number; b: number },
+            color2: { r: number; g: number; b: number }
+          ): number => {
+            const lum1 = getLuminance(color1);
+            const lum2 = getLuminance(color2);
+            const lighter = Math.max(lum1, lum2);
+            const darker = Math.min(lum1, lum2);
+            return (lighter + 0.05) / (darker + 0.05);
+          };
+
+          // Processar resultados
+          const processedResults = result.textNodeInfos
+            .map((textInfo: any, index: number) => {
+              try {
+                if (
+                  !textInfo.textStyleSamples ||
+                  textInfo.textStyleSamples.length === 0
+                ) {
+                  return null;
+                }
+
+                const sample = textInfo.textStyleSamples[0];
+                if (!sample || !sample.color) {
+                  return null;
+                }
+
+                // Cores vêm em formato 0-1 do Figma; usar pageBgColorRgb (objeto) enviado pelo plugin
+                const textColor = sample.color;
+                const bgColor =
+                  result.pageBgColorRgb &&
+                  typeof result.pageBgColorRgb === "object"
+                    ? result.pageBgColorRgb
+                    : { r: 1, g: 1, b: 1 };
+
+                // Converter para HEX para exibição
+                const textColorHex = colorToHex(textColor);
+                const bgColorHex = colorToHex(bgColor);
+
+                // Calcular contraste com cores 0-1
+                const contrastRatio = getContrastRatio(textColor, bgColor);
+
+                // Determinar se é texto grande
+                const pointSize = (sample.textSize || 16) / 1.333333; // px -> pt
+                const isLarge =
+                  pointSize >= 18 || (sample.isBold && pointSize >= 14);
+
+                // Avaliar conformidade
+                const aa = contrastRatio >= (isLarge ? 3 : 4.5);
+                const aaa = contrastRatio >= (isLarge ? 4.5 : 7);
+                const aaLarge = contrastRatio >= 3;
+
+                return {
+                  id: textInfo.nodeId || `node-${index}`,
+                  nodeName: textInfo.name || `Texto ${index + 1}`,
+                  nodeType: "TEXT",
+                  text: (textInfo.value || "").substring(0, 100),
+                  textColor: textColorHex,
+                  bgColor: bgColorHex,
+                  contrastRatio: Math.round(contrastRatio * 100) / 100,
+                  aa,
+                  aaa,
+                  aaLarge,
+                  hasIssues: !aa,
+                  issues: !aa
+                    ? [
+                        `Contraste ${Math.round(contrastRatio * 100) /
+                          100}:1 (mínimo ${
+                          isLarge ? "3:1 para texto grande" : "4.5:1"
+                        })`
+                      ]
+                    : [],
+                  fontSize: sample.textSize || 16,
+                  fontWeight: sample.isBold ? 700 : 400,
+                  textOpacity: sample.color.a || 1,
+                  bgOpacity: bgColor.a || 1
+                };
+              } catch (err) {
+                console.warn(
+                  `[AccessibilityTab] Erro ao processar texto ${index}:`,
+                  err
+                );
+                return null;
+              }
+            })
+            .filter((r: any) => r !== null);
+
+          console.log("[AccessibilityTab] Resultados processados:", {
+            total: processedResults.length,
+            issues: processedResults.filter((r: any) => r.hasIssues).length
+          });
+
+          setAutoAnalysisResults(processedResults);
+
+          // Screenshot do frame (como no plugin accessibility): criar URL a partir dos bytes da imagem
+          if (contrastPreviewImageUrl) {
+            URL.revokeObjectURL(contrastPreviewImageUrl);
+          }
+          const imageBytes = result.imageWithTextLayers;
+          if (
+            imageBytes &&
+            (imageBytes instanceof Uint8Array ||
+              ArrayBuffer.isView(imageBytes) ||
+              imageBytes instanceof ArrayBuffer)
+          ) {
+            const blob = new Blob([imageBytes], { type: "image/png" });
+            const url = URL.createObjectURL(blob);
+            setContrastPreviewImageUrl(url);
+            const w = Number(result.width) || 0;
+            const h = Number(result.height) || 0;
+            setContrastPreviewSize(w && h ? { width: w, height: h } : null);
+          } else {
+            setContrastPreviewImageUrl(null);
+            setContrastPreviewSize(null);
+          }
+
+          if (processedResults.length === 0) {
+            setAutoAnalysisError(
+              "Nenhum texto encontrado para análise de contraste"
+            );
+          }
         }
+      } catch (err) {
+        console.error("[AccessibilityTab] Erro ao processar resultados:", err);
+        setAutoAnalysisError(
+          `Erro ao processar resultados: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      } finally {
         setAutoAnalysisLoading(false);
       }
     };
 
     window.addEventListener("message", handleAnalysisResults);
-    return () => window.removeEventListener("message", handleAnalysisResults);
-  }, []);
+
+    // Timeout para caso não haja resposta
+    const timeout = setTimeout(() => {
+      if (autoAnalysisLoading) {
+        console.warn("[AccessibilityTab] Timeout na análise de contraste");
+        setAutoAnalysisError(
+          "Timeout ao analisar contraste. Verifique se há elementos de texto selecionados."
+        );
+        setAutoAnalysisLoading(false);
+      }
+    }, 8000);
+
+    return () => {
+      window.removeEventListener("message", handleAnalysisResults);
+      clearTimeout(timeout);
+    };
+  }, [autoAnalysisLoading]);
+
+  // Revogar URL da screenshot ao desmontar ou ao limpar
+  useEffect(() => {
+    return () => {
+      if (contrastPreviewImageUrl) {
+        URL.revokeObjectURL(contrastPreviewImageUrl);
+      }
+    };
+  }, [contrastPreviewImageUrl]);
 
   // Função para mudar de subpágina e comunicar com App.tsx
   const changeSubPage = (page: "main" | "contrate" | "documentacao") => {
@@ -469,14 +702,12 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
       case "contrate":
         return (
           <div
-            className="scrollable-content"
             style={{
               flex: 1,
-              overflowY: "auto",
-              backgroundColor: "transparent",
               display: "flex",
               flexDirection: "column",
-              height: "100%"
+              height: "100%",
+              minHeight: 0
             }}
           >
             <div
@@ -526,7 +757,18 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               </button>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, margin: "8px 0 0 0" }}>
+            <div
+              className="scrollable-content"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                margin: "8px 0 0 0",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                paddingBottom: activeContrastTab === "auto" ? "80px" : 0
+              }}
+            >
               {activeContrastTab === "auto" ? (
                 <div
                   style={{
@@ -536,28 +778,6 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                     flexDirection: "column"
                   }}
                 >
-                  <div style={{ marginBottom: 16 }}>
-                    <button
-                      onClick={performAutoAnalysis}
-                      disabled={autoAnalysisLoading}
-                      style={{
-                        background: "#3b82f6",
-                        border: "none",
-                        borderRadius: 6,
-                        fontWeight: 500,
-                        fontSize: 13,
-                        color: "#fff",
-                        padding: "8px 16px",
-                        cursor: autoAnalysisLoading ? "not-allowed" : "pointer",
-                        opacity: autoAnalysisLoading ? 0.6 : 1
-                      }}
-                    >
-                      {autoAnalysisLoading
-                        ? "Analisando..."
-                        : "Analisar Contraste Automático"}
-                    </button>
-                  </div>
-
                   {autoAnalysisError && (
                     <div
                       style={{
@@ -571,6 +791,68 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                       <p style={{ margin: 0, color: "#ef4444", fontSize: 12 }}>
                         {autoAnalysisError}
                       </p>
+                    </div>
+                  )}
+
+                  {contrastPreviewImageUrl && (
+                    <div style={{ marginBottom: 16 }}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowContrastPreview(!showContrastPreview)
+                        }
+                        style={{
+                          background: "transparent",
+                          border: "1px solid rgba(255,255,255,0.2)",
+                          borderRadius: 6,
+                          color: "#e0e0e0",
+                          fontSize: 12,
+                          padding: "6px 12px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}
+                      >
+                        <span
+                          style={{
+                            transform: showContrastPreview
+                              ? "rotate(0deg)"
+                              : "rotate(-90deg)",
+                            transition: "transform 0.2s"
+                          }}
+                        >
+                          ▼
+                        </span>
+                        {showContrastPreview
+                          ? "Ocultar preview"
+                          : "Mostrar preview"}
+                      </button>
+                      {showContrastPreview && (
+                        <div
+                          style={{
+                            marginTop: 12,
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            background: "rgba(0,0,0,0.2)",
+                            maxWidth: "100%",
+                            maxHeight: 320,
+                            overflowY: "auto",
+                            overflowX: "auto"
+                          }}
+                        >
+                          <img
+                            src={contrastPreviewImageUrl}
+                            alt="Preview do frame analisado"
+                            style={{
+                              display: "block",
+                              maxWidth: "100%",
+                              height: "auto",
+                              width: contrastPreviewSize ? undefined : "100%"
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -715,16 +997,25 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                     !autoAnalysisError && (
                       <div
                         style={{
-                          padding: 16,
-                          color: "rgba(255, 255, 255, 0.7)",
-                          fontSize: 13,
-                          lineHeight: 1.5,
-                          borderRadius: 8,
-                          background: "rgba(255,255,255,0.04)"
+                          flex: 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 24,
+                          textAlign: "center"
                         }}
                       >
-                        Clique em "Analisar Contraste Automático" para verificar
-                        todos os elementos de texto no seu design.
+                        <p
+                          style={{
+                            margin: 0,
+                            color: "rgba(255, 255, 255, 0.7)",
+                            fontSize: 13,
+                            lineHeight: 1.5
+                          }}
+                        >
+                          Selecione um objeto e clique em &quot;Analisar
+                          contraste&quot; para realizar a verificação.
+                        </p>
                       </div>
                     )}
                 </div>
@@ -736,6 +1027,56 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                 />
               )}
             </div>
+
+            {activeContrastTab === "auto" && (
+              <footer
+                className="initial-content-footer"
+                style={{
+                  padding: "16px",
+                  background: "#2A2A2A",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+                  display: "flex",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <button
+                  className="button button--primary"
+                  onClick={performAutoAnalysis}
+                  disabled={autoAnalysisLoading || !selectedNode}
+                  style={{
+                    background:
+                      autoAnalysisLoading || !selectedNode
+                        ? "#4A4A4A"
+                        : "#18A0FB",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "12px 16px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor:
+                      autoAnalysisLoading || !selectedNode
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity: autoAnalysisLoading || !selectedNode ? 0.6 : 1,
+                    transition: "background 0.2s, opacity 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "100%",
+                    maxWidth: "100%",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  {autoAnalysisLoading
+                    ? "Analisando..."
+                    : !selectedNode
+                    ? "Selecione um objeto"
+                    : "Realizar análise"}
+                </button>
+              </footer>
+            )}
           </div>
         );
       case "documentacao":

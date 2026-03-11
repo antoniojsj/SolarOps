@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion/dist/framer-motion";
 import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
-import ImportDesignTab from "./ImportDesignTab";
+import ImportDesignTab, { ImportDesignTabRef } from "./ImportDesignTab";
 import CollapsibleSection from "./CollapsibleSection";
 
 // Add CSS for scrollbar
@@ -60,6 +60,9 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
     "main" | "inspect" | "measure" | "import"
   >("main");
   const [animationData, setAnimationData] = useState(null);
+  const importDesignRef = useRef<ImportDesignTabRef>(null);
+  const [importCanImport, setImportCanImport] = useState(false);
+  const [importIsLoading, setImportIsLoading] = useState(false);
 
   // Função para mudar de subpágina e comunicar com App.tsx
   const changeSubPage = (page: "main" | "inspect" | "measure" | "import") => {
@@ -91,6 +94,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (!event.data || !event.data.pluginMessage) return;
+
       const { type, payload } = event.data.pluginMessage;
       if (type === "animation-data") {
         setAnimationData(payload.animations);
@@ -955,14 +960,79 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
       case "import":
         return (
           <div
-            className="scrollable-content"
             style={{
               flex: 1,
-              overflowY: "auto",
-              backgroundColor: "transparent"
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0
             }}
           >
-            <ImportDesignTab />
+            <div
+              className="scrollable-content"
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                backgroundColor: "transparent"
+              }}
+            >
+              <ImportDesignTab
+                ref={importDesignRef}
+                hideButton={true}
+                onStateChange={(canImport, isLoading) => {
+                  setImportCanImport(canImport);
+                  setImportIsLoading(isLoading);
+                }}
+              />
+            </div>
+            <footer
+              className="initial-content-footer"
+              style={{
+                padding: "0px",
+                background: "#2A2A2A",
+                borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+                display: "block"
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px",
+                  display: "flex",
+                  justifyContent: "center"
+                }}
+              >
+                <button
+                  className="button button--primary"
+                  onClick={() => importDesignRef.current?.handleImport()}
+                  disabled={!importCanImport || importIsLoading}
+                  style={{
+                    background:
+                      importCanImport && !importIsLoading
+                        ? "#18A0FB"
+                        : "#4A4A4A",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "12px 16px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor:
+                      importCanImport && !importIsLoading
+                        ? "pointer"
+                        : "not-allowed",
+                    opacity: importCanImport && !importIsLoading ? 1 : 0.6,
+                    transition: "background 0.2s, opacity 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "100%",
+                    maxWidth: "100%",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  {importIsLoading ? "⏳ Importando..." : "Importar"}
+                </button>
+              </div>
+            </footer>
           </div>
         );
 

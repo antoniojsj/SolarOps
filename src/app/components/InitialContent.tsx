@@ -642,21 +642,23 @@ function InitialContent(props) {
             <button
               className="button button--primary"
               onClick={props.onHandleRunApp}
-              disabled={!canStartAudit}
+              disabled={!canStartAudit || !selectedNode}
               style={{
-                background: canStartAudit
-                  ? "#18A0FB"
-                  : hasTokensImported
-                  ? "#4A4A4A"
-                  : "#4A4A4A",
+                background:
+                  canStartAudit && selectedNode
+                    ? "#18A0FB"
+                    : hasTokensImported && !selectedNode
+                    ? "#4A4A4A"
+                    : "#4A4A4A",
                 color: "#fff",
                 border: "none",
                 borderRadius: "4px",
                 padding: "12px 16px",
                 fontSize: "14px",
                 fontWeight: 500,
-                cursor: canStartAudit ? "pointer" : "not-allowed",
-                opacity: canStartAudit ? 1 : 0.6,
+                cursor:
+                  canStartAudit && selectedNode ? "pointer" : "not-allowed",
+                opacity: canStartAudit && selectedNode ? 1 : 0.6,
                 transition: "background 0.2s, opacity 0.2s",
                 display: "flex",
                 alignItems: "center",
