@@ -1112,14 +1112,19 @@ ${bodyHTML}
   return html;
 };
 
-// Helper to convert SerializedNode back to HTML with inline styles
+// Helper to convert SerializedNode back to HTML preserving Tailwind classes
 const serializeNodeToHTML = (node: any, indent = 1): string => {
   if (!node) return "";
 
   const indentStr = "  ".repeat(indent);
 
   if (node.nodeType === "text") {
-    return `${indentStr}${escapeHtml(node.text)}`;
+    const text = node.text || "";
+    // Preserve whitespace if it's meaningful
+    if (text.trim()) {
+      return `${indentStr}${escapeHtml(text)}`;
+    }
+    return "";
   }
 
   if (node.nodeType === "element") {
@@ -1129,25 +1134,63 @@ const serializeNodeToHTML = (node: any, indent = 1): string => {
       styles = {},
       children = [],
       imageUrl,
-      imageData
+      imageData,
+      iconName,
+      isIcon
     } = node;
 
-    // Build style attribute
-    const styleStr = Object.entries(styles)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join("; ");
-
-    // Build attributes
+    // Build attributes preserving order: class first, then others
     const attrEntries: string[] = [];
-    if (styleStr) attrEntries.push(`style="${styleStr}"`);
+
+    // 1. Prioritize class attribute if it exists
+    if (attrs.class) {
+      attrEntries.push(`class="${escapeHtml(String(attrs.class))}"`);
+    }
+
+    // 2. Add other important attributes
+    const priorityAttrs = [
+      "id",
+      "type",
+      "placeholder",
+      "value",
+      "href",
+      "src",
+      "alt",
+      "role",
+      "aria-label",
+      "data-testid"
+    ];
+    priorityAttrs.forEach(key => {
+      if (attrs[key] && key !== "class" && key !== "style") {
+        attrEntries.push(`${key}="${escapeHtml(String(attrs[key]))}"`);
+      }
+    });
+
+    // 3. Add remaining attributes
     Object.entries(attrs).forEach(([key, value]: [string, any]) => {
-      if (key !== "style" && value !== undefined && value !== null) {
+      const isProcessed =
+        key === "class" || key === "style" || priorityAttrs.includes(key);
+      if (!isProcessed && value !== undefined && value !== null) {
         attrEntries.push(`${key}="${escapeHtml(String(value))}"`);
       }
     });
 
-    // Handle image URLs
-    if (imageUrl) {
+    // 4. Only add inline styles if there's no class (to avoid duplication)
+    // and if it has meaningful styles that aren't usually in Tailwind
+    if (!attrs.class && Object.keys(styles).length > 0) {
+      const styleStr = Object.entries(styles)
+        .filter(
+          ([, value]) => value !== undefined && value !== null && value !== ""
+        )
+        .map(([key, value]) => `${key}: ${value}`)
+        .join("; ");
+      if (styleStr) {
+        attrEntries.push(`style="${styleStr}"`);
+      }
+    }
+
+    // 5. Handle image URLs (for img tags)
+    if (imageUrl && tagName.toLowerCase() === "img") {
       attrEntries.push(`src="${escapeHtml(imageUrl)}"`);
     }
 
@@ -1155,19 +1198,27 @@ const serializeNodeToHTML = (node: any, indent = 1): string => {
 
     // Self-closing tags
     if (["img", "input", "br", "hr"].includes(tagName.toLowerCase())) {
-      return `${indentStr}<${tagName}${attrStr} />`;
+      return `${indentStr}<${tagName}${attrStr}/>`;
     }
 
-    // Tags with children
-    if (children && children.length > 0) {
-      const childContent = children
+    // Handle text content for certain tags
+    let content = "";
+    if (tagName.toLowerCase() === "input" && attrs.placeholder) {
+      // Input placeholders are attributes, no inner content
+    } else if (children && children.length > 0) {
+      const childLines = children
         .map((child: any) => serializeNodeToHTML(child, indent + 1))
-        .join("\n");
-      return `${indentStr}<${tagName}${attrStr}>\n${childContent}\n${indentStr}</${tagName}>`;
+        .filter((line: string) => line.trim());
+      if (childLines.length > 0) {
+        content = `\n${childLines.join("\n")}\n${indentStr}`;
+      }
     }
 
-    // Empty self-closing tags
-    return `${indentStr}<${tagName}${attrStr}></${tagName}>`;
+    if (content) {
+      return `${indentStr}<${tagName}${attrStr}>${content}</${tagName}>`;
+    } else {
+      return `${indentStr}<${tagName}${attrStr}></${tagName}>`;
+    }
   }
 
   return "";
@@ -1775,7 +1826,7 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
                 );
               }
               cleanup();
-              generateSnippets(receivedFullNodeData);
+              generateSnippets(receivedFullNodeData, serializedDOMData?.tree);
               resolveLoadSnippets();
             }
           } catch (e) {
@@ -1789,7 +1840,7 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
               "[LoadSnippets] Timeout waiting for full node data, using selectedNode"
             );
             cleanup();
-            generateSnippets(receivedFullNodeData);
+            generateSnippets(receivedFullNodeData, serializedDOMData?.tree);
             resolveLoadSnippets();
           }
         }, 2000);
@@ -1815,33 +1866,46 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
         } catch (e) {
           console.error("[LoadSnippets] Error posting message:", e);
           cleanup();
-          generateSnippets(receivedFullNodeData);
+          generateSnippets(receivedFullNodeData, serializedDOMData?.tree);
           resolveLoadSnippets();
         }
       });
 
-      function generateSnippets(nodeData: any) {
+      function generateSnippets(nodeData: any, domTree?: any) {
         try {
           console.log(
             "[LoadSnippets] Generating snippets with data:",
             nodeData?.id,
-            nodeData?.name
+            nodeData?.name,
+            "Has DOM tree:",
+            !!domTree
           );
 
-          // Generate Tailwind HTML with full node data
-          let tailwindHtml = "<!-- Unable to generate Tailwind HTML -->";
+          // Generate HTML - prioritize serialized DOM tree if available
+          let htmlCode = "<!-- Unable to generate HTML -->";
           try {
-            tailwindHtml = generateTailwindHTML(nodeData);
-            console.log("✓ HTML com Tailwind CSS gerado com sucesso");
+            if (domTree) {
+              // Use the original HTML structure from imported design
+              console.log("✓ Using serialized DOM tree for HTML generation");
+              htmlCode = generateHTMLFromSerialized(domTree);
+            } else {
+              // Fall back to Tailwind generation from Figma data
+              console.log("✓ Using Tailwind HTML generation from Figma data");
+              htmlCode = generateTailwindHTML(nodeData);
+            }
+            console.log("✓ HTML gerado com sucesso");
           } catch (e) {
-            console.error("Erro ao gerar HTML com Tailwind:", e);
+            console.error("Erro ao gerar HTML:", e);
+            htmlCode = "<!-- Error generating HTML -->";
           }
 
           const nodeSnippets: CodeSnippet[] = [
             {
-              title: "HTML (Tailwind CSS) - RECOMENDADO",
+              title: domTree
+                ? "HTML (Imported Original)"
+                : "HTML (Tailwind CSS) - RECOMENDADO",
               language: "html",
-              code: tailwindHtml
+              code: htmlCode
             },
             {
               title: "Node Data",
@@ -1909,11 +1973,22 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
           "*"
         );
       }
+
+      // Request serialized DOM data
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: "get-serialized-dom"
+          }
+        },
+        "*"
+      );
+
       loadSnippets();
     } else {
       setSnippets([]);
     }
-  }, [selectedNode, svgCode]);
+  }, [selectedNode]);
 
   if (!selectedNode) {
     return (
