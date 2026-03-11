@@ -1431,6 +1431,129 @@ ${bodyContent}
 };
 
 // Generate HTML from serialized DOM structure
+// Generate perfect HTML/CSS by rendering nodes with proper styling
+const generatePerfectHTMLFromSerializedTree = (tree: any): string => {
+  if (!tree) return "";
+
+  const bodyHTML = serializeNodeToHTML(tree);
+
+  // Extract all unique CSS styles from the tree
+  const styleMap = new Map<string, Record<string, string>>();
+  let nodeCounter = 0;
+
+  const extractStyles = (node: any) => {
+    if (!node || !node.nodeType) return;
+
+    if (
+      node.nodeType === "element" &&
+      node.styles &&
+      Object.keys(node.styles).length > 0
+    ) {
+      const cssId = `node-${nodeCounter++}`;
+      styleMap.set(cssId, node.styles);
+    }
+
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child: any) => extractStyles(child));
+    }
+  };
+
+  extractStyles(tree);
+
+  // Build organized CSS
+  const cssLines: string[] = [];
+  styleMap.forEach((styles, className) => {
+    if (Object.keys(styles).length > 0) {
+      cssLines.push(`.${className} {`);
+      Object.entries(styles).forEach(([key, value]: [string, any]) => {
+        const cssKey = key.replace(/([A-Z])/g, "-$1").toLowerCase();
+        cssLines.push(`  ${cssKey}: ${value};`);
+      });
+      cssLines.push("}");
+    }
+  });
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Design Code</title>
+  <style>
+    /* Reset & Base Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      box-sizing: border-box;
+    }
+
+    *::before,
+    *::after {
+      box-sizing: inherit;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    html, body {
+      width: 100%;
+      height: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      background-color: #ffffff;
+      color: #333333;
+      overflow-x: hidden;
+    }
+
+    main, section, article, header, footer, nav, aside {
+      display: block;
+    }
+
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    input, textarea, select {
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    /* Generated Component Styles */
+${cssLines.join("\n")}
+  </style>
+</head>
+<body>
+  <main>
+${bodyHTML}
+  </main>
+</body>
+</html>`;
+
+  return html;
+};
+
 const generateHTMLFromSerialized = (tree: any): string => {
   if (!tree) return "";
 
