@@ -130,6 +130,51 @@ Adicione anotações e medidas visuais diretamente no canvas para documentar esp
 - **Criação Rápida**: Interface intuitiva para adicionar medidas
 - **Organização**: Agrupe anotações e medidas por área do design
 
+#### 3.4 Renomear Layers
+
+Renomeie automaticamente layers e componentes com nomenclatura semântica HTML baseada no tipo e conteúdo do elemento.
+
+**Funcionalidades:**
+- **Detecção automática de tags HTML**: Analisa o tipo do elemento (Frame, Text, Component, etc) e sugere a tag semântica apropriada
+- **Geração de classes CSS**: Extrai palavras-chave do nome original para criar classes CSS significativas
+- **Suporte a Componentes**: Componentes são renomeados como `component.{tipo}` (ex: `component.button`, `component.input`)
+- **Tratamento de nomes genéricos**: Elementos com nomes como "Frame 1", "Group 2", "Rectangle 3" são renomeados apenas com a tag semântica (ex: `div`, `section`, `img`)
+- **Processamento em lote**: Renomeia o elemento selecionado e todos os seus filhos recursivamente
+
+**Tags HTML suportadas:**
+- **Estruturais**: `section` (frames verticais), `div` (frames horizontais), `header`, `footer`, `nav`, `main`
+- **Texto**: `h1`, `h2`, `h3`, `h4`, `p`, `span` (baseado no tamanho da fonte)
+- **Interativos**: `button`, `a` (link), `input`, `select`, `textarea`
+- **Mídia**: `img` (imagens e retângulos com fill de imagem)
+- **Componentes**: `component` (para components e instances)
+
+**Como Usar:**
+1. Abra a aba **Ferramentas** → **Rename Layers**
+2. Selecione um elemento ou frame no canvas
+3. Clique em **Renomear Layers**
+4. O plugin renomeará o elemento e todos os seus filhos automaticamente
+
+**Exemplos de renomeação:**
+
+| Nome Original | Nome Renomeado | Tag Aplicada |
+|--------------|----------------|--------------|
+| `PrimaryButton` | `component.button` | Componente detectado |
+| `SearchInput` | `component.input` | Componente detectado |
+| `Frame 1` | `section` ou `div` | Estrutural |
+| `Header Section` | `section.header` | Estrutural com classe |
+| `Text 12` | `h1` ou `p` | Texto baseado em fontSize |
+| `Rectangle 3` (com imagem) | `img` | Imagem |
+| `Component 01` | `component` | Componente genérico |
+
+**Regras de processamento:**
+- Nomes genéricos (Frame, Group, Layer, Rectangle, etc. seguidos de números) são substituídos apenas pela tag
+- Componentes são sempre prefixados com `component.`
+- Classes CSS são geradas a partir de palavras significativas do nome original
+- Stop words (button, input, icon, etc.) são removidas das classes para evitar duplicação
+- Palavras em camelCase são separadas (ex: `PrimaryButton` → `primary-button`)
+
+---
+
 ## 🛠 Tecnologias Utilizadas
 
 - **Frontend**: React 17, TypeScript
@@ -301,33 +346,6 @@ Os arquivos de build serão armazenados no diretório `dist/`.
    - Visualize lista de anotações
    - Clique para focar no canvas
    - Edite ou remova conforme necessário
-
-#### Renomear Layers
-
-Renomeie camadas automaticamente com nomenclatura semântica baseada em HTML/CSS.
-
-1. Abra a aba **Ferramentas** → **Rename Layers**
-2. Selecione um ou mais elementos no canvas
-3. Clique em **Renomear Layers**
-4. Os elementos serão renomeados seguindo o padrão `tag.classe`
-
-**Regras de renomeação:**
-- **Componentes**: `component.button`, `component.input`, `component.card`
-  - Detecta automaticamente o tipo (button, input, icon, card, etc.)
-  - Ignora nomes genéricos como "Component 01", "Frame 2"
-- **Textos**: `h1`, `h2`, `h3`, `p`, `span` (baseado no tamanho da fonte)
-- **Containers**: `section` (layout vertical), `div` (layout horizontal ou automático)
-- **Imagens**: `img`
-- **Botões/Links**: `button`, `a` (detectado pelo nome)
-
-**Exemplos:**
-| Nome Original | Nome Renomeado |
-|--------------|----------------|
-| `Button` | `component.button` |
-| `PrimaryButton` | `component.button` |
-| `Frame 1` | `div` |
-| `Header Section` | `section.header` |
-| `Text 24px` | `h2` |
 
 ## ⚙️ Configuração
 

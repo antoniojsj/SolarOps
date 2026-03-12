@@ -179,6 +179,15 @@ function generateClassName(name: string): string {
     .slice(0, 2) // Limita a 2 palavras para evitar nomes muito longos
     .join("-");
 
+  // Validação final: classe não pode começar com número ou ser genérica
+  if (
+    !processedName ||
+    /^\d/.test(processedName) ||
+    isGenericName(processedName)
+  ) {
+    return "";
+  }
+
   return processedName;
 }
 
@@ -236,62 +245,32 @@ async function determineTag(node: SceneNode): Promise<string> {
 
 // Lógica Principal de Renomeação (Main Rename Logic)
 
-/**
- * Verifica se um nome já está no formato semântico válido
- * para evitar reprocessar layers já renomeadas
- */
-function isAlreadySemanticFormat(name: string, tag: string): boolean {
-  // Padrões válidos: "div", "section.header", "component.button", "h1", etc
-  const validTags = [
-    "div",
-    "section",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "p",
-    "span",
-    "button",
-    "a",
-    "input",
-    "img",
-    "icon",
-    "component"
-  ];
-
-  // Se é apenas a tag (ex: "div", "h1")
-  if (name.toLowerCase() === tag.toLowerCase()) {
-    return true;
-  }
-
-  // Se está no formato tag.classe (ex: "section.header", "component.button")
-  const semanticPattern = new RegExp(`^${tag}\\.[a-z][a-z0-9-]*$`, "i");
-  if (semanticPattern.test(name)) {
-    return true;
-  }
-
-  // Se é outro formato semântico válido (outra tag conhecida)
-  for (const validTag of validTags) {
-    if (validTag === tag) continue;
-    const otherTagPattern = new RegExp(
-      `^${validTag}(\\.[a-z][a-z0-9-]*)?$`,
-      "i"
-    );
-    if (otherTagPattern.test(name)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 async function getNewNameForNode(node: SceneNode): Promise<string> {
   const currentName = node.name.trim();
   const tag = await determineTag(node);
 
-  // Se já está em formato semântico válido, não renomeia
-  if (isAlreadySemanticFormat(currentName, tag)) {
-    return currentName;
+  // Se o nome atual é apenas uma palavra genérica (frame, group, layer, etc),
+  // forçar renomeação completa ignorando o nome
+  const isJustGenericWord =
+    /^[a-z]+\s*\d*$/i.test(currentName) &&
+    [
+      "frame",
+      "group",
+      "layer",
+      "component",
+      "instance",
+      "element",
+      "item",
+      "rectangle",
+      "ellipse",
+      "vector",
+      "text",
+      "line"
+    ].includes(currentName.toLowerCase().replace(/\s*\d*$/, ""));
+
+  if (isJustGenericWord) {
+    // Para nomes puramente genéricos, só usar a tag semântica
+    return tag;
   }
 
   // Caso especial para Componentes

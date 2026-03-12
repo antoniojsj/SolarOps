@@ -308,8 +308,7 @@ const RenameLayersTab = forwardRef<RenameLayersTabRef, RenameLayersTabProps>(
         ) : (
           <>
             <MessageContainer>
-              <TitleText>Elemento Selecionado</TitleText>
-              <SubtitleText style={{ marginTop: "8px", color: "#fff" }}>
+              <SubtitleText style={{ color: "#fff", fontWeight: 600 }}>
                 {selectedNode.name || "Elemento sem nome"}
               </SubtitleText>
               <SubtitleText style={{ marginTop: "12px", fontSize: "12px" }}>
