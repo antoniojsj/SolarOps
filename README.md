@@ -302,6 +302,33 @@ Os arquivos de build serão armazenados no diretório `dist/`.
    - Clique para focar no canvas
    - Edite ou remova conforme necessário
 
+#### Renomear Layers
+
+Renomeie camadas automaticamente com nomenclatura semântica baseada em HTML/CSS.
+
+1. Abra a aba **Ferramentas** → **Rename Layers**
+2. Selecione um ou mais elementos no canvas
+3. Clique em **Renomear Layers**
+4. Os elementos serão renomeados seguindo o padrão `tag.classe`
+
+**Regras de renomeação:**
+- **Componentes**: `component.button`, `component.input`, `component.card`
+  - Detecta automaticamente o tipo (button, input, icon, card, etc.)
+  - Ignora nomes genéricos como "Component 01", "Frame 2"
+- **Textos**: `h1`, `h2`, `h3`, `p`, `span` (baseado no tamanho da fonte)
+- **Containers**: `section` (layout vertical), `div` (layout horizontal ou automático)
+- **Imagens**: `img`
+- **Botões/Links**: `button`, `a` (detectado pelo nome)
+
+**Exemplos:**
+| Nome Original | Nome Renomeado |
+|--------------|----------------|
+| `Button` | `component.button` |
+| `PrimaryButton` | `component.button` |
+| `Frame 1` | `div` |
+| `Header Section` | `section.header` |
+| `Text 24px` | `h2` |
+
 ## ⚙️ Configuração
 
 ### Configurar Bibliotecas de Tokens

@@ -288,6 +288,263 @@ const extractColorPalette = (
 };
 
 // Better Tailwind generation from Figma node
+// Generate HTML from Figma node data (when no imported DOM tree available)
+const generateHTMLFromFigmaNode = (node: any): string => {
+  if (!node) return "";
+
+  const palette = extractColorPalette(node);
+
+  const buildElement = (n: any, depth = 0): string => {
+    if (!n || depth > 20) return "";
+    const indent = "  ".repeat(depth + 3);
+
+    // Determine tag based on node name/type
+    let tag = "div";
+    const nodeName = (n.name || "").toLowerCase();
+
+    if (n.type === "TEXT") tag = "span";
+    else if (
+      nodeName.includes("button") ||
+      nodeName.includes("btn") ||
+      n.type === "BUTTON"
+    )
+      tag = "button";
+    else if (
+      nodeName.includes("input") ||
+      nodeName.includes("field") ||
+      n.type === "INPUT"
+    )
+      tag = "input";
+    else if (
+      nodeName.includes("heading") ||
+      nodeName.includes("h1") ||
+      nodeName.includes("h2") ||
+      nodeName.includes("h3") ||
+      nodeName.includes("title")
+    )
+      tag = "h3";
+    else if (
+      nodeName.includes("text") ||
+      nodeName.includes("label") ||
+      nodeName.includes("paragraph")
+    )
+      tag = "p";
+    else if (nodeName.includes("link")) tag = "a";
+    else if (nodeName.includes("image") || nodeName.includes("img"))
+      tag = "img";
+
+    // Extract colors
+    let bgColor = "";
+    let textColor = "";
+    let borderColor = "";
+
+    if (n.fills && Array.isArray(n.fills) && n.fills.length > 0) {
+      const fill = n.fills.find(
+        (f: any) => f.type === "SOLID" && f.visible !== false
+      );
+      if (fill && fill.color) {
+        bgColor = rgbToHex(
+          (fill.color.r ?? 0) * 255,
+          (fill.color.g ?? 0) * 255,
+          (fill.color.b ?? 0) * 255,
+          fill.opacity ?? 1
+        );
+      }
+    }
+
+    if (n.strokes && Array.isArray(n.strokes) && n.strokes.length > 0) {
+      const stroke = n.strokes[0];
+      if (stroke && stroke.color) {
+        borderColor = rgbToHex(
+          (stroke.color.r ?? 0) * 255,
+          (stroke.color.g ?? 0) * 255,
+          (stroke.color.b ?? 0) * 255,
+          stroke.opacity ?? 1
+        );
+      }
+    }
+
+    // Build classes
+    const classes: string[] = [];
+
+    // Background color
+    if (bgColor === palette.primary) classes.push("bg-primary");
+    else if (bgColor === palette.secondary) classes.push("bg-secondary");
+    else if (bgColor === palette.accent) classes.push("bg-accent");
+    else if (bgColor && bgColor !== "#ffffff" && bgColor !== "#fff")
+      classes.push(`[background-color:${bgColor}]`);
+
+    // Text color (if tag is text-like)
+    if (["span", "p", "h3", "button", "a", "label"].includes(tag) && n.fills) {
+      const textFill = n.fills.find((f: any) => f.type === "SOLID");
+      if (textFill && textFill.color) {
+        textColor = rgbToHex(
+          (textFill.color.r ?? 0) * 255,
+          (textFill.color.g ?? 0) * 255,
+          (textFill.color.b ?? 0) * 255,
+          textFill.opacity ?? 1
+        );
+        if (textColor && textColor !== "#000000")
+          classes.push(`[color:${textColor}]`);
+      }
+    }
+
+    // Border
+    if (borderColor && n.strokeWeight) {
+      classes.push(`border [border-color:${borderColor}]`);
+      const weight = n.strokeWeight || 1;
+      if (weight === 1) classes.push("border");
+      else if (weight === 2) classes.push("border-2");
+      else if (weight >= 4) classes.push("border-4");
+    }
+
+    // Sizing and spacing
+    if (n.absoluteBoundingBox) {
+      const width = n.absoluteBoundingBox.width;
+      const height = n.absoluteBoundingBox.height;
+      if (width > 0) classes.push(`w-[${Math.round(width)}px]`);
+      if (height > 0 && tag !== "input")
+        classes.push(`h-[${Math.round(height)}px]`);
+    }
+
+    // Padding
+    if (n.paddingTop !== undefined && n.paddingTop > 0) {
+      const p = Math.round(n.paddingTop / 4);
+      classes.push(`py-${Math.min(p, 16)}`);
+      if (n.paddingLeft !== undefined && n.paddingLeft > 0) {
+        const px = Math.round(n.paddingLeft / 4);
+        classes.push(`px-${Math.min(px, 16)}`);
+      }
+    }
+
+    // Border radius
+    if (n.cornerRadius) {
+      const r = n.cornerRadius;
+      if (r < 4) classes.push("rounded");
+      else if (r < 8) classes.push("rounded-md");
+      else if (r < 12) classes.push("rounded-lg");
+      else if (r < 16) classes.push("rounded-xl");
+      else if (r >= 50) classes.push("rounded-full");
+      else classes.push("rounded-2xl");
+    } else if (tag === "button") {
+      classes.push("rounded-lg");
+    }
+
+    // Font size
+    if (n.fontSize) {
+      const size = n.fontSize;
+      if (size < 12) classes.push("text-xs");
+      else if (size < 14) classes.push("text-xs");
+      else if (size < 16) classes.push("text-sm");
+      else if (size < 18) classes.push("text-base");
+      else if (size < 20) classes.push("text-lg");
+      else if (size < 24) classes.push("text-xl");
+      else if (size < 30) classes.push("text-2xl");
+      else classes.push("text-3xl");
+    }
+
+    // Font weight
+    if (n.fontWeight) {
+      const weight = n.fontWeight;
+      if (weight >= 900) classes.push("font-black");
+      else if (weight >= 700) classes.push("font-bold");
+      else if (weight >= 600) classes.push("font-semibold");
+      else if (weight >= 500) classes.push("font-medium");
+    }
+
+    // Layout
+    if (n.layoutMode === "HORIZONTAL") classes.push("flex flex-row");
+    else if (n.layoutMode === "VERTICAL") classes.push("flex flex-col");
+
+    if (n.itemSpacing && n.layoutMode) {
+      const gap = Math.round(n.itemSpacing / 4);
+      classes.push(`gap-${Math.min(gap, 16)}`);
+    }
+
+    // Handle overflow and flexbox alignment
+    if (n.counterAxisAlignItems) {
+      if (n.counterAxisAlignItems === "CENTER") classes.push("items-center");
+      else if (n.counterAxisAlignItems === "MAX") classes.push("items-end");
+      else if (n.counterAxisAlignItems === "MIN") classes.push("items-start");
+    }
+
+    const classStr = classes.length > 0 ? ` class="${classes.join(" ")}"` : "";
+
+    // Content
+    if (n.type === "TEXT" || n.characters) {
+      const text = escapeHtml(n.characters || n.name || "");
+      return `${indent}<${tag}${classStr}>${text}</${tag}>`;
+    }
+
+    // For containers with children
+    if (n.children && Array.isArray(n.children) && n.children.length > 0) {
+      const children = n.children
+        .map((child: any) => buildElement(child, depth + 1))
+        .filter(Boolean)
+        .join("\n");
+      if (children) {
+        return `${indent}<${tag}${classStr}>\n${children}\n${indent}</${tag}>`;
+      }
+    }
+
+    // Self-closing tags
+    if (tag === "input") {
+      return `${indent}<${tag}${classStr} />`;
+    } else if (tag === "img") {
+      return `${indent}<${tag}${classStr} />`;
+    }
+
+    return `${indent}<${tag}${classStr}></${tag}>`;
+  };
+
+  const bodyHTML = buildElement(node);
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTC-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "${palette.primary || "#13ec5b"}",
+            "secondary": "${palette.secondary || "#6b7280"}",
+            "accent": "${palette.accent || "#f59e0b"}",
+            "background-light": "${palette.background || "#f6f8f6"}",
+            "background-dark": "#102216",
+          },
+          fontFamily: {
+            display: ["Plus Jakarta Sans", "sans-serif"]
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            full: "9999px"
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
+  <main class="min-h-screen p-8">
+${bodyHTML}
+  </main>
+</body>
+</html>`;
+};
+
 const generateTailwindHTML = (node: any, config?: TailwindConfig): string => {
   if (!node) return "";
 
@@ -309,454 +566,18 @@ const generateTailwindHTML = (node: any, config?: TailwindConfig): string => {
 </html>`;
   }
 
-  const palette = extractColorPalette(node);
-  const tailwindConfig = config || {
-    colors: {
-      primary: palette.primary || "#13ec5b",
-      secondary: palette.secondary || "#6b7280",
-      accent: palette.accent || "#f59e0b",
-      "background-light": palette.background || "#f6f8f6",
-      "background-dark": "#102216"
-    },
-    fonts: ["Manrope", "Segoe UI", "Roboto"],
-    borderRadius: {
-      DEFAULT: "0.25rem",
-      lg: "0.5rem",
-      xl: "0.75rem",
-      full: "9999px"
-    }
-  };
+  // Use improved generation from Figma node data
+  return generateHTMLFromFigmaNode(node);
+};
 
-  const tailwindScript = `
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "primary": "${tailwindConfig.colors.primary}",
-                        "secondary": "${tailwindConfig.colors.secondary}",
-                        "accent": "${tailwindConfig.colors.accent}",
-                        "background-light": "${tailwindConfig.colors["background-light"]}",
-                        "background-dark": "${tailwindConfig.colors["background-dark"]}",
-                    },
-                    fontFamily: {
-                        "display": ["Manrope", "sans-serif"]
-                    },
-                    borderRadius: {
-                        "DEFAULT": "0.25rem",
-                        "lg": "0.5rem",
-                        "xl": "0.75rem",
-                        "full": "9999px"
-                    },
-                },
-            },
-        }
-    `;
+// Helper to convert inline styles to Tailwind classes
+const convertInlineStylesToTailwind = (
+  styles: Record<string, string>
+): string[] => {
+  const classes: string[] = [];
 
-  // Advanced Tailwind generation with comprehensive Figma API data extraction
-  const buildHTML = (
-    n: any,
-    indent = 0,
-    parentType?: string,
-    depth = 0
-  ): string => {
-    if (!n || depth > 50) return "";
-
-    const indentStr = "  ".repeat(indent);
-
-    // ============ TEXT NODE HANDLING ============
-    if (n.type === "TEXT") {
-      // Extract the actual text content from the node
-      const text = n.characters
-        ? String(n.characters).trim()
-        : n.content
-        ? String(n.content).trim()
-        : n.text
-        ? String(n.text).trim()
-        : n.name
-        ? String(n.name).trim()
-        : "";
-
-      if (!text || text === "") return "";
-
-      const classes: string[] = [];
-
-      // === COLOR ===
-      let textColor = "#000000";
-      if (n.fills && Array.isArray(n.fills) && n.fills.length > 0) {
-        const fill = n.fills.find(
-          (f: any) => f.type === "SOLID" && f.visible !== false
-        );
-        if (fill && fill.color) {
-          textColor = rgbToHex(
-            (fill.color.r ?? 0) * 255,
-            (fill.color.g ?? 0) * 255,
-            (fill.color.b ?? 0) * 255,
-            fill.opacity ?? 1
-          );
-          if (textColor !== "#ffffff" && textColor !== "#000000") {
-            classes.push(`[color:${textColor}]`);
-          }
-        }
-      }
-
-      // === FONT SIZE ===
-      const size = n.fontSize ?? 16;
-      if (size < 12) classes.push("text-xs");
-      else if (size < 14) classes.push("text-xs");
-      else if (size < 16) classes.push("text-sm");
-      else if (size < 18) classes.push("text-base");
-      else if (size < 20) classes.push("text-lg");
-      else if (size < 24) classes.push("text-xl");
-      else if (size < 30) classes.push("text-2xl");
-      else if (size < 36) classes.push("text-3xl");
-      else if (size < 48) classes.push("text-4xl");
-      else classes.push("text-5xl");
-
-      // === FONT WEIGHT ===
-      const weight = n.fontWeight ?? 400;
-      if (weight >= 900) classes.push("font-black");
-      else if (weight >= 700) classes.push("font-bold");
-      else if (weight >= 600) classes.push("font-semibold");
-      else if (weight >= 500) classes.push("font-medium");
-      else if (weight < 400) classes.push("font-light");
-
-      // === LETTER SPACING ===
-      if (n.letterSpacing && n.letterSpacing !== 0) {
-        if (n.letterSpacing < -2) classes.push("tracking-tighter");
-        else if (n.letterSpacing < 0) classes.push("tracking-tight");
-        else if (n.letterSpacing > 3) classes.push("tracking-wide");
-        else if (n.letterSpacing > 1) classes.push("tracking-normal");
-      }
-
-      // === TEXT ALIGNMENT ===
-      if (n.textAlignHorizontal) {
-        if (n.textAlignHorizontal === "CENTER") classes.push("text-center");
-        else if (n.textAlignHorizontal === "RIGHT") classes.push("text-right");
-        else if (n.textAlignHorizontal === "JUSTIFIED")
-          classes.push("text-justify");
-      }
-
-      // === TEXT DECORATION ===
-      if (n.textDecoration === "UNDERLINE") classes.push("underline");
-      if (n.textDecoration === "STRIKETHROUGH") classes.push("line-through");
-
-      // === LINE HEIGHT ===
-      if (n.lineHeight) {
-        if (typeof n.lineHeight === "object" && n.lineHeight.value) {
-          if (n.lineHeight.value < 1.2) classes.push("leading-tight");
-          else if (n.lineHeight.value < 1.5) classes.push("leading-snug");
-          else if (n.lineHeight.value > 2) classes.push("leading-loose");
-          else classes.push("leading-relaxed");
-        } else if (typeof n.lineHeight === "number" && n.lineHeight > 1.2) {
-          classes.push("leading-relaxed");
-        }
-      }
-
-      const classStr =
-        classes.length > 0 ? ` class="${classes.join(" ")}"` : "";
-      const contentText = escapeHtml(text);
-
-      // Choose heading vs paragraph based on size and weight
-      if (size > 24 || weight >= 700 || text.length < 50) {
-        return `${indentStr}<h3${classStr}>${contentText}</h3>`;
-      }
-      return `${indentStr}<p${classStr}>${contentText}</p>`;
-    }
-
-    // ============ IMAGE NODE HANDLING ============
-    if (n.type === "IMAGE") {
-      const classes = ["w-full", "h-auto", "rounded-lg", "object-cover"];
-
-      // Get aspect ratio from bounding box
-      if (n.absoluteBoundingBox) {
-        const width = n.absoluteBoundingBox.width;
-        const height = n.absoluteBoundingBox.height;
-        if (height > 0) {
-          const aspect = width / height;
-          if (aspect > 2) classes.push("aspect-video");
-          else if (aspect > 1.5) classes.push("aspect-landscape");
-          else if (aspect < 0.7) classes.push("aspect-portrait");
-        }
-      }
-
-      const classStr = ` class="${classes.join(" ")}"`;
-      const altText = (n.name || "Image").substring(0, 100);
-      return `${indentStr}<img${classStr} alt="${escapeHtml(
-        altText
-      )}" src="https://via.placeholder.com/800x600" />`;
-    }
-
-    // ============ NODE NAME ANALYSIS ============
-    const nodeName = String(n.name || "").toLowerCase();
-
-    // Determine semantic HTML tag
-    let tagName = "div";
-    let isContainer = false;
-
-    const tagMap: Record<string, [string, boolean]> = {
-      "button|btn|cta": ["button", false],
-      "link|anchor": ["a", false],
-      "header|navbar": ["header", true],
-      "nav|navigation": ["nav", true],
-      footer: ["footer", true],
-      "hero|banner|section": ["section", true],
-      "card|item|product": ["article", true],
-      "list|menu": ["ul", true],
-      form: ["form", true],
-      "input|field|textbox": ["input", false]
-    };
-
-    for (const [pattern, [tag, isCtainer]] of Object.entries(tagMap)) {
-      const patterns = pattern.split("|");
-      if (patterns.some(p => nodeName.includes(p))) {
-        tagName = tag;
-        isContainer = isCtainer;
-        break;
-      }
-    }
-
-    // Default to container if has layout mode
-    if (
-      !isContainer &&
-      (n.layoutMode || (n.children && n.children.length > 0))
-    ) {
-      isContainer = true;
-    }
-
-    // ============ BUILD CLASSES ============
-    const classes: string[] = [];
-
-    // === BACKGROUND COLOR ===
-    if (n.fills && Array.isArray(n.fills) && n.fills.length > 0) {
-      const fill = n.fills.find(
-        (f: any) => f.type === "SOLID" && f.visible !== false
-      );
-      if (fill && fill.color) {
-        const bgColor = rgbToHex(
-          (fill.color.r ?? 0) * 255,
-          (fill.color.g ?? 0) * 255,
-          (fill.color.b ?? 0) * 255,
-          fill.opacity ?? 1
-        );
-        if (bgColor === tailwindConfig.colors.primary) {
-          classes.push("bg-primary");
-        } else if (bgColor === tailwindConfig.colors.secondary) {
-          classes.push("bg-secondary");
-        } else if (bgColor === tailwindConfig.colors.accent) {
-          classes.push("bg-accent");
-        } else if (
-          bgColor.toLowerCase() !== "#ffffff" &&
-          bgColor.toLowerCase() !== "#fff"
-        ) {
-          classes.push(`[background-color:${bgColor}]`);
-        }
-      }
-    }
-
-    // === BORDER ===
-    if (n.strokes && Array.isArray(n.strokes) && n.strokes.length > 0) {
-      const stroke = n.strokes[0];
-      if (stroke.type === "SOLID" && stroke.color) {
-        const borderColor = rgbToHex(
-          (stroke.color.r ?? 0) * 255,
-          (stroke.color.g ?? 0) * 255,
-          (stroke.color.b ?? 0) * 255,
-          stroke.opacity ?? 1
-        );
-        classes.push("border", `[border-color:${borderColor}]`);
-      }
-      if (n.strokeWeight) {
-        const weight = n.strokeWeight;
-        if (weight === 1) classes.push("border");
-        else if (weight === 2) classes.push("border-2");
-        else if (weight >= 4) classes.push("border-4");
-      }
-    }
-
-    // === BORDER RADIUS ===
-    if (n.cornerRadius) {
-      const radius = n.cornerRadius;
-      if (radius < 4) classes.push("rounded");
-      else if (radius < 8) classes.push("rounded-md");
-      else if (radius < 12) classes.push("rounded-lg");
-      else if (radius < 16) classes.push("rounded-xl");
-      else if (radius >= 50) classes.push("rounded-full");
-      else classes.push("rounded-2xl");
-    } else if (tagName === "button") {
-      classes.push("rounded-lg");
-    }
-
-    // === PADDING ===
-    if (n.paddingTop || n.paddingRight || n.paddingBottom || n.paddingLeft) {
-      const top = Math.round((n.paddingTop ?? 0) / 4);
-      const right = Math.round((n.paddingRight ?? 0) / 4);
-      const bottom = Math.round((n.paddingBottom ?? 0) / 4);
-      const left = Math.round((n.paddingLeft ?? 0) / 4);
-
-      if (top === right && right === bottom && bottom === left && top > 0) {
-        classes.push(`p-${Math.min(top, 16)}`);
-      } else {
-        if (top > 0) classes.push(`pt-${Math.min(top, 16)}`);
-        if (right > 0) classes.push(`pr-${Math.min(right, 16)}`);
-        if (bottom > 0) classes.push(`pb-${Math.min(bottom, 16)}`);
-        if (left > 0) classes.push(`pl-${Math.min(left, 16)}`);
-      }
-    } else if (isContainer && !n.layoutMode) {
-      classes.push("p-4");
-    }
-
-    // === FLEXBOX LAYOUT ===
-    if (n.layoutMode) {
-      classes.push("flex");
-      if (n.layoutMode === "HORIZONTAL") {
-        classes.push("flex-row");
-      } else if (n.layoutMode === "VERTICAL") {
-        classes.push("flex-col");
-      }
-
-      // Item spacing (gap)
-      if (n.itemSpacing && n.itemSpacing > 0) {
-        const gap = Math.round(n.itemSpacing / 4);
-        if (gap > 0) classes.push(`gap-${Math.min(gap, 16)}`);
-      }
-
-      // Primary axis alignment
-      if (n.layoutAlign) {
-        if (n.layoutAlign === "MIN") classes.push("justify-start");
-        else if (n.layoutAlign === "CENTER") classes.push("justify-center");
-        else if (n.layoutAlign === "MAX") classes.push("justify-end");
-        else if (n.layoutAlign === "SPACE_BETWEEN")
-          classes.push("justify-between");
-      }
-
-      // Cross axis alignment
-      if (n.counterAxisAlignItems) {
-        if (n.counterAxisAlignItems === "MIN") classes.push("items-start");
-        else if (n.counterAxisAlignItems === "CENTER")
-          classes.push("items-center");
-        else if (n.counterAxisAlignItems === "MAX") classes.push("items-end");
-      }
-
-      // Wrap flex items
-      if (n.layoutWrap === "WRAP") classes.push("flex-wrap");
-    }
-
-    // === SIZE ===
-    if (n.absoluteBoundingBox) {
-      const width = Math.round(n.absoluteBoundingBox.width);
-      const height = Math.round(n.absoluteBoundingBox.height);
-
-      if (!isContainer && width > 0 && width < 1280) {
-        const w = Math.round(width / 16);
-        if (w > 0 && w <= 80) classes.push(`w-${w}`);
-      }
-
-      if (!isContainer && height > 0) {
-        const h = Math.round(height / 16);
-        if (h > 0 && h <= 96) classes.push(`h-${h}`);
-      }
-    }
-
-    // === OPACITY ===
-    if (n.opacity !== undefined && n.opacity < 1) {
-      const op = Math.round((n.opacity * 100) / 10) * 10;
-      classes.push(`opacity-${op}`);
-    }
-
-    // === BUTTON STYLING ===
-    if (tagName === "button") {
-      if (!classes.some(c => c.includes("px"))) classes.push("px-6");
-      if (!classes.some(c => c.includes("py"))) classes.push("py-2");
-      if (!classes.some(c => c.startsWith("bg-"))) classes.push("bg-primary");
-      classes.push(
-        "text-white",
-        "font-medium",
-        "hover:opacity-90",
-        "transition-opacity",
-        "cursor-pointer"
-      );
-    }
-
-    const classStr = classes.length > 0 ? ` class="${classes.join(" ")}"` : "";
-
-    // ============ RENDER CHILDREN ============
-    let childrenHTML = "";
-    let hasContent = false;
-
-    if (n.children && Array.isArray(n.children) && n.children.length > 0) {
-      const childParts = n.children
-        .map((child: any) => {
-          const result = buildHTML(child, indent + 1, tagName, depth + 1);
-          if (result && result.trim()) hasContent = true;
-          return result;
-        })
-        .filter(x => Boolean(x));
-
-      if (childParts.length > 0) {
-        childrenHTML = `\n${childParts.join("\n")}\n${indentStr}`;
-      }
-    }
-
-    // Placeholder for empty containers
-    if (isContainer && !hasContent) {
-      const sectionName = nodeName.includes("hero")
-        ? "Hero"
-        : nodeName.includes("banner")
-        ? "Banner"
-        : nodeName.includes("card")
-        ? "Card"
-        : nodeName.includes("section")
-        ? "Section"
-        : "Container";
-      childrenHTML = `\n${indentStr}  <div class="flex items-center justify-center min-h-[200px] bg-slate-50 dark:bg-slate-900 rounded-lg">\n${indentStr}    <p class="text-center text-slate-500 dark:text-slate-400">📦 ${sectionName} vazio</p>\n${indentStr}  </div>\n${indentStr}`;
-    }
-
-    // ============ FINAL RENDER ============
-    const selfClosing = ["input", "img", "br", "hr"];
-    if (selfClosing.includes(tagName)) {
-      return `${indentStr}<${tagName}${classStr} />`;
-    }
-
-    if (childrenHTML) {
-      return `${indentStr}<${tagName}${classStr}>${childrenHTML}</${tagName}>`;
-    } else {
-      return `${indentStr}<${tagName}${classStr}></${tagName}>`;
-    }
-  };
-
-  const bodyHTML = buildHTML(node);
-
-  const html = `<!DOCTYPE html>
-<html class="light" lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <meta name="description" content="SolarOps - Design Export"/>
-  <title>SolarOps - Extracted Design</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet"/>
-  <script id="tailwind-config">
-${tailwindScript}
-  </script>
-  <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-    }
-    body {
-      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-  </style>
-</head>
-<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
-  <main class="min-h-screen max-w-[1280px] mx-auto px-4 py-8">
-${bodyHTML}
-  </main>
-</body>
-</html>`;
-
-  return html;
+  // Implementation would go here
+  return classes;
 };
 
 const extractImprovedCSS = (node: any, parentNode?: any): string => {
@@ -1775,6 +1596,15 @@ const CodeSnippetSection: FC<CodeSnippetSectionProps> = ({
         } else {
           console.log("✗ Dados serializados não encontrados:", error);
           setSerializedDOMData(null);
+        }
+      }
+
+      if (type === "rendered-node-as-html-response") {
+        if (data && data.tree) {
+          console.log("✓ Nó renderizado recebido do plugin");
+          setSerializedDOMData(data);
+        } else {
+          console.log("✗ Erro ao renderizar nó:", error);
         }
       }
     };

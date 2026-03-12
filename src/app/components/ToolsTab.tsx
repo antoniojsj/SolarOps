@@ -5,6 +5,7 @@ import MeasurementTool from "./MeasurementTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
 import ImportDesignTab, { ImportDesignTabRef } from "./ImportDesignTab";
+import RenameLayersTab, { RenameLayersTabRef } from "./RenameLayersTab";
 import CollapsibleSection from "./CollapsibleSection";
 
 // Add CSS for scrollbar
@@ -57,15 +58,20 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
   onInspectClick
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<
-    "main" | "inspect" | "measure" | "import"
+    "main" | "inspect" | "measure" | "import" | "rename"
   >("main");
   const [animationData, setAnimationData] = useState(null);
   const importDesignRef = useRef<ImportDesignTabRef>(null);
+  const renameLayersTabRef = useRef<RenameLayersTabRef>(null);
   const [importCanImport, setImportCanImport] = useState(false);
   const [importIsLoading, setImportIsLoading] = useState(false);
+  const [renameCanRename, setRenameCanRename] = useState(false);
+  const [renameIsLoading, setRenameIsLoading] = useState(false);
 
   // Função para mudar de subpágina e comunicar com App.tsx
-  const changeSubPage = (page: "main" | "inspect" | "measure" | "import") => {
+  const changeSubPage = (
+    page: "main" | "inspect" | "measure" | "import" | "rename"
+  ) => {
     console.log("[ToolsTab] Mudando para subpágina:", page);
     setActiveSubPage(page);
 
@@ -78,6 +84,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
         ? "Mensurar"
         : page === "import"
         ? "Importar Design"
+        : page === "rename"
+        ? "Rename Layers"
         : "";
 
     // Enviar mensagem diretamente para a janela atual
@@ -391,6 +399,93 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
               }}
             >
               Importe designs e tokens de outras fontes
+            </p>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255, 255, 255, 0.5)" }}
+          >
+            <path d="M9 18l6-6-6-6"></path>
+          </svg>
+        </div>
+
+        {/* Card Rename Layers */}
+        <div
+          onClick={() => changeSubPage("rename")}
+          style={{
+            background: "rgba(255, 149, 0, 0.12)",
+            border: "1px solid rgba(255, 149, 0, 0.30)",
+            borderRadius: 8,
+            padding: 16,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(255, 149, 0, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(255, 149, 0, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(255, 149, 0, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(255, 149, 0, 0.30)";
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              background: "rgba(255, 149, 0, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#ff9500" }}
+            >
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Rename Layers
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Renomeie camadas em lote no seu design
             </p>
           </div>
           <svg
@@ -1030,6 +1125,89 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
                   }}
                 >
                   {importIsLoading ? "⏳ Importando..." : "Importar"}
+                </button>
+              </div>
+            </footer>
+          </div>
+        );
+
+      case "rename":
+        return (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0
+            }}
+          >
+            <div
+              className="scrollable-content"
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                backgroundColor: "transparent"
+              }}
+            >
+              <RenameLayersTab
+                ref={renameLayersTabRef}
+                hideButton={true}
+                selectedNode={selectedNode}
+                onStateChange={(canRename, isLoading) => {
+                  setRenameCanRename(canRename);
+                  setRenameIsLoading(isLoading);
+                }}
+              />
+            </div>
+            <footer
+              className="initial-content-footer"
+              style={{
+                padding: "0px",
+                background: "#2A2A2A",
+                borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+                display: "block"
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px",
+                  display: "flex",
+                  justifyContent: "center"
+                }}
+              >
+                <button
+                  className="button button--primary"
+                  onClick={() => {
+                    console.log("[ToolsTab] Botão Renomear Layers clicado");
+                    renameLayersTabRef.current?.triggerRename();
+                  }}
+                  disabled={!renameCanRename || renameIsLoading}
+                  style={{
+                    background:
+                      renameCanRename && !renameIsLoading
+                        ? "#18A0FB"
+                        : "#4A4A4A",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "12px 16px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor:
+                      renameCanRename && !renameIsLoading
+                        ? "pointer"
+                        : "not-allowed",
+                    opacity: renameCanRename && !renameIsLoading ? 1 : 0.6,
+                    transition: "background 0.2s, opacity 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "100%",
+                    maxWidth: "100%",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  {renameIsLoading ? "⏳ Processando..." : "Renomear Layers"}
                 </button>
               </div>
             </footer>
