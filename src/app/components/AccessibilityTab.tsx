@@ -86,6 +86,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   const [autoAnalysisError, setAutoAnalysisError] = useState<string | null>(
     null
   );
+  const [hoveredResultId, setHoveredResultId] = useState<string | null>(null);
   // Screenshot do frame analisado (como no plugin accessibility)
   const [contrastPreviewImageUrl, setContrastPreviewImageUrl] = useState<
     string | null
@@ -103,6 +104,19 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
       return hex.length === 1 ? "0" + hex : hex;
     };
     return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`.toUpperCase();
+  };
+
+  const handleSelectNode = (nodeId: string) => {
+    if (!nodeId) return;
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "fetch-layer-data",
+          id: nodeId
+        }
+      },
+      "*"
+    );
   };
 
   const getLuminance = (color: { r: number; g: number; b: number }): number => {
@@ -1132,64 +1146,113 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                           <div
                             style={{
                               display: "flex",
-                              gap: 4,
-                              flexWrap: "wrap"
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              marginTop: 8
                             }}
                           >
-                            {result.aa && (
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  background: "rgba(34, 197, 94, 0.2)",
-                                  color: "#22c55e",
-                                  padding: "2px 6px",
-                                  borderRadius: 3
-                                }}
-                              >
-                                AA
-                              </span>
-                            )}
-                            {result.aaa && (
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  background: "rgba(34, 197, 94, 0.2)",
-                                  color: "#22c55e",
-                                  padding: "2px 6px",
-                                  borderRadius: 3
-                                }}
-                              >
-                                AAA
-                              </span>
-                            )}
-                            {result.aaLarge && (
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  background: "rgba(34, 197, 94, 0.2)",
-                                  color: "#22c55e",
-                                  padding: "2px 6px",
-                                  borderRadius: 3
-                                }}
-                              >
-                                AA Large
-                              </span>
-                            )}
-                            {result.hasIssues &&
-                              result.issues.map((issue, i) => (
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 4,
+                                flexWrap: "wrap"
+                              }}
+                            >
+                              {result.aa && (
                                 <span
-                                  key={i}
                                   style={{
                                     fontSize: 10,
-                                    background: "rgba(239, 68, 68, 0.2)",
-                                    color: "#ef4444",
+                                    background: "rgba(34, 197, 94, 0.2)",
+                                    color: "#22c55e",
                                     padding: "2px 6px",
                                     borderRadius: 3
                                   }}
                                 >
-                                  {issue}
+                                  AA
                                 </span>
-                              ))}
+                              )}
+                              {result.aaa && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    background: "rgba(34, 197, 94, 0.2)",
+                                    color: "#22c55e",
+                                    padding: "2px 6px",
+                                    borderRadius: 3
+                                  }}
+                                >
+                                  AAA
+                                </span>
+                              )}
+                              {result.aaLarge && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    background: "rgba(34, 197, 94, 0.2)",
+                                    color: "#22c55e",
+                                    padding: "2px 6px",
+                                    borderRadius: 3
+                                  }}
+                                >
+                                  AA Large
+                                </span>
+                              )}
+                              {result.hasIssues &&
+                                result.issues.map((issue, i) => (
+                                  <span
+                                    key={i}
+                                    style={{
+                                      fontSize: 10,
+                                      background: "rgba(239, 68, 68, 0.2)",
+                                      color: "#ef4444",
+                                      padding: "2px 6px",
+                                      borderRadius: 3
+                                    }}
+                                  >
+                                    {issue}
+                                  </span>
+                                ))}
+                            </div>
+                            <button
+                              onClick={() => handleSelectNode(result.id)}
+                              onMouseEnter={() => setHoveredResultId(result.id)}
+                              onMouseLeave={() => setHoveredResultId(null)}
+                              style={{
+                                background:
+                                  hoveredResultId === result.id
+                                    ? "rgba(255, 255, 255, 0.1)"
+                                    : "none",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                padding: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                                flexShrink: 0
+                              }}
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <g>
+                                  <path
+                                    fillRule="evenodd"
+                                    clipRule="evenodd"
+                                    d="M7.5 6V3.025C5.138 3.259 3.26 5.138 3.025 7.5H6V8.5H3.025C3.259 10.862 5.138 12.74 7.5 12.975V10H8.5V12.975C10.862 12.741 12.74 10.862 12.975 8.5H10V7.5H12.975C12.741 5.138 10.862 3.26 8.5 3.025V6H7.5ZM13.98 7.5C13.739 4.585 11.415 2.261 8.5 2.02V0H7.5V2.02C4.585 2.261 2.261 4.585 2.02 7.5H0V8.5H2.02C2.261 11.415 4.585 13.739 7.5 13.98V16H8.5V13.98C11.415 13.739 13.739 11.415 13.98 8.5H16V7.5H13.98Z"
+                                    fill="white"
+                                  />
+                                </g>
+                                <defs>
+                                  <clipPath>
+                                    <rect width="16" height="16" fill="white" />
+                                  </clipPath>
+                                </defs>
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       ))}
