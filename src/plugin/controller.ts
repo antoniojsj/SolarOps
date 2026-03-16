@@ -3816,41 +3816,119 @@ const analyzeSelectedContrast = async (msg?: any) => {
       return node.type === "PAGE" ? node : null;
     };
 
-    const computeTypeContrast = (textNodeInfo, bgImageData) => {
-      const { r, g, b } = bgImageData;
-      const bgLuminance = srgbLuminance({ r, g, b });
+    const mixColors = (c1, c2, amount) => {
+      // from tinycolor - blends two colors at given amount (0 to 1)
+      const newAmount = amount === 0 ? 0 : amount || 0.5;
+      return {
+        r: (c2.r - c1.r) * newAmount + c1.r,
+        g: (c2.g - c1.g) * newAmount + c1.g,
+        b: (c2.b - c1.b) * newAmount + c1.b,
+        a: (c2.a - c1.a) * newAmount + c1.a
+      };
+    };
 
-      let numPass = 0;
-      let numFail = 0;
-      let minCR = 0;
-      let maxCR = 0;
+    const getImageDataPixel = (imageData, x, y, constrain = true) => {
+      x = Math.round(x);
+      y = Math.round(y);
 
-      for (const { color, textSize, isBold } of textNodeInfo.textStyleSamples) {
-        const { r, g, b } = color;
-        const textLuminance = srgbLuminance({ r, g, b });
-        const contrastRatio = (bgLuminance + 0.05) / (textLuminance + 0.05);
-
-        if (textSize >= 18 || (isBold && textSize >= 14)) {
-          // Large text: 3:1 ratio required
-          if (contrastRatio >= 3) {
-            numPass++;
-          } else {
-            numFail++;
-          }
-        } else {
-          // Small text: 4.5:1 ratio required
-          if (contrastRatio >= 4.5) {
-            numPass++;
-          } else {
-            numFail++;
-          }
-        }
-
-        minCR = Math.min(minCR || 999, contrastRatio);
-        maxCR = Math.max(maxCR || 0, contrastRatio);
+      if (constrain) {
+        x = Math.max(0, Math.min(x, imageData.width - 1));
+        y = Math.max(0, Math.min(y, imageData.height - 1));
       }
 
-      return detailFor(numFail, numPass, minCR, maxCR);
+      if (x < 0 || x >= imageData.width || y < 0 || y >= imageData.height) {
+        return null;
+      }
+
+      return {
+        r: imageData.data[(y * imageData.width + x) * 4] / 255,
+        g: imageData.data[(y * imageData.width + x) * 4 + 1] / 255,
+        b: imageData.data[(y * imageData.width + x) * 4 + 2] / 255,
+        a: imageData.data[(y * imageData.width + x) * 4 + 3] / 255
+      };
+    };
+
+    const computeTypeContrast = (textNodeInfo, bgImageData) => {
+      const { x, y, w, h, textStyleSamples, effectiveOpacity } = textNodeInfo;
+
+      if (!textStyleSamples || textStyleSamples.length === 0) {
+        return {
+          aa: { status: "unknown", contrastRatio: 0 },
+          aaa: { status: "unknown", contrastRatio: 0 }
+        };
+      }
+
+      // Sample 4 points around the text node (corners)
+      const samplePoints = [
+        [x, y],
+        [x + w - 1, y],
+        [x, y + h - 1],
+        [x + w - 1, y + h - 1]
+      ];
+
+      const stats = {
+        aaFail: 0,
+        aaPass: 0,
+        aaaFail: 0,
+        aaaPass: 0,
+        minCR: Infinity,
+        maxCR: 0
+      };
+
+      for (const { textSize, isBold, color } of textStyleSamples) {
+        // Convert CSS px to pt for large text calculation
+        const pointSize = textSize / 1.333333333;
+        const isLargeText = pointSize >= 18 || (isBold && pointSize >= 14);
+        const passingAAContrastForLayer = isLargeText ? 3 : 4.5;
+        const passingAAAContrastForLayer = isLargeText ? 4.5 : 7;
+
+        for (const [x_, y_] of samplePoints) {
+          let bgColor = getImageDataPixel(bgImageData, x_, y_);
+
+          if (!bgColor) {
+            // Sample point out of bounds - skip
+            continue;
+          }
+
+          // Flatten background color on white matte (handle transparency)
+          bgColor = flattenColors(bgColor, { r: 1, g: 1, b: 1, a: 1 });
+
+          // Mix text color with background based on opacity
+          const blendedTextColor = mixColors(
+            bgColor,
+            color,
+            color.a * (effectiveOpacity || 1)
+          );
+
+          // Calculate luminance of both colors
+          const lum1 = srgbLuminance(blendedTextColor);
+          const lum2 = srgbLuminance(bgColor);
+
+          // Calculate contrast ratio
+          const contrastRatio =
+            (Math.max(lum1, lum2) + 0.05) / (Math.min(lum1, lum2) + 0.05);
+
+          stats.minCR = Math.min(stats.minCR, contrastRatio);
+          stats.maxCR = Math.max(stats.maxCR, contrastRatio);
+
+          if (contrastRatio < passingAAContrastForLayer) {
+            stats.aaFail += 1;
+          } else {
+            stats.aaPass += 1;
+          }
+
+          if (contrastRatio < passingAAAContrastForLayer) {
+            stats.aaaFail += 1;
+          } else {
+            stats.aaaPass += 1;
+          }
+        }
+      }
+
+      return {
+        aa: detailFor(stats.aaFail, stats.aaPass, stats.minCR, stats.maxCR),
+        aaa: detailFor(stats.aaaFail, stats.aaaPass, stats.minCR, stats.maxCR)
+      };
     };
 
     const contrast = {
@@ -3858,6 +3936,8 @@ const analyzeSelectedContrast = async (msg?: any) => {
       mapNodeIds,
       rgbToCssColor,
       flattenColors,
+      mixColors,
+      getImageDataPixel,
       formatContrastRatio,
       detailFor,
       srgbLuminance,
@@ -4026,17 +4106,73 @@ const analyzeSelectedContrast = async (msg?: any) => {
     // Obter cor de fundo da página (objeto 0-1 para a UI e string CSS para compatibilidade)
     let pageBgColor: string | null = null;
     let pageBgColorRgb: { r: number; g: number; b: number } | null = null;
-    const pageBgNode = pageContainingNode(frameNodeToAnalyze as SceneNode);
-    if (pageBgNode?.backgrounds?.[0]) {
-      const bgColor = pageBgNode.backgrounds[0];
-      if (bgColor.type === "SOLID" && bgColor.color) {
-        const c = bgColor.color;
+
+    // Primeiro, tentar obter a cor de fundo do próprio frame sendo analisado
+    const frameNodeInfo = frameNodeToAnalyze as any;
+    console.log(
+      "[Controller] Debug - frameNodeToAnalyze:",
+      frameNodeInfo?.id,
+      frameNodeInfo?.name
+    );
+    console.log(
+      "[Controller] Debug - frame backgrounds:",
+      frameNodeInfo?.backgrounds
+    );
+
+    if (frameNodeInfo?.backgrounds?.[0]) {
+      const frameBgColor = frameNodeInfo.backgrounds[0];
+      console.log(
+        "[Controller] Debug - frameBgColor.type:",
+        frameBgColor.type,
+        "frameBgColor.color:",
+        (frameBgColor as any).color
+      );
+      if (frameBgColor.type === "SOLID" && (frameBgColor as any).color) {
+        const c = (frameBgColor as any).color;
         pageBgColor = rgbToCssColor(c);
         pageBgColorRgb = { r: c.r, g: c.g, b: c.b };
+        console.log("[Controller] Usando cor de fundo DO FRAME:", pageBgColor);
       }
     }
+
+    // Se o frame não tem background, tentar obter da página
+    if (!pageBgColorRgb) {
+      const pageBgNode = pageContainingNode(frameNodeToAnalyze as SceneNode);
+
+      console.log(
+        "[Controller] Debug - pageBgNode:",
+        pageBgNode?.id,
+        pageBgNode?.name
+      );
+      console.log(
+        "[Controller] Debug - page backgrounds:",
+        pageBgNode?.backgrounds
+      );
+
+      if (pageBgNode?.backgrounds?.[0]) {
+        const bgColor = pageBgNode.backgrounds[0];
+        console.log(
+          "[Controller] Debug - page bgColor.type:",
+          bgColor.type,
+          "bgColor.color:",
+          (bgColor as any).color
+        );
+        if (bgColor.type === "SOLID" && (bgColor as any).color) {
+          const c = (bgColor as any).color;
+          pageBgColor = rgbToCssColor(c);
+          pageBgColorRgb = { r: c.r, g: c.g, b: c.b };
+          console.log(
+            "[Controller] Usando cor de fundo DA PÁGINA:",
+            pageBgColor
+          );
+        }
+      }
+    }
+
+    // Fallback para branco se não encontrou nenhuma cor
     if (!pageBgColorRgb) {
       pageBgColorRgb = { r: 1, g: 1, b: 1 };
+      console.log("[Controller] Usando cor de fundo PADRÃO (branco)");
     }
 
     console.log(

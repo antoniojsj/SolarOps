@@ -42,6 +42,7 @@ interface AccessibilityTabProps {
 interface ContrastResult {
   id: string;
   nodeName: string;
+  nodeType?: string;
   text: string;
   textColor: string;
   bgColor: string;
@@ -51,6 +52,10 @@ interface ContrastResult {
   aaLarge: boolean;
   hasIssues: boolean;
   issues: string[];
+  fontSize?: number;
+  fontWeight?: number | string;
+  textOpacity?: number;
+  bgOpacity?: number;
 }
 
 const TabContent = styled.div`
@@ -138,6 +143,99 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     return fontSize >= 18 || (weight >= 700 && fontSize >= 14);
   };
 
+  // Helper functions for image-based contrast analysis (from accessibility plugin)
+  const decodeToImageData = (
+    uint8Array: Uint8Array
+  ): Promise<ImageData | null> => {
+    return new Promise(resolve => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+
+      const img = new Image();
+      const blob = new Blob([uint8Array], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        URL.revokeObjectURL(url);
+        resolve(imageData);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  };
+
+  const getImageDataPixel = (
+    imageData: ImageData,
+    x: number,
+    y: number,
+    constrain = true
+  ): { r: number; g: number; b: number; a: number } | null => {
+    x = Math.round(x);
+    y = Math.round(y);
+
+    if (constrain) {
+      x = Math.max(0, Math.min(x, imageData.width - 1));
+      y = Math.max(0, Math.min(y, imageData.height - 1));
+    }
+
+    if (x < 0 || x >= imageData.width || y < 0 || y >= imageData.height) {
+      return null;
+    }
+
+    const idx = (y * imageData.width + x) * 4;
+    return {
+      r: imageData.data[idx] / 255,
+      g: imageData.data[idx + 1] / 255,
+      b: imageData.data[idx + 2] / 255,
+      a: imageData.data[idx + 3] / 255
+    };
+  };
+
+  const flattenColors = (
+    fg: { r: number; g: number; b: number; a: number },
+    bg: { r: number; g: number; b: number; a: number }
+  ) => {
+    return {
+      r: (1 - fg.a) * bg.a * bg.r + fg.a * fg.r,
+      g: (1 - fg.a) * bg.a * bg.g + fg.a * fg.g,
+      b: (1 - fg.a) * bg.a * bg.b + fg.a * fg.b,
+      a: (1 - fg.a) * bg.a + fg.a
+    };
+  };
+
+  const mixColors = (
+    c1: { r: number; g: number; b: number; a: number },
+    c2: { r: number; g: number; b: number; a: number },
+    amount: number
+  ) => {
+    const newAmount = amount === 0 ? 0 : amount || 0.5;
+    return {
+      r: (c2.r - c1.r) * newAmount + c1.r,
+      g: (c2.g - c1.g) * newAmount + c1.g,
+      b: (c2.b - c1.b) * newAmount + c1.b,
+      a: (c2.a - c1.a) * newAmount + c1.a
+    };
+  };
+
+  const srgbLuminance = (color: { r: number; g: number; b: number }) => {
+    const { r, g, b } = color;
+    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  };
+
   const performAutoAnalysis = async () => {
     setAutoAnalysisLoading(true);
     setAutoAnalysisError(null);
@@ -172,7 +270,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
 
   // Ouvir mensagem com resultados de análise automática
   useEffect(() => {
-    const handleAnalysisResults = (event: MessageEvent) => {
+    const handleAnalysisResults = async (event: MessageEvent) => {
       try {
         // Acessar dados corretamente do plugin Figma
         const pluginMessage = event.data?.pluginMessage || event.data || {};
@@ -202,14 +300,20 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             return;
           }
 
-          // Função auxiliar para converter cores 0-1 para HEX
+          // Função auxiliar para converter cores 0-1 ou 0-255 para HEX
           const colorToHex = (color: {
             r: number;
             g: number;
             b: number;
           }): string => {
             const toHexComponent = (v: number) => {
-              const val = Math.round(Math.max(0, Math.min(1, v)) * 255);
+              // Detecta se a cor está em formato 0-255 (valor > 1) ou 0-1
+              const is255Format =
+                v > 1 || color.r > 1 || color.g > 1 || color.b > 1;
+              const normalizedVal = is255Format ? v / 255 : v;
+              const val = Math.round(
+                Math.max(0, Math.min(1, normalizedVal)) * 255
+              );
               return Math.round(val)
                 .toString(16)
                 .padStart(2, "0");
@@ -254,81 +358,181 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             return (lighter + 0.05) / (darker + 0.05);
           };
 
-          // Processar resultados
-          const processedResults = result.textNodeInfos
-            .map((textInfo: any, index: number) => {
-              try {
-                if (
-                  !textInfo.textStyleSamples ||
-                  textInfo.textStyleSamples.length === 0
-                ) {
-                  return null;
-                }
+          // Decode image without text layers to sample background colors
+          const imageWithoutText = result.imageWithoutTextLayers;
+          let bgImageData: ImageData | null = null;
 
-                const sample = textInfo.textStyleSamples[0];
-                if (!sample || !sample.color) {
-                  return null;
-                }
+          if (
+            imageWithoutText &&
+            (imageWithoutText instanceof Uint8Array ||
+              ArrayBuffer.isView(imageWithoutText))
+          ) {
+            bgImageData = await decodeToImageData(
+              imageWithoutText as Uint8Array
+            );
+          }
 
-                // Cores vêm em formato 0-1 do Figma; usar pageBgColorRgb (objeto) enviado pelo plugin
+          // White matte for color flattening
+          const whiteMatte = { r: 1, g: 1, b: 1, a: 1 };
+
+          // Processar resultados com amostragem de imagem
+          const processedResults: ContrastResult[] = [];
+
+          for (let index = 0; index < result.textNodeInfos.length; index++) {
+            const textInfo = result.textNodeInfos[index];
+            try {
+              if (
+                !textInfo.textStyleSamples ||
+                textInfo.textStyleSamples.length === 0
+              ) {
+                continue;
+              }
+
+              const {
+                x,
+                y,
+                w,
+                h,
+                textStyleSamples,
+                effectiveOpacity
+              } = textInfo;
+
+              // Sample 4 points around the text node (corners)
+              const samplePoints = [
+                [x, y],
+                [x + w - 1, y],
+                [x, y + h - 1],
+                [x + w - 1, y + h - 1]
+              ];
+
+              // Process each text style sample
+              for (const sample of textStyleSamples) {
+                if (!sample || !sample.color) continue;
+
                 const textColor = sample.color;
-                const bgColor =
-                  result.pageBgColorRgb &&
-                  typeof result.pageBgColorRgb === "object"
-                    ? result.pageBgColorRgb
-                    : { r: 1, g: 1, b: 1 };
+                const textOpacity = effectiveOpacity || 1;
 
-                // Converter para HEX para exibição
-                const textColorHex = colorToHex(textColor);
-                const bgColorHex = colorToHex(bgColor);
+                // DEBUG: Log the raw color values
+                console.log("[AccessibilityTab] Raw text color:", {
+                  r: textColor.r,
+                  g: textColor.g,
+                  b: textColor.b,
+                  a: textColor.a,
+                  hex: colorToHex(textColor)
+                });
 
-                // Calcular contraste com cores 0-1
-                const contrastRatio = getContrastRatio(textColor, bgColor);
+                let totalContrastRatio = 0;
+                let validSamples = 0;
+                let sampledBgColor: {
+                  r: number;
+                  g: number;
+                  b: number;
+                } | null = null;
 
-                // Determinar se é texto grande
-                const pointSize = (sample.textSize || 16) / 1.333333; // px -> pt
+                // Sample background from image at each point
+                for (const [px, py] of samplePoints) {
+                  if (!bgImageData) break;
+
+                  const bgPixel = getImageDataPixel(bgImageData, px, py, true);
+                  if (!bgPixel) continue;
+
+                  // Flatten background on white matte (handle transparency)
+                  const flattenedBg = flattenColors(bgPixel, whiteMatte);
+
+                  // Store first valid sample for display
+                  if (!sampledBgColor) {
+                    sampledBgColor = {
+                      r: flattenedBg.r,
+                      g: flattenedBg.g,
+                      b: flattenedBg.b
+                    };
+                  }
+
+                  // Blend text color with background based on opacity
+                  const blendedText = mixColors(
+                    flattenedBg,
+                    textColor,
+                    textColor.a * textOpacity
+                  );
+
+                  // Calculate luminance
+                  const textLum = srgbLuminance(blendedText);
+                  const bgLum = srgbLuminance(flattenedBg);
+
+                  // Calculate contrast ratio
+                  const lighter = Math.max(textLum, bgLum);
+                  const darker = Math.min(textLum, bgLum);
+                  const contrastRatio = (lighter + 0.05) / (darker + 0.05);
+
+                  totalContrastRatio += contrastRatio;
+                  validSamples++;
+                }
+
+                // If no image samples, fallback to page background
+                if (validSamples === 0) {
+                  const fallbackBg =
+                    result.pageBgColorRgb || ({ r: 1, g: 1, b: 1 } as any);
+                  sampledBgColor = fallbackBg;
+
+                  // Blend text with fallback background
+                  const blendedText = mixColors(
+                    { ...fallbackBg, a: 1 },
+                    textColor,
+                    textColor.a * textOpacity
+                  );
+
+                  const textLum = srgbLuminance(blendedText);
+                  const bgLum = srgbLuminance(fallbackBg);
+                  const lighter = Math.max(textLum, bgLum);
+                  const darker = Math.min(textLum, bgLum);
+                  totalContrastRatio = (lighter + 0.05) / (darker + 0.05);
+                  validSamples = 1;
+                }
+
+                const avgContrastRatio = totalContrastRatio / validSamples;
+
+                // Determine if large text
+                const pointSize = (sample.textSize || 16) / 1.333333;
                 const isLarge =
                   pointSize >= 18 || (sample.isBold && pointSize >= 14);
 
-                // Avaliar conformidade
-                const aa = contrastRatio >= (isLarge ? 3 : 4.5);
-                const aaa = contrastRatio >= (isLarge ? 4.5 : 7);
-                const aaLarge = contrastRatio >= 3;
+                // Evaluate compliance
+                const aa = avgContrastRatio >= (isLarge ? 3 : 4.5);
+                const aaa = avgContrastRatio >= (isLarge ? 4.5 : 7);
 
-                return {
+                const contrastResult: ContrastResult = {
                   id: textInfo.nodeId || `node-${index}`,
                   nodeName: textInfo.name || `Texto ${index + 1}`,
-                  nodeType: "TEXT",
                   text: (textInfo.value || "").substring(0, 100),
-                  textColor: textColorHex,
-                  bgColor: bgColorHex,
-                  contrastRatio: Math.round(contrastRatio * 100) / 100,
+                  textColor: colorToHex(textColor),
+                  bgColor: colorToHex(sampledBgColor!), // Use the sampled color!
+                  contrastRatio: Math.round(avgContrastRatio * 100) / 100,
                   aa,
                   aaa,
-                  aaLarge,
+                  aaLarge: avgContrastRatio >= 3,
                   hasIssues: !aa,
                   issues: !aa
                     ? [
-                        `Contraste ${Math.round(contrastRatio * 100) /
-                          100}:1 (mínimo ${
+                        `Contraste ${avgContrastRatio.toFixed(1)}:1 (mínimo ${
                           isLarge ? "3:1 para texto grande" : "4.5:1"
                         })`
                       ]
                     : [],
                   fontSize: sample.textSize || 16,
                   fontWeight: sample.isBold ? 700 : 400,
-                  textOpacity: sample.color.a || 1,
-                  bgOpacity: bgColor.a || 1
+                  textOpacity: textColor.a || 1,
+                  bgOpacity: 1
                 };
-              } catch (err) {
-                console.warn(
-                  `[AccessibilityTab] Erro ao processar texto ${index}:`,
-                  err
-                );
-                return null;
+
+                processedResults.push(contrastResult);
               }
-            })
-            .filter((r: any) => r !== null);
+            } catch (err) {
+              console.warn(
+                `[AccessibilityTab] Erro ao processar texto ${index}:`,
+                err
+              );
+            }
+          }
 
           console.log("[AccessibilityTab] Resultados processados:", {
             total: processedResults.length,
