@@ -53,10 +53,10 @@ type Effect = {
 
 // Declaração da constante figma
 declare const figma: {
-  getLocalPaintStyles: () => Promise<BaseStyle[]>;
-  getLocalTextStyles: () => Promise<BaseStyle[]>;
-  getLocalEffectStyles: () => Promise<BaseStyle[]>;
-  getStyleById: (id: string) => BaseStyle | null;
+  getLocalPaintStylesAsync: () => Promise<BaseStyle[]>;
+  getLocalTextStylesAsync: () => Promise<BaseStyle[]>;
+  getLocalEffectStylesAsync: () => Promise<BaseStyle[]>;
+  getStyleByIdAsync: (id: string) => Promise<BaseStyle | null>;
   root: {
     children: any[];
   };
@@ -69,8 +69,8 @@ declare const figma: {
 // Implementação alternativa caso as funções não estejam disponíveis
 async function getLocalPaintStylesAlt() {
   try {
-    // Tentar usar a API oficial primeiro
-    return await figma.getLocalPaintStyles();
+    // Tentar usar a API oficial primeiro (async)
+    return await figma.getLocalPaintStylesAsync();
   } catch (error) {
     console.warn(
       "[getLocalPaintStyles] API oficial falhou, tentando alternativa:",
@@ -80,9 +80,9 @@ async function getLocalPaintStylesAlt() {
     const styles: BaseStyle[] = [];
 
     // Buscar todos os nós que têm estilos de preenchimento
-    function findNodesWithFillStyles(node: any) {
+    async function findNodesWithFillStyles(node: any) {
       if (node.fillStyleId && typeof node.fillStyleId === "string") {
-        const style = figma.getStyleById(node.fillStyleId);
+        const style = await figma.getStyleByIdAsync(node.fillStyleId);
         if (style && style.type === "PAINT") {
           styles.push(style);
         }
@@ -90,14 +90,14 @@ async function getLocalPaintStylesAlt() {
 
       if (node.children) {
         for (const child of node.children) {
-          findNodesWithFillStyles(child);
+          await findNodesWithFillStyles(child);
         }
       }
     }
 
     // Buscar em todas as páginas
     for (const page of figma.root.children) {
-      findNodesWithFillStyles(page);
+      await findNodesWithFillStyles(page);
     }
 
     // Remover duplicatas
@@ -117,8 +117,8 @@ async function getLocalPaintStylesAlt() {
 
 async function getLocalTextStylesAlt() {
   try {
-    // Tentar usar a API oficial primeiro
-    return await figma.getLocalTextStyles();
+    // Tentar usar a API oficial primeiro (async)
+    return await figma.getLocalTextStylesAsync();
   } catch (error) {
     console.warn(
       "[getLocalTextStyles] API oficial falhou, tentando alternativa:",
@@ -128,9 +128,9 @@ async function getLocalTextStylesAlt() {
     const styles: BaseStyle[] = [];
 
     // Buscar todos os nós que têm estilos de texto
-    function findNodesWithTextStyles(node: any) {
+    async function findNodesWithTextStyles(node: any) {
       if (node.textStyleId && typeof node.textStyleId === "string") {
-        const style = figma.getStyleById(node.textStyleId);
+        const style = await figma.getStyleByIdAsync(node.textStyleId);
         if (style && style.type === "TEXT") {
           styles.push(style);
         }
@@ -138,14 +138,14 @@ async function getLocalTextStylesAlt() {
 
       if (node.children) {
         for (const child of node.children) {
-          findNodesWithTextStyles(child);
+          await findNodesWithTextStyles(child);
         }
       }
     }
 
     // Buscar em todas as páginas
     for (const page of figma.root.children) {
-      findNodesWithTextStyles(page);
+      await findNodesWithTextStyles(page);
     }
 
     // Remover duplicatas
@@ -175,8 +175,8 @@ async function getLocalTextStylesAlt() {
 
 async function getLocalEffectStylesAlt() {
   try {
-    // Tentar usar a API oficial primeiro
-    return await figma.getLocalEffectStyles();
+    // Tentar usar a API oficial primeiro (async)
+    return await figma.getLocalEffectStylesAsync();
   } catch (error) {
     console.warn(
       "[getLocalEffectStyles] API oficial falhou, tentando alternativa:",
@@ -186,9 +186,9 @@ async function getLocalEffectStylesAlt() {
     const styles: BaseStyle[] = [];
 
     // Buscar todos os nós que têm estilos de efeito
-    function findNodesWithEffectStyles(node: any) {
+    async function findNodesWithEffectStyles(node: any) {
       if (node.effectStyleId && typeof node.effectStyleId === "string") {
-        const style = figma.getStyleById(node.effectStyleId);
+        const style = await figma.getStyleByIdAsync(node.effectStyleId);
         if (style && style.type === "EFFECT") {
           styles.push(style);
         }
@@ -196,14 +196,14 @@ async function getLocalEffectStylesAlt() {
 
       if (node.children) {
         for (const child of node.children) {
-          findNodesWithEffectStyles(child);
+          await findNodesWithEffectStyles(child);
         }
       }
     }
 
     // Buscar em todas as páginas
     for (const page of figma.root.children) {
-      findNodesWithEffectStyles(page);
+      await findNodesWithEffectStyles(page);
     }
 
     // Remover duplicatas

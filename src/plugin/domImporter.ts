@@ -1,5 +1,7 @@
 /// <reference types="@figma/plugin-typings" />
 
+import { safeFetch, fetchWithRetry, isUrlAllowed } from "./networkConfig";
+
 type SerializedRect = { x: number; y: number; width: number; height: number };
 
 type SerializedNode =
@@ -184,8 +186,20 @@ async function safeLoadFont(
 
 async function createImageFillFromUrl(url: string): Promise<Paint[] | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    // Check if URL is from an allowed domain
+    if (!isUrlAllowed(url)) {
+      console.warn("[domImporter] Image URL not from whitelisted domain:", url);
+      return null;
+    }
+
+    const res = await fetchWithRetry(url, { timeout: 5000, retries: 2 });
+    if (!res.ok) {
+      console.warn(
+        "[domImporter] Failed to fetch image (status " + res.status + "):",
+        url
+      );
+      return null;
+    }
     const buf = await res.arrayBuffer();
     const bytes = new Uint8Array(buf);
     const img = figma.createImage(bytes);
@@ -302,8 +316,16 @@ async function tryCreateMaterialSymbolVector(
   // Unofficial but widely used gstatic endpoint pattern
   const svgUrl = `https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/${normalized}/default/24px.svg`;
   try {
-    const res = await fetch(svgUrl);
-    if (!res.ok) return null;
+    const res = await fetchWithRetry(svgUrl, { timeout: 5000, retries: 2 });
+    if (!res.ok) {
+      console.warn(
+        "[domImporter] Failed to fetch material symbol (status " +
+          res.status +
+          "):",
+        svgUrl
+      );
+      return null;
+    }
     const svgText = await res.text();
     const node = figma.createNodeFromSvg(svgText);
 

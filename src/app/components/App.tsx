@@ -471,7 +471,8 @@ const App = ({}) => {
         selectedNodeIds,
         projectName,
         activeComponentLibraries: detectedComponentLibs,
-        libs
+        libs,
+        tokens
       } = pluginMessage;
       console.log("[UI] Mensagem recebida:", type, pluginMessage);
 
@@ -794,13 +795,13 @@ const App = ({}) => {
         }
       } else if (type === "saved-tokens-loaded") {
         console.log("[LOG] saved-tokens-loaded", { t: performance.now() - t0 });
-        if (success && message) {
+        if (success && tokens) {
           console.log(
             "[App] Tokens salvos carregados:",
-            message.length,
+            tokens.length,
             "conjuntos"
           );
-          setSavedTokens(message);
+          setSavedTokens(tokens);
         } else {
           console.warn("[App] Falha ao carregar tokens salvos");
           setSavedTokens([]);

@@ -1161,7 +1161,7 @@ function BulkErrorList(props) {
                   Conformes
                 </span>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                  {nonConformElements}
+                  {conformElements}
                 </span>
               </div>
               <div

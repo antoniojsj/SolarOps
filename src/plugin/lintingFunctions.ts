@@ -135,12 +135,12 @@ function isTextStyleInTokens(node: any, tokens: any[]): boolean {
 }
 
 // Função para verificar se um estilo de texto está na biblioteca ou nos tokens salvos
-function isTextStyleInLibrary(
+async function isTextStyleInLibrary(
   styleId: string,
   preprocessedLibs: { text: Set<string> },
   node?: any,
   savedTokens: any[] = []
-): boolean {
+): Promise<boolean> {
   try {
     console.log(`[isTextStyleInLibrary] Verificando estilo ${styleId}`);
     console.log(
@@ -173,7 +173,9 @@ function isTextStyleInLibrary(
     if (savedTokens && savedTokens.length > 0) {
       try {
         // Obtém o estilo do Figma para comparar com os tokens
-        const style = figma.getStyleById(styleId) as TextStyle | null;
+        const style = (await figma.getStyleByIdAsync(
+          styleId
+        )) as TextStyle | null;
         if (style) {
           console.log(
             `[isTextStyleInLibrary] Estilo do Figma encontrado: ${style.name}`
@@ -537,12 +539,12 @@ function isEffectStyleInLibrary(
 }
 
 // Função auxiliar para verificar se um estilo de cor está na biblioteca ou nos tokens salvos
-function isColorStyleInLibrary(
+async function isColorStyleInLibrary(
   styleId: string,
   preprocessedLibs: { fills: Set<string> },
   node?: any,
   savedTokens: any[] = []
-): boolean {
+): Promise<boolean> {
   try {
     console.log(`[isColorStyleInLibrary] Verificando estilo ${styleId}`);
     console.log(
@@ -575,7 +577,9 @@ function isColorStyleInLibrary(
     if (savedTokens && savedTokens.length > 0) {
       try {
         // Obtém o estilo do Figma para comparar
-        const style = figma.getStyleById(styleId) as PaintStyle | null;
+        const style = (await figma.getStyleByIdAsync(
+          styleId
+        )) as PaintStyle | null;
         if (style) {
           console.log(
             `[isColorStyleInLibrary] Estilo do Figma encontrado: ${style.name}`
@@ -748,7 +752,7 @@ export async function checkType(
       });
     } else {
       // Se um estilo é aplicado, verifica se ele pertence a uma biblioteca válida ou corresponde a um token salvo
-      const styleFoundInTokens = isTextStyleInLibrary(
+      const styleFoundInTokens = await isTextStyleInLibrary(
         node.textStyleId,
         preprocessedLibs,
         node,
@@ -913,7 +917,7 @@ export async function newCheckFills(
           preprocessedLibs?.fills?.has(node.fillStyleId) || false;
 
         // IMPORTANTE: Usar a função isColorStyleInLibrary que já verifica tanto bibliotecas quanto tokens
-        const styleFoundInTokens = isColorStyleInLibrary(
+        const styleFoundInTokens = await isColorStyleInLibrary(
           node.fillStyleId,
           preprocessedLibs,
           node,
@@ -1239,7 +1243,7 @@ export async function newCheckStrokes(
         });
       } else {
         // Caso 2: Há estilo aplicado - verificar se está na biblioteca ou tokens salvos
-        const styleFoundInTokens = isColorStyleInLibrary(
+        const styleFoundInTokens = await isColorStyleInLibrary(
           node.strokeStyleId,
           preprocessedLibs,
           node,

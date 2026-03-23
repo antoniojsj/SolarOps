@@ -14,7 +14,9 @@
       "https://cdn.tailwindcss.com",
       "https://fonts.googleapis.com",
       "https://fonts.gstatic.com",
-      "https://lh3.googleusercontent.com"
+      "https://lh3.googleusercontent.com",
+      "https://www.figma.com",
+      "https://static.figma.com"
     ]
   }
 }

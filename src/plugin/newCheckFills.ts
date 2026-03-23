@@ -140,7 +140,9 @@ function isColorStyleInLibrary(
     if (node && savedTokens && savedTokens.length > 0) {
       try {
         // Obtém o estilo do nó para comparar com os tokens
-        const style = figma.getStyleById(styleId) as PaintStyle | null;
+        const style = (await figma.getStyleByIdAsync(
+          styleId
+        )) as PaintStyle | null;
         if (style) {
           // Verifica se o estilo corresponde a algum token salvo
           return savedTokens.some(token => {
@@ -257,7 +259,7 @@ export function newCheckFills(
         // Obter o nome do estilo inválido para mostrar no erro
         let invalidStyleName = "Desconhecido";
         try {
-          const invalidStyle = figma.getStyleById(node.fillStyleId);
+          const invalidStyle = await figma.getStyleByIdAsync(node.fillStyleId);
           if (invalidStyle) {
             invalidStyleName = invalidStyle.name;
           }
