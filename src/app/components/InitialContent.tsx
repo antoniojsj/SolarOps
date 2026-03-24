@@ -364,7 +364,7 @@ function InitialContent(props) {
       </div>
       <div
         className="initial-content-main"
-        style={{ flex: 1, overflow: "auto" }}
+        style={{ flex: 1, overflow: "auto", paddingBottom: "64px" }}
       >
         {activeTab === "tools" && (
           <div
@@ -386,7 +386,8 @@ function InitialContent(props) {
           <div
             style={{
               width: "calc(100% - 32px)",
-              margin: "0 16px",
+              margin: "0 16px 64px 16px",
+              minHeight: "calc(100vh - 150px)", // Garantir altura mínima
               boxSizing: "border-box"
             }}
           >
@@ -557,18 +558,9 @@ function InitialContent(props) {
                 padding: "16px",
                 marginTop: "24px",
                 display: "flex",
-                alignItems: "flex-start",
-                gap: "12px"
+                alignItems: "flex-start"
               }}
             >
-              <div
-                style={{
-                  fontSize: "20px",
-                  opacity: hasTokensImported ? 0.8 : 1
-                }}
-              >
-                {hasTokensImported ? "✅" : "💡"}
-              </div>
               <div style={{ flex: 1 }}>
                 <h4
                   className="tip-title"

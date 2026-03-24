@@ -398,7 +398,7 @@ function SettingsPanel(props: SettingsPanelProps) {
             borderRadius: 0,
             outline: "none",
             transition: "background 0.2s",
-            justifyContent: "flex-start"
+            justifyContent: "space-between"
           }}
         >
           <span
@@ -432,7 +432,6 @@ function SettingsPanel(props: SettingsPanelProps) {
               {category}
             </span>
           </span>
-          <span style={{ flex: 1 }} />
           <span style={{ color: "#aaa", fontWeight: 400, fontSize: 14 }}>
             {tokens.length}
           </span>

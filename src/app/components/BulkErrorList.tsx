@@ -195,6 +195,18 @@ function BulkErrorList(props) {
       }
     }
 
+    // Debug: Verificar nós aplicáveis
+    console.log("=== NÓS APLICÁVEIS POR TIPO ===");
+    itemTypes.forEach(type => {
+      const stat = stats[type.key];
+      console.log(
+        `${type.label} (${type.key}): ${stat.applicable.size} nós aplicáveis`
+      );
+      if (stat.applicable.size <= 3) {
+        console.log(`  Nós: ${Array.from(stat.applicable).join(", ")}`);
+      }
+    });
+
     // 5b: Mapeamento completo de tipos de erro para categorias
     const errorTypeMap: Record<string, string> = {
       // Tipos básicos
@@ -280,11 +292,10 @@ function BulkErrorList(props) {
       activeErrors.map(e => getErrorNodeId(e))
     );
 
-    // CORRIGIDO: Não conformes = total de ERROS, não nós únicos
-    // Um nó pode ter múltiplos erros (ex: erro de texto + erro de fill)
-    const totalNonConformElements = activeErrors.length;
+    // CORRIGIDO: Não conformes = NÓS ÚNICOS com erro, não total de erros
+    const totalNonConformElements = nodesWithActiveErrors.size;
 
-    // Conformes = total escaneado - não conformes
+    // Conformes = total escaneado - nós únicos não conformes
     const totalConformElements = Math.max(
       0,
       totalScannedElements - totalNonConformElements
@@ -295,7 +306,7 @@ function BulkErrorList(props) {
     console.log("Total de erros ativos:", activeErrors.length);
     console.log("Nós únicos com erro:", nodesWithActiveErrors.size);
     console.log(
-      "Elementos não conformes (total de erros):",
+      "Elementos não conformes (nós únicos):",
       totalNonConformElements
     );
     console.log("Elementos conformes:", totalConformElements);
@@ -305,6 +316,30 @@ function BulkErrorList(props) {
       "=",
       totalScannedElements
     );
+
+    // Debug adicional: Verificar se há nós que não são aplicáveis a nenhum tipo
+    const allApplicableNodes = new Set<string>();
+    itemTypes.forEach(type => {
+      stats[type.key].applicable.forEach(nodeId => {
+        allApplicableNodes.add(nodeId);
+      });
+    });
+
+    console.log("=== DEBUG ADICIONAL ===");
+    console.log("Nós aplicáveis a qualquer tipo:", allApplicableNodes.size);
+    console.log(
+      "Nós não aplicáveis:",
+      totalScannedElements - allApplicableNodes.size
+    );
+
+    if (totalScannedElements > allApplicableNodes.size) {
+      console.log(
+        "ATENCAO: Alguns nos nao sao aplicaveis a nenhum tipo de verificacao!"
+      );
+      console.log(
+        "Isso pode explicar a contagem inconsistente de elementos conformes."
+      );
+    }
 
     // NOVO: Passo 6.5: Calcular detalhamento de conformidade por cor
     const simpleRgba = (color: any, opacity?: number) => {
@@ -932,10 +967,12 @@ function BulkErrorList(props) {
 
     const message: any = {
       type: "apply-styles",
-      error: { ...error },
+      error: {
+        ...error,
+        nodes: error.nodeId ? [error.nodeId] : []
+      },
       field,
-      index: index,
-      count: error.count
+      index: index
     };
 
     // Adiciona a propriedade específica para erros de radius e gap
@@ -1411,7 +1448,11 @@ function BulkErrorList(props) {
               const topColors = (colorBreakdown || [])
                 .filter(c => c.nonConform > 0)
                 .slice(0, 8);
-              if (topColors.length === 0) return null;
+              const hasNonConformingColors = (colorBreakdown || []).some(
+                c => c.nonConform > 0
+              );
+              if (!hasNonConformingColors || topColors.length === 0)
+                return null;
               return (
                 <div
                   className="system-card"
@@ -1435,7 +1476,52 @@ function BulkErrorList(props) {
                     >
                       Tokens com problemas (cores)
                     </div>
-                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        height: 24
+                      }}
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <rect
+                          className="bar1"
+                          x="3"
+                          y="12"
+                          width="3"
+                          height="8"
+                          rx="1.5"
+                          fill="#18a0fb"
+                        />
+                        <rect
+                          className="bar2"
+                          x="9"
+                          y="8"
+                          width="3"
+                          height="12"
+                          rx="1.5"
+                          fill="#27ae60"
+                        />
+                        <rect
+                          className="bar3"
+                          x="15"
+                          y="5"
+                          width="3"
+                          height="15"
+                          rx="1.5"
+                          fill="#fbbf24"
+                        />
+                      </svg>
+                    </span>
+                    <span
+                      style={{ color: "#ffffff", fontSize: 11, opacity: 0.9 }}
+                    >
                       {topColors.length} itens
                     </span>
                   </div>
@@ -1443,7 +1529,8 @@ function BulkErrorList(props) {
                     style={{
                       display: "grid",
                       gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-                      gap: 8
+                      gap: 8,
+                      marginBottom: 12
                     }}
                   >
                     {topColors.map(c => (
@@ -1476,7 +1563,7 @@ function BulkErrorList(props) {
                             gap: 2
                           }}
                         >
-                          <span style={{ color: "#fff", fontSize: 12 }}>
+                          <span style={{ color: "#ffffff", fontSize: 12 }}>
                             {c.color}
                           </span>
                           <span style={{ color: "#9ca3af", fontSize: 11 }}>
@@ -1626,8 +1713,11 @@ function BulkErrorList(props) {
                   frameIds.has(getErrorNodeId(e))
                 );
 
-                // CORRIGIDO: Usar total de erros como na aba Geral (não nós únicos)
-                const frameNonConformElements = frameErrors.length;
+                // CORRIGIDO: Usar nós únicos com erro (não total de erros)
+                const frameNodesWithErrors = new Set(
+                  frameErrors.map(e => getErrorNodeId(e))
+                );
+                const frameNonConformElements = frameNodesWithErrors.size;
                 const frameConformElements = Math.max(
                   totalElements - frameNonConformElements,
                   0
@@ -1641,6 +1731,7 @@ function BulkErrorList(props) {
                 console.log(`=== DEBUG FRAME: ${frame.name} ===`);
                 console.log("Total de elementos no frame:", totalElements);
                 console.log("Erros no frame:", frameErrors.length);
+                console.log("Nós únicos com erro:", frameNodesWithErrors.size);
                 console.log(
                   "Elementos não conformes:",
                   frameNonConformElements

@@ -355,7 +355,16 @@ figma.on("selectionchange", () => {
                 let destinationNode = null;
                 try {
                   // Tentar obter o nó de destino com tratamento de erro
-                  destinationNode = figma.getNodeById(action.destinationId);
+                  destinationNode = await new Promise(resolve => {
+                    try {
+                      // Usar Promise wrapper para evitar erro com dynamic-page
+                      const node = figma.getNodeById(action.destinationId);
+                      resolve(node);
+                    } catch (e) {
+                      console.error("[DEBUG] Erro ao obter nó de destino:", e);
+                      resolve(null);
+                    }
+                  });
                 } catch (e) {
                   console.error("[DEBUG] Erro ao obter nó de destino:", e);
                   destinationNode = null;
@@ -422,7 +431,9 @@ figma.on("selectionchange", () => {
           current.id !== MEASURE_RUNTIME.firstNodeId
         ) {
           // segundo clique
-          const a = figma.getNodeById(MEASURE_RUNTIME.firstNodeId) as any;
+          const a = (await figma.getNodeByIdAsync(
+            MEASURE_RUNTIME.firstNodeId
+          )) as any;
           const b = current;
           if (a && b) {
             const ca = getAbsoluteCenter(a);
@@ -1192,7 +1203,7 @@ async function restoreBrokenComponent(
   nodeId: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const node = figma.getNodeById(nodeId) as InstanceNode;
+    const node = (await figma.getNodeByIdAsync(nodeId)) as InstanceNode;
 
     if (!node) {
       return { success: false, message: "Node não encontrado" };
@@ -1856,85 +1867,362 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
     if (msg.type === "apply-styles") {
       console.log("[Controller] Aplicando estilos");
+      console.log("[DEBUG] Mensagem completa:", JSON.stringify(msg, null, 2));
       try {
         const { error, field, index, count } = msg;
+        console.log("[DEBUG] Dados extraídos:", { error, field, index, count });
+
         if (!error || !field || index === undefined) {
           throw new Error("Dados insuficientes para aplicar o estilo.");
         }
 
         const suggestion = error[field][index];
-        if (!suggestion || !suggestion.id) {
+        console.log("[DEBUG] Sugestão encontrada:", suggestion);
+
+        if (!suggestion || (!suggestion.id && !suggestion.key)) {
           throw new Error("Sugestão de estilo inválida.");
         }
 
-        const nodesToApply = error.nodes || [error.nodeId];
+        const nodesToApply =
+          error.nodes || (error.nodeId ? [error.nodeId] : []);
+        console.log("[DEBUG] Nós para aplicar:", nodesToApply);
+        console.log("[DEBUG] error.nodes:", error.nodes);
+        console.log("[DEBUG] error.nodeId:", error.nodeId);
+
         if (!nodesToApply || nodesToApply.length === 0) {
           throw new Error("Nenhum nó para aplicar o estilo.");
         }
 
         let appliedCount = 0;
-        for (const nodeId of nodesToApply) {
-          if (count && appliedCount >= count) break;
 
-          // CORRIGIDO: Usar figma.getNodeById ao invés de getNodeByIdAsync
-          const node = figma.getNodeById(nodeId);
-          if (!node) continue;
+        // Obter o nó atual selecionado em vez de procurar por ID
+        const currentNode = figma.currentPage.selection[0];
+        if (!currentNode) {
+          throw new Error("Nenhum nó selecionado encontrado.");
+        }
 
-          switch (error.type) {
-            case "text":
-              if (node.type === "TEXT") {
-                await node.setTextStyleIdAsync(suggestion.id);
+        console.log("[DEBUG] Nó selecionado:", currentNode);
+        console.log("[DEBUG] ID do nó selecionado:", currentNode.id);
+        console.log("[DEBUG] Tipo do nó selecionado:", currentNode.type);
+        console.log("[DEBUG] Estado atual do nó antes da aplicação:", {
+          fillStyleId: (currentNode as any).fillStyleId,
+          fills: (currentNode as any).fills,
+          strokeStyleId: (currentNode as any).strokeStyleId,
+          effectStyleId: (currentNode as any).effectStyleId
+        });
+
+        // Usar o nó selecionado diretamente
+        const node = currentNode;
+
+        try {
+          console.log(
+            "[DEBUG] Iniciando aplicação de estilo para tipo:",
+            error.type
+          );
+
+          if (node.type === "TEXT") {
+            if (error.type === "text") {
+              console.log("[DEBUG] Aplicando estilo de texto");
+              await node.setTextStyleIdAsync(suggestion.id);
+              console.log("[DEBUG] setTextStyleIdAsync aplicado com sucesso");
+              appliedCount++;
+            } else if (error.type === "fill") {
+              // Para TEXT nodes com fill, usar variáveis ou tokens salvos
+              console.log("[DEBUG] Aplicando fill em TEXT node:", {
+                suggestionId: suggestion.id,
+                suggestionType: suggestion.type,
+                startsWithVar:
+                  suggestion.id && suggestion.id.startsWith("VAR:"),
+                hasSetBoundVariable: "setBoundVariable" in node
+              });
+
+              if (
+                suggestion.id &&
+                (suggestion.id.startsWith("VAR:") ||
+                  suggestion.type === "SAVED_TOKEN")
+              ) {
+                // TEXT nodes com variáveis PRECISAM usar setBoundVariable diretamente
+                // setFillStyleIdAsync NÃO funciona com VAR:VariableID:
+                console.log(
+                  "[DEBUG] Usando setBoundVariable para TEXT node com variável"
+                );
+                try {
+                  node.setBoundVariable("fills", suggestion.id);
+                  console.log("[DEBUG] setBoundVariable aplicado com sucesso");
+                  console.log("[DEBUG] Estado do nó após aplicação:", {
+                    fillStyleId: (node as any).fillStyleId,
+                    fills: (node as any).fills
+                  });
+                  appliedCount++;
+                } catch (boundError) {
+                  console.error(
+                    "[DEBUG] Erro no setBoundVariable:",
+                    boundError
+                  );
+                  console.log(
+                    "[DEBUG] Tentando abordagem alternativa - modificando fills diretamente"
+                  );
+
+                  // Abordagem alternativa: modificar o array fills diretamente
+                  try {
+                    const fills = (node as any).fills || [];
+                    if (fills.length > 0) {
+                      // Modificar o fill existente para usar a variável
+                      fills[0] = {
+                        type: "SOLID",
+                        visible: true,
+                        opacity: 1,
+                        blendMode: "NORMAL",
+                        boundVariables: { fills: { id: suggestion.id } }
+                      };
+                      (node as any).fills = fills;
+                      console.log(
+                        "[DEBUG] Array fills modificado diretamente com sucesso"
+                      );
+                      console.log(
+                        "[DEBUG] Estado do nó após modificação direta:",
+                        {
+                          fillStyleId: (node as any).fillStyleId,
+                          fills: (node as any).fills
+                        }
+                      );
+                      appliedCount++;
+                    }
+                  } catch (directError) {
+                    console.error(
+                      "[DEBUG] Erro na modificação direta:",
+                      directError
+                    );
+                    console.log(
+                      "[DEBUG] TEXT nodes não suportam variáveis para fills. Tentando criar um style temporário..."
+                    );
+
+                    // Último recurso: usar a cor da sugestão diretamente
+                    try {
+                      console.log(
+                        "[DEBUG] Usando cor da sugestão diretamente:",
+                        suggestion.value
+                      );
+
+                      if (
+                        suggestion.value &&
+                        typeof suggestion.value === "string"
+                      ) {
+                        // Tentar extrair cor RGB do valor rgba
+                        const rgbaMatch = suggestion.value.match(
+                          /rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/
+                        );
+                        if (rgbaMatch) {
+                          const r = parseInt(rgbaMatch[1]) / 255;
+                          const g = parseInt(rgbaMatch[2]) / 255;
+                          const b = parseInt(rgbaMatch[3]) / 255;
+                          const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
+
+                          // Criar um fill temporário com a cor da sugestão (SEM propriedade 'a' inválida)
+                          const tempFill = {
+                            type: "SOLID" as const,
+                            color: {
+                              r: r,
+                              g: g,
+                              b: b
+                            },
+                            opacity: a
+                          };
+
+                          // Para TEXT nodes, precisamos criar um novo array
+                          const newFills = [tempFill];
+                          (node as any).fills = newFills;
+
+                          console.log(
+                            "[DEBUG] Fill temporário aplicado com sucesso:",
+                            suggestion.value
+                          );
+                          console.log(
+                            "[DEBUG] Estado do nó após fill temporário:",
+                            {
+                              fillStyleId: (node as any).fillStyleId,
+                              fills: (node as any).fills
+                            }
+                          );
+                          appliedCount++;
+                        }
+                      }
+                    } catch (tempError) {
+                      console.error(
+                        "[DEBUG] Erro no fill temporário:",
+                        tempError
+                      );
+                    }
+                  }
+                }
+              } else {
+                // Para Style IDs normais (S:...), usar setFillStyleIdAsync
+                console.log("[DEBUG] Aplicando como style ID normal (S:...)");
+                try {
+                  await node.setFillStyleIdAsync(suggestion.id);
+                  console.log(
+                    "[DEBUG] setFillStyleIdAsync (normal) aplicado com sucesso"
+                  );
+                  console.log("[DEBUG] Estado do nó após aplicação:", {
+                    fillStyleId: (node as any).fillStyleId,
+                    fills: (node as any).fills
+                  });
+                  appliedCount++;
+                } catch (styleError) {
+                  console.error(
+                    "[DEBUG] Erro no setFillStyleIdAsync:",
+                    styleError
+                  );
+                }
               }
-              break;
-            case "fill":
-              if ("fillStyleId" in node) {
+            }
+          } else if ("fillStyleId" in node && error.type === "fill") {
+            // Para nós não-TEXT, aplicar fillStyleId normalmente
+            console.log("[DEBUG] Aplicando fill em nó não-TEXT:", {
+              nodeType: node.type,
+              suggestionId: suggestion.id,
+              suggestionType: suggestion.type,
+              startsWithVar: suggestion.id && suggestion.id.startsWith("VAR:")
+            });
+
+            if (
+              suggestion.id &&
+              (suggestion.id.startsWith("VAR:") ||
+                suggestion.type === "SAVED_TOKEN")
+            ) {
+              // Usar variável se for VAR ID ou token salvo
+              if ("setBoundVariable" in node) {
+                try {
+                  node.setBoundVariable("fills", suggestion.id);
+                  console.log(
+                    "[DEBUG] setBoundVariable aplicado em nó não-TEXT"
+                  );
+                  appliedCount++;
+                } catch (boundError) {
+                  console.error(
+                    "[DEBUG] Erro no setBoundVariable em nó não-TEXT:",
+                    boundError
+                  );
+                  await node.setFillStyleIdAsync(suggestion.id);
+                  appliedCount++;
+                }
+              } else {
                 await node.setFillStyleIdAsync(suggestion.id);
+                appliedCount++;
               }
-              break;
-            case "stroke":
-              if ("strokeStyleId" in node) {
-                await node.setStrokeStyleIdAsync(suggestion.id);
-              }
-              break;
-            case "effects":
-              if ("effectStyleId" in node) {
-                await node.setEffectStyleIdAsync(suggestion.id);
-              }
-              break;
-            case "radius":
-              if (
-                "setBoundVariable" in node &&
-                suggestion.id &&
-                error.property
-              ) {
-                // A suggestion.id é o ID da variável.
-                node.setBoundVariable(error.property, suggestion.id);
-              }
-              break;
-            case "gap":
-              if (
-                "setBoundVariable" in node &&
-                suggestion.id &&
-                error.property === "itemSpacing"
-              ) {
-                node.setBoundVariable("itemSpacing", suggestion.id);
-              }
-              break;
+            } else {
+              // Usar style ID
+              await node.setFillStyleIdAsync(suggestion.id);
+              appliedCount++;
+            }
+          } else if ("strokeStyleId" in node && error.type === "stroke") {
+            console.log("[DEBUG] Aplicando stroke em nó:", {
+              nodeType: node.type,
+              suggestionId: suggestion.id,
+              suggestionType: suggestion.type,
+              startsWithVar: suggestion.id && suggestion.id.startsWith("VAR:")
+            });
 
-            case "padding":
-              if (
-                "setBoundVariable" in node &&
-                suggestion.id &&
-                error.property &&
-                typeof error.property === "string" &&
-                error.property.startsWith("padding")
-              ) {
-                // Aplica a variável ao lado específico do padding (top, right, bottom, left)
-                node.setBoundVariable(error.property, suggestion.id);
+            if (
+              suggestion.id &&
+              (suggestion.id.startsWith("VAR:") ||
+                suggestion.type === "SAVED_TOKEN")
+            ) {
+              if ("setBoundVariable" in node) {
+                try {
+                  node.setBoundVariable("strokes", suggestion.id);
+                  console.log("[DEBUG] setBoundVariable aplicado para stroke");
+                  appliedCount++;
+                } catch (boundError) {
+                  console.error(
+                    "[DEBUG] Erro no setBoundVariable para stroke:",
+                    boundError
+                  );
+                  await node.setStrokeStyleIdAsync(suggestion.id);
+                  appliedCount++;
+                }
+              } else {
+                await node.setStrokeStyleIdAsync(suggestion.id);
+                appliedCount++;
               }
-              break;
+            } else {
+              await node.setStrokeStyleIdAsync(suggestion.id);
+              appliedCount++;
+            }
+          } else if ("effectStyleId" in node && error.type === "effects") {
+            console.log("[DEBUG] Aplicando effects em nó:", {
+              nodeType: node.type,
+              suggestionId: suggestion.id,
+              suggestionType: suggestion.type,
+              startsWithVar: suggestion.id && suggestion.id.startsWith("VAR:")
+            });
+
+            if (
+              suggestion.id &&
+              (suggestion.id.startsWith("VAR:") ||
+                suggestion.type === "SAVED_TOKEN")
+            ) {
+              if ("setBoundVariable" in node) {
+                try {
+                  node.setBoundVariable("effects", suggestion.id);
+                  console.log("[DEBUG] setBoundVariable aplicado para effects");
+                  appliedCount++;
+                } catch (boundError) {
+                  console.error(
+                    "[DEBUG] Erro no setBoundVariable para effects:",
+                    boundError
+                  );
+                  await node.setEffectStyleIdAsync(suggestion.id);
+                  appliedCount++;
+                }
+              } else {
+                await node.setEffectStyleIdAsync(suggestion.id);
+                appliedCount++;
+              }
+            } else {
+              await node.setEffectStyleIdAsync(suggestion.id);
+              appliedCount++;
+            }
+          } else if ("setBoundVariable" in node && suggestion.id) {
+            // Para radius, gap, padding - usar variáveis
+            const errorAny = error as any;
+            console.log("[DEBUG] Aplicando propriedade com setBoundVariable:", {
+              nodeType: node.type,
+              property: errorAny.property,
+              suggestionId: suggestion.id,
+              suggestionType: suggestion.type,
+              startsWithVar: suggestion.id && suggestion.id.startsWith("VAR:")
+            });
+
+            if (errorAny.property && typeof errorAny.property === "string") {
+              try {
+                node.setBoundVariable(errorAny.property, suggestion.id);
+                console.log(
+                  "[DEBUG] setBoundVariable aplicado para",
+                  errorAny.property
+                );
+                appliedCount++;
+              } catch (boundError) {
+                console.error(
+                  "[DEBUG] Erro no setBoundVariable para",
+                  errorAny.property,
+                  ":",
+                  boundError
+                );
+              }
+            }
           }
-          appliedCount++;
+        } catch (e) {
+          console.error("[Controller] Erro ao aplicar estilo:", e);
+          console.error("[Controller] Detalhes do erro:", {
+            errorType: error.type,
+            nodeType: node.type,
+            suggestionId: suggestion.id,
+            suggestionType: suggestion.type,
+            errorMessage: e.message,
+            errorStack: e.stack
+          });
+          figma.notify(`Erro ao aplicar estilo: ${e.message}`, { error: true });
         }
 
         figma.notify(`${appliedCount} erro(s) corrigido(s).`);
@@ -1943,6 +2231,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         figma.ui.postMessage({
           type: "update-errors-after-fix"
         });
+
+        return;
       } catch (e) {
         console.error("[Controller] Erro ao aplicar estilo:", e);
         figma.notify(`Erro ao aplicar estilo: ${e.message}`, { error: true });
@@ -1958,7 +2248,9 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     if (msg.type === "select-layer") {
       console.log("[Controller] Selecionando layer");
       const nodesArr = msg && msg.nodes && msg.nodes.length ? msg.nodes : [];
-      const node = figma.getNodeById(nodesArr.length > 0 ? nodesArr[0] : "");
+      const node = await figma.getNodeByIdAsync(
+        nodesArr.length > 0 ? nodesArr[0] : ""
+      );
       if (node) {
         figma.currentPage.selection = [node];
         figma.viewport.scrollAndZoomIntoView([node]);
@@ -1970,7 +2262,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       const nodesToBeSelected: any[] = [];
       if (msg && Array.isArray(msg.nodes)) {
         for (const item of msg.nodes) {
-          const layer = figma.getNodeById(item);
+          const layer = await figma.getNodeByIdAsync(item);
           if (layer) {
             nodesToBeSelected.push(layer);
           }
@@ -2652,7 +2944,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       // Tentar usar a API assíncrona para compatibilidade com dynamic-page
       (async () => {
         try {
-          const node = figma.getNodeById(msg.id);
+          const node = await figma.getNodeByIdAsync(msg.id);
           if (node) {
             console.log(
               "[Controller] Nó encontrado, focando e fazendo zoom:",
@@ -2673,7 +2965,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
           );
           // Fallback para o método síncrono se o assíncrono falhar
           try {
-            const node = figma.getNodeById(msg.id);
+            const node = await figma.getNodeByIdAsync(msg.id);
             if (node) {
               console.log(
                 "[Controller] Nó encontrado (método síncrono), focando e fazendo zoom:",
@@ -3109,7 +3401,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
     if (msg.type === "export-node-as-svg") {
       try {
-        const node = figma.getNodeById(msg.nodeId);
+        const node = await figma.getNodeByIdAsync(msg.nodeId);
         if (node && node.exportAsync) {
           const svgBytes = await node.exportAsync({ format: "SVG" });
           const svg = String.fromCharCode.apply(null, new Uint8Array(svgBytes));
@@ -4258,7 +4550,7 @@ const analyzeSelectedContrast = async (msg?: any) => {
     const pageId = page && typeof page === "object" && page.id;
     let frameNodeToAnalyze: BaseNode | null = null;
     if (pageId && pageId !== "current-page") {
-      frameNodeToAnalyze = figma.getNodeById(pageId);
+      frameNodeToAnalyze = await figma.getNodeByIdAsync(pageId);
     }
     if (!frameNodeToAnalyze) {
       frameNodeToAnalyze = frameNode;

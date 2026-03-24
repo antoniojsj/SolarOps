@@ -1094,12 +1094,10 @@ export async function newCheckFills(
 
             if (firstVisibleFill && firstVisibleFill.type === "SOLID") {
               const color = convertColor(firstVisibleFill.color);
-              fillValue = `${getHexString(
-                color,
-                firstVisibleFill.opacity
-              )} (Token ID: ${node.fillStyleId})`;
+              const hexColor = getHexString(color, firstVisibleFill.opacity);
+              fillValue = `${hexColor} (Token: ${node.fillStyleId})`;
             } else if (firstVisibleFill) {
-              fillValue = `${firstVisibleFill.type} (Token ID: ${node.fillStyleId})`;
+              fillValue = `${firstVisibleFill.type} (Token: ${node.fillStyleId})`;
             }
 
             const suggestions = [];
