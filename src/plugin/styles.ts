@@ -83,7 +83,13 @@ async function getLocalPaintStylesAlt() {
     async function findNodesWithFillStyles(node: any) {
       if (node.fillStyleId && typeof node.fillStyleId === "string") {
         const style = await figma.getStyleByIdAsync(node.fillStyleId);
-        if (style && style.type === "PAINT") {
+        if (
+          style &&
+          (style.type === "PAINT" ||
+            style.type === "SOLID" ||
+            style.type === "GRADIENT" ||
+            style.type === "IMAGE")
+        ) {
           styles.push(style);
         }
       }

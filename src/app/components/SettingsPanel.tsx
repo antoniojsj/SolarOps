@@ -41,6 +41,21 @@ function SettingsPanel(props: SettingsPanelProps) {
   } | null>(null);
   const [savedTokens, setSavedTokens] = React.useState<any[]>([]);
 
+  // Estado para o token de acesso do Figma
+  const [figmaToken, setFigmaToken] = React.useState<string>("");
+  const [hasToken, setHasToken] = React.useState<boolean>(false);
+  const [showTokenInput, setShowTokenInput] = React.useState<boolean>(false);
+  const [tokenStatus, setTokenStatus] = React.useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  // Estado para URL da biblioteca
+  const [libraryUrl, setLibraryUrl] = React.useState<string>("");
+  const [showLibraryUrlInput, setShowLibraryUrlInput] = React.useState<boolean>(
+    false
+  );
+
   // Remover a inicialização com activeComponentLibraries - as bibliotecas devem vir do clientStorage
   // React.useEffect(() => {
   //   setLibs(props.activeComponentLibraries || []);
@@ -65,6 +80,47 @@ function SettingsPanel(props: SettingsPanelProps) {
       setIsLoadingTokens(false);
     }
   };
+
+  // Funções para gerenciar o token do Figma
+  const handleSaveFigmaToken = async () => {
+    if (!figmaToken.trim()) {
+      setTokenStatus({
+        success: false,
+        message: "Por favor, insira um token válido"
+      });
+      return;
+    }
+
+    try {
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: "save-figma-token",
+            token: figmaToken.trim()
+          }
+        },
+        "*"
+      );
+    } catch (error) {
+      setTokenStatus({
+        success: false,
+        message: "Erro ao salvar token"
+      });
+    }
+  };
+
+  const handleLoadFigmaToken = async () => {
+    parent.postMessage({ pluginMessage: { type: "get-figma-token" } }, "*");
+  };
+
+  const handleRemoveFigmaToken = async () => {
+    parent.postMessage({ pluginMessage: { type: "remove-figma-token" } }, "*");
+  };
+
+  // Carregar token ao montar o componente
+  React.useEffect(() => {
+    handleLoadFigmaToken();
+  }, []);
 
   // Função para salvar os tokens de design
   const handleSaveDesignTokens = async () => {
@@ -109,6 +165,8 @@ function SettingsPanel(props: SettingsPanelProps) {
         success: boolean;
         message?: string;
         tokens?: any[];
+        token?: string;
+        hasToken?: boolean;
       };
 
       if (!message) return;
@@ -140,6 +198,31 @@ function SettingsPanel(props: SettingsPanelProps) {
         });
         if (message.success && message.tokens) {
           setSavedTokens(message.tokens);
+        }
+      } else if (message.type === "figma-token-saved") {
+        setTokenStatus({
+          success: message.success,
+          message: message.success
+            ? "Token salvo com sucesso! Agora você pode importar TODOS os tokens da biblioteca."
+            : message.message || "Erro ao salvar token"
+        });
+        if (message.success) {
+          setHasToken(true);
+          setShowTokenInput(false);
+        }
+      } else if (message.type === "figma-token-loaded") {
+        setHasToken(message.hasToken || false);
+        if (message.token) {
+          setFigmaToken(message.token);
+        }
+      } else if (message.type === "figma-token-removed") {
+        if (message.success) {
+          setHasToken(false);
+          setFigmaToken("");
+          setTokenStatus({
+            success: true,
+            message: "Token removido com sucesso"
+          });
         }
       }
     };
@@ -221,9 +304,15 @@ function SettingsPanel(props: SettingsPanelProps) {
       const { pluginMessage } = event.data;
       if (pluginMessage && pluginMessage.type === "fetched-token-libraries") {
         const tokenLibraries = pluginMessage.tokenLibraries || [];
+        const hybridMode = pluginMessage.hybridMode || false;
+
         console.log(
           "[SettingsPanel] Token libraries detectadas:",
           tokenLibraries
+        );
+        console.log(
+          "[SettingsPanel] Modo híbrido:",
+          hybridMode ? "ATIVADO (API + Local)" : "Desativado (apenas local)"
         );
         console.log(
           "[SettingsPanel] Número de bibliotecas detectadas:",
@@ -236,7 +325,11 @@ function SettingsPanel(props: SettingsPanelProps) {
               name: tokenLibraries[0].name,
               fillsCount: tokenLibraries[0].fills?.length || 0,
               textCount: tokenLibraries[0].text?.length || 0,
-              effectsCount: tokenLibraries[0].effects?.length || 0
+              effectsCount: tokenLibraries[0].effects?.length || 0,
+              totalTokens: tokenLibraries[0].totalTokens,
+              apiTokens: tokenLibraries[0].apiTokens,
+              localTokens: tokenLibraries[0].localTokens,
+              duplicates: tokenLibraries[0].duplicates
             }
           );
         }
@@ -249,10 +342,18 @@ function SettingsPanel(props: SettingsPanelProps) {
       }
     }
     window.addEventListener("message", handler);
-    parent.postMessage(
-      { pluginMessage: { type: "fetch-token-libraries" } },
-      "*"
-    );
+
+    // Enviar URL da biblioteca se fornecida
+    const messageData: any = {
+      type: "fetch-token-libraries",
+      figmaAccessToken: hasToken ? figmaToken : null
+    };
+
+    if (libraryUrl.trim()) {
+      messageData.libraryUrl = libraryUrl.trim();
+    }
+
+    parent.postMessage({ pluginMessage: messageData }, "*");
   }
 
   // Função utilitária para agrupar tokens por subcategoria (antes da barra)
@@ -934,6 +1035,375 @@ function SettingsPanel(props: SettingsPanelProps) {
             justifyContent: "flex-start"
           }}
         >
+          {/* Seção de Token do Figma */}
+          <div
+            style={{
+              width: "100%",
+              marginBottom: 24,
+              padding: 16,
+              background: "rgba(60,60,60,0.5)",
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.1)"
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12
+              }}
+            >
+              <div>
+                <h4
+                  style={{
+                    color: "#fff",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    margin: 0,
+                    marginBottom: 4
+                  }}
+                >
+                  Token de Acesso do Figma
+                </h4>
+                <p
+                  style={{
+                    color: "#bdbdbd",
+                    fontSize: 13,
+                    margin: 0
+                  }}
+                >
+                  {hasToken
+                    ? "Modo híbrido ativo: detecta TODOS os tokens da biblioteca"
+                    : "Configure para importar todos os tokens via API"}
+                </p>
+              </div>
+              <div
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: "50%",
+                  background: hasToken ? "#22c55e" : "#ef4444"
+                }}
+              />
+            </div>
+
+            {showTokenInput && (
+              <div style={{ marginTop: 12 }}>
+                <input
+                  type="password"
+                  placeholder="Cole seu token de acesso aqui..."
+                  value={figmaToken}
+                  onChange={e => setFigmaToken(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    background: "#1a1a1a",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    borderRadius: 6,
+                    color: "#fff",
+                    fontSize: 13,
+                    marginBottom: 8,
+                    outline: "none"
+                  }}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={handleSaveFigmaToken}
+                    disabled={!figmaToken.trim()}
+                    style={{
+                      flex: 1,
+                      padding: "8px 16px",
+                      background: figmaToken.trim()
+                        ? "#3b82f6"
+                        : "rgba(255,255,255,0.16)",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: figmaToken.trim() ? "pointer" : "not-allowed",
+                      opacity: figmaToken.trim() ? 1 : 0.7
+                    }}
+                  >
+                    Salvar Token
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowTokenInput(false);
+                      setTokenStatus(null);
+                    }}
+                    style={{
+                      padding: "8px 16px",
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!showTokenInput && (
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                {!hasToken ? (
+                  <button
+                    onClick={() => setShowTokenInput(true)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 16px",
+                      background: "#3b82f6",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Configurar Token
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowTokenInput(true)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 16px",
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        borderRadius: 6,
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Atualizar Token
+                    </button>
+                    <button
+                      onClick={handleRemoveFigmaToken}
+                      style={{
+                        padding: "8px 16px",
+                        background: "rgba(239,68,68,0.13)",
+                        border: "none",
+                        borderRadius: 6,
+                        color: "#ef4444",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Remover
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {tokenStatus && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  background: tokenStatus.success
+                    ? "rgba(34,197,94,0.13)"
+                    : "rgba(239,68,68,0.13)",
+                  borderRadius: 6,
+                  color: tokenStatus.success ? "#22c55e" : "#ef4444",
+                  fontSize: 13
+                }}
+              >
+                {tokenStatus.message}
+              </div>
+            )}
+          </div>
+
+          {/* Seção de URL da Biblioteca (opcional para modo híbrido) */}
+          {hasToken && (
+            <div
+              style={{
+                width: "100%",
+                marginBottom: 24,
+                padding: 16,
+                background: "rgba(60,60,60,0.5)",
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.1)"
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12
+                }}
+              >
+                <div>
+                  <h4
+                    style={{
+                      color: "#fff",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      margin: 0,
+                      marginBottom: 4
+                    }}
+                  >
+                    URL da Biblioteca (Opcional)
+                  </h4>
+                  <p
+                    style={{
+                      color: "#bdbdbd",
+                      fontSize: 13,
+                      margin: 0
+                    }}
+                  >
+                    Cole a URL da biblioteca do Figma para importar TODOS os
+                    tokens via API
+                  </p>
+                </div>
+              </div>
+
+              {showLibraryUrlInput && (
+                <div style={{ marginTop: 12 }}>
+                  <input
+                    type="text"
+                    placeholder="https://www.figma.com/file/abc123/Library-Name"
+                    value={libraryUrl}
+                    onChange={e => setLibraryUrl(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      background: "#1a1a1a",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontSize: 13,
+                      marginBottom: 8,
+                      outline: "none"
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        setShowLibraryUrlInput(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "8px 16px",
+                        background: "#3b82f6",
+                        border: "none",
+                        borderRadius: 6,
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Confirmar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowLibraryUrlInput(false);
+                        setLibraryUrl("");
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        borderRadius: 6,
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!showLibraryUrlInput && (
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  {!libraryUrl ? (
+                    <button
+                      onClick={() => setShowLibraryUrlInput(true)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 16px",
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        borderRadius: 6,
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Adicionar URL da Biblioteca
+                    </button>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          background: "rgba(59,130,246,0.1)",
+                          border: "1px solid rgba(59,130,246,0.3)",
+                          borderRadius: 6,
+                          color: "#3b82f6",
+                          fontSize: 13,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {libraryUrl}
+                      </div>
+                      <button
+                        onClick={() => setShowLibraryUrlInput(true)}
+                        style={{
+                          padding: "8px 16px",
+                          background: "transparent",
+                          border: "1px solid rgba(255,255,255,0.2)",
+                          borderRadius: 6,
+                          color: "#fff",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => setLibraryUrl("")}
+                        style={{
+                          padding: "8px 16px",
+                          background: "rgba(239,68,68,0.13)",
+                          border: "none",
+                          borderRadius: 6,
+                          color: "#ef4444",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Remover
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Passo 1: Tela de buscar bibliotecas */}
           {!hasFetchedLibs && step === "select" && !showLibSelection && (
             <div

@@ -445,7 +445,60 @@ const App = ({}) => {
     activeComponentLibrariesRef.current = activeComponentLibraries;
     // Mantém librariesRef em sincronia para compatibilidade
     librariesRef.current = activeComponentLibraries;
-  }, [activeComponentLibraries]);
+
+    // CRÍTICO: Atualizar designTokens quando as bibliotecas mudarem
+    // Isso garante que variables e outros tokens sejam incluídos
+    if (activeComponentLibraries && activeComponentLibraries.length > 0) {
+      const tokens: any = {
+        fills: [],
+        text: [],
+        effects: [],
+        strokes: [],
+        radius: borderRadiusValues,
+        gaps: [],
+        paddings: [],
+        variables: [] // NOVO: incluir variables
+      };
+
+      // Consolidar tokens de todas as bibliotecas
+      activeComponentLibraries.forEach((lib: any) => {
+        if (lib.fills && Array.isArray(lib.fills)) {
+          tokens.fills.push(...lib.fills);
+        }
+        if (lib.text && Array.isArray(lib.text)) {
+          tokens.text.push(...lib.text);
+        }
+        if (lib.effects && Array.isArray(lib.effects)) {
+          tokens.effects.push(...lib.effects);
+        }
+        if (lib.strokes && Array.isArray(lib.strokes)) {
+          tokens.strokes.push(...lib.strokes);
+        }
+        if (lib.gaps && Array.isArray(lib.gaps)) {
+          tokens.gaps.push(...lib.gaps);
+        }
+        if (lib.paddings && Array.isArray(lib.paddings)) {
+          tokens.paddings.push(...lib.paddings);
+        }
+        // CRÍTICO: Incluir variables
+        if (lib.variables && Array.isArray(lib.variables)) {
+          tokens.variables.push(...lib.variables);
+        }
+      });
+
+      console.log("[App] Atualizando designTokens com:", {
+        fills: tokens.fills.length,
+        text: tokens.text.length,
+        effects: tokens.effects.length,
+        strokes: tokens.strokes.length,
+        gaps: tokens.gaps.length,
+        paddings: tokens.paddings.length,
+        variables: tokens.variables.length // NOVO
+      });
+
+      setDesignTokens(tokens);
+    }
+  }, [activeComponentLibraries, borderRadiusValues]);
 
   React.useEffect(() => {
     activePageRef.current = activePage;
@@ -1407,7 +1460,7 @@ const App = ({}) => {
         </div>
       ) : auditStarted && activePage === "bulk" ? (
         <BulkErrorList
-          libraries={activeComponentLibraries}
+          libraries={designTokens}
           errorArray={Array.isArray(errorArray) ? errorArray : []}
           ignoredErrorArray={ignoredErrorArray}
           onIgnoredUpdate={updateIgnoredErrors}

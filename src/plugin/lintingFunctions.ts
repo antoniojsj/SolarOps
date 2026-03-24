@@ -738,6 +738,62 @@ export async function checkType(
 
     // Erro se não houver um estilo de texto aplicado.
     if (!node.textStyleId || node.textStyleId === "") {
+      // NOVO: Verificar se o nó tem uma variable bound (variável vinculada)
+      let hasBoundVariable = false;
+      try {
+        const boundVariables = node.boundVariables;
+        if (
+          boundVariables &&
+          (boundVariables.fontFamily ||
+            boundVariables.fontSize ||
+            boundVariables.fontWeight)
+        ) {
+          console.log(`[checkType] ✓ Nó de texto tem variable bound`);
+          hasBoundVariable = true;
+          // Não reportar erro se tem variable bound
+          return;
+        }
+      } catch (error) {
+        console.log(`[checkType] boundVariables não disponível`);
+      }
+
+      // Se for uma INSTANCE, verificar o componente principal
+      if (
+        node.type === "TEXT" &&
+        node.parent &&
+        node.parent.type === "INSTANCE"
+      ) {
+        try {
+          const instance = node.parent;
+          const mainComponent = await instance.getMainComponentAsync();
+          if (mainComponent) {
+            // Procurar o nó de texto correspondente no componente principal
+            const mainTextNode = mainComponent.findOne(
+              (n: any) => n.type === "TEXT" && n.name === node.name
+            );
+            if (mainTextNode && mainTextNode.textStyleId) {
+              console.log(
+                `[checkType] ✓ Nó de texto sem textStyleId, mas componente principal tem: ${mainTextNode.textStyleId}`
+              );
+              // Verificar se o estilo do componente principal existe
+              const mainStyle = figma.getStyleById(mainTextNode.textStyleId);
+              if (mainStyle) {
+                console.log(
+                  `[checkType] ✓ Estilo do componente principal encontrado: ${mainStyle.name}`
+                );
+                // Componente principal tem token válido - não reportar erro
+                return;
+              }
+            }
+          }
+        } catch (error) {
+          console.log(
+            `[checkType] Erro ao verificar componente principal:`,
+            error
+          );
+        }
+      }
+
       const styleDesc = `${node.fontName.family} ${node.fontSize}px`;
       const suggestions =
         libraries?.flatMap(lib => lib.text).filter(Boolean) || [];
@@ -817,7 +873,6 @@ export async function checkType(
   }
 }
 
-// Função para verificar fills (cores)
 export async function newCheckFills(
   node: any,
   errors: any[],
@@ -850,8 +905,64 @@ export async function newCheckFills(
     const hasVisibleFills = node.fills.some(fill => fill.visible !== false);
 
     if (hasVisibleFills) {
+      // Log detalhado para debug
+      console.log(`[newCheckFills] Verificando nó: ${node.name} (${node.id})`);
+      console.log(
+        `[newCheckFills] fillStyleId: ${node.fillStyleId || "NENHUM"}`
+      );
+      console.log(`[newCheckFills] Tipo do nó: ${node.type}`);
+
+      // NOVO: Verificar se o nó tem uma variable bound (variável vinculada)
+      let hasBoundVariable = false;
+      try {
+        const boundVariables = node.boundVariables;
+        if (
+          boundVariables &&
+          boundVariables.fills &&
+          boundVariables.fills.length > 0
+        ) {
+          console.log(
+            `[newCheckFills] ✓ Nó tem variable bound em fills:`,
+            boundVariables.fills
+          );
+          hasBoundVariable = true;
+          // Não reportar erro se tem variable bound
+          return;
+        }
+      } catch (error) {
+        // boundVariables pode não existir em versões antigas
+        console.log(`[newCheckFills] boundVariables não disponível`);
+      }
+
       if (!node.fillStyleId || node.fillStyleId === "") {
-        // Caso 1: Não há estilo aplicado - sempre mostrar erro se não for estilo local
+        // Caso 1: Não há estilo aplicado
+
+        // Se for uma INSTANCE, verificar o componente principal
+        if (node.type === "INSTANCE") {
+          try {
+            const mainComponent = await node.getMainComponentAsync();
+            if (mainComponent && mainComponent.fillStyleId) {
+              console.log(
+                `[newCheckFills] ✓ Instância sem fillStyleId, mas componente principal tem: ${mainComponent.fillStyleId}`
+              );
+              // Verificar se o estilo do componente principal existe
+              const mainStyle = figma.getStyleById(mainComponent.fillStyleId);
+              if (mainStyle) {
+                console.log(
+                  `[newCheckFills] ✓ Estilo do componente principal encontrado: ${mainStyle.name}`
+                );
+                // Componente principal tem token válido - não reportar erro
+                return;
+              }
+            }
+          } catch (error) {
+            console.log(
+              `[newCheckFills] Erro ao verificar componente principal:`,
+              error
+            );
+          }
+        }
+
         const firstVisibleFill = node.fills.find(
           fill => fill.visible !== false
         );
@@ -864,44 +975,81 @@ export async function newCheckFills(
           fillValue = firstVisibleFill.type;
         }
 
+        console.log(
+          `[newCheckFills] ✗ Nó sem fillStyleId - cor hard-coded: ${fillValue}`
+        );
+
         const suggestions = [];
+
+        // Log para debug
+        console.log(`[newCheckFills] Gerando sugestões para fill:`, {
+          librariesCount: libraries ? libraries.length : 0,
+          savedTokensCount: savedTokens ? savedTokens.length : 0
+        });
 
         // Adicionar sugestões das bibliotecas locais
         if (libraries && libraries.length > 0) {
           libraries.forEach(lib => {
+            console.log(`[newCheckFills] Biblioteca: ${lib.name}`, {
+              hasFills: !!lib.fills,
+              fillsCount: lib.fills ? lib.fills.length : 0,
+              fillsIsArray: Array.isArray(lib.fills)
+            });
             if (lib.fills && Array.isArray(lib.fills)) {
-              suggestions.push(...lib.fills.filter(Boolean));
+              const validFills = lib.fills.filter(Boolean);
+              console.log(
+                `[newCheckFills] Adicionando ${validFills.length} fills da biblioteca ${lib.name}`
+              );
+              suggestions.push(...validFills);
             }
           });
         }
 
         // Adicionar sugestões dos tokens salvos
         if (savedTokens && savedTokens.length > 0) {
+          console.log(
+            `[newCheckFills] Processando ${savedTokens.length} bibliotecas de tokens salvos`
+          );
           savedTokens.forEach(tokenLib => {
+            console.log(`[newCheckFills] Token library:`, {
+              name: tokenLib.name,
+              hasFlattenedTokens: !!tokenLib.flattenedTokens,
+              flattenedTokensCount: tokenLib.flattenedTokens
+                ? tokenLib.flattenedTokens.length
+                : 0
+            });
             if (tokenLib.flattenedTokens) {
-              tokenLib.flattenedTokens
-                .filter((token: any) => token.category === "fills")
-                .forEach((token: any) => {
-                  suggestions.push({
-                    id: token.id,
+              const fillTokens = tokenLib.flattenedTokens.filter(
+                (token: any) => token.category === "fills"
+              );
+              console.log(
+                `[newCheckFills] Encontrados ${fillTokens.length} tokens de fill`
+              );
+              fillTokens.forEach((token: any) => {
+                suggestions.push({
+                  id: token.id,
+                  name: token.name,
+                  value: token.value,
+                  type: "SAVED_TOKEN",
+                  description: `Token salvo: ${token.name}`,
+                  paint: { type: "SOLID", color: token.color },
+                  key: token.key || token.id,
+                  style: {
+                    type: "SAVED_TOKEN",
                     name: token.name,
                     value: token.value,
-                    type: "SAVED_TOKEN",
                     description: `Token salvo: ${token.name}`,
-                    paint: { type: "SOLID", color: token.color },
-                    key: token.key || token.id,
-                    style: {
-                      type: "SAVED_TOKEN",
-                      name: token.name,
-                      value: token.value,
-                      description: `Token salvo: ${token.name}`,
-                      id: token.id
-                    }
-                  });
+                    id: token.id
+                  }
                 });
+              });
             }
           });
         }
+
+        console.log(
+          `[newCheckFills] Total de sugestões geradas: ${suggestions.length}`
+        );
 
         errors.push({
           type: "fill",
@@ -912,56 +1060,49 @@ export async function newCheckFills(
           suggestions: suggestions
         });
       } else {
-        // Caso 2: Há estilo aplicado - verificar se está na biblioteca ou tokens salvos
-        const styleFoundInLibraries =
-          preprocessedLibs?.fills?.has(node.fillStyleId) || false;
-
-        // IMPORTANTE: Usar a função isColorStyleInLibrary que já verifica tanto bibliotecas quanto tokens
-        const styleFoundInTokens = await isColorStyleInLibrary(
-          node.fillStyleId,
-          preprocessedLibs,
-          node,
-          savedTokens
+        // Caso 2: Há estilo aplicado - verificar se é um estilo válido
+        console.log(
+          `[newCheckFills] ✓ Nó tem fillStyleId: ${node.fillStyleId}`
         );
 
-        console.log(`[newCheckFills] Verificando estilo ${node.fillStyleId}:`, {
-          styleId: node.fillStyleId,
-          foundInLibraries: styleFoundInLibraries,
-          foundInTokens: styleFoundInTokens,
-          hasTokens: savedTokens && savedTokens.length > 0,
-          preprocessedLibsSize: preprocessedLibs?.fills?.size || 0
-        });
+        // Tentar obter o estilo do Figma para verificar se existe
+        let paintStyle: PaintStyle | null = null;
 
-        // Se encontrou nos tokens (que já inclui verificação de bibliotecas), não mostrar erro
-        if (!styleFoundInTokens) {
-          try {
-            const paintStyle = (await figma.getStyleById(
-              node.fillStyleId
-            )) as PaintStyle;
-            let value = "Cor desconhecida";
-            if (
-              paintStyle &&
-              paintStyle.paints &&
-              paintStyle.paints.length > 0
-            ) {
-              const paint = paintStyle.paints[0];
-              if (paint.type === "SOLID") {
-                value = getHexString(paint.color, paint.opacity);
-              } else if (
-                paint.type === "GRADIENT_LINEAR" ||
-                paint.type === "GRADIENT_RADIAL" ||
-                paint.type === "GRADIENT_ANGULAR" ||
-                paint.type === "GRADIENT_DIAMOND"
-              ) {
-                value = `Gradiente ${paint.type.split("_")[1].toLowerCase()}`;
-              } else if (paint.type === "IMAGE") {
-                value = "Imagem de preenchimento";
-              }
+        try {
+          // Usar getStyleById (síncrono) que é mais confiável
+          paintStyle = figma.getStyleById(node.fillStyleId) as PaintStyle;
+
+          if (paintStyle) {
+            console.log(`[newCheckFills] ✓ Estilo encontrado:`, {
+              id: paintStyle.id,
+              key: paintStyle.key,
+              name: paintStyle.name,
+              remote: paintStyle.remote,
+              nodeName: node.name
+            });
+            // Estilo existe e está aplicado corretamente - não adicionar erro
+            // O token está funcionando corretamente
+          } else {
+            console.log(
+              `[newCheckFills] ✗ Estilo retornou null: ${node.fillStyleId}`
+            );
+            // Estilo não encontrado - token realmente quebrado
+            const firstVisibleFill = node.fills.find(
+              fill => fill.visible !== false
+            );
+            let fillValue = "Token removido ou quebrado";
+
+            if (firstVisibleFill && firstVisibleFill.type === "SOLID") {
+              const color = convertColor(firstVisibleFill.color);
+              fillValue = `${getHexString(
+                color,
+                firstVisibleFill.opacity
+              )} (Token ID: ${node.fillStyleId})`;
+            } else if (firstVisibleFill) {
+              fillValue = `${firstVisibleFill.type} (Token ID: ${node.fillStyleId})`;
             }
 
             const suggestions = [];
-
-            // Adicionar sugestões das bibliotecas locais
             if (libraries && libraries.length > 0) {
               libraries.forEach(lib => {
                 if (lib.fills && Array.isArray(lib.fills)) {
@@ -969,8 +1110,6 @@ export async function newCheckFills(
                 }
               });
             }
-
-            // Adicionar sugestões dos tokens salvos
             if (savedTokens && savedTokens.length > 0) {
               savedTokens.forEach(tokenLib => {
                 if (tokenLib.flattenedTokens) {
@@ -1000,31 +1139,16 @@ export async function newCheckFills(
 
             errors.push({
               type: "fill",
-              message:
-                "Estilo de preenchimento não pertence a uma biblioteca ou foi modificado",
+              message: "Token de preenchimento foi removido ou está quebrado",
               nodeId: node.id,
               nodeName: node.name,
-              value: value,
+              value: fillValue,
               suggestions: suggestions
             });
-          } catch (error) {
-            console.error(
-              "[newCheckFills] Erro ao buscar estilo de preenchimento:",
-              error
-            );
-            errors.push({
-              type: "fill",
-              message: "Erro ao verificar estilo de preenchimento",
-              nodeId: node.id,
-              nodeName: node.name,
-              value: "Erro ao carregar estilo",
-              suggestions: []
-            });
           }
-        } else {
-          console.log(
-            `[newCheckFills] ✓ Estilo ${node.fillStyleId} encontrado - sem erro`
-          );
+        } catch (error) {
+          console.error(`[newCheckFills] Erro ao buscar estilo:`, error);
+          // Em caso de erro, não adicionar como erro de linting
         }
       }
     }
@@ -1071,6 +1195,50 @@ export async function newCheckEffects(
       hasVisibleEffects &&
       (!node.effectStyleId || node.effectStyleId === "")
     ) {
+      // NOVO: Verificar se o nó tem uma variable bound (variável vinculada)
+      let hasBoundVariable = false;
+      try {
+        const boundVariables = node.boundVariables;
+        if (
+          boundVariables &&
+          boundVariables.effects &&
+          boundVariables.effects.length > 0
+        ) {
+          console.log(`[newCheckEffects] ✓ Nó tem variable bound em effects`);
+          hasBoundVariable = true;
+          // Não reportar erro se tem variable bound
+          return;
+        }
+      } catch (error) {
+        console.log(`[newCheckEffects] boundVariables não disponível`);
+      }
+
+      // Se for uma INSTANCE, verificar o componente principal
+      if (node.type === "INSTANCE") {
+        try {
+          const mainComponent = await node.getMainComponentAsync();
+          if (mainComponent && mainComponent.effectStyleId) {
+            console.log(
+              `[newCheckEffects] ✓ Instância sem effectStyleId, mas componente principal tem: ${mainComponent.effectStyleId}`
+            );
+            // Verificar se o estilo do componente principal existe
+            const mainStyle = figma.getStyleById(mainComponent.effectStyleId);
+            if (mainStyle) {
+              console.log(
+                `[newCheckEffects] ✓ Estilo do componente principal encontrado: ${mainStyle.name}`
+              );
+              // Componente principal tem token válido - não reportar erro
+              return;
+            }
+          }
+        } catch (error) {
+          console.log(
+            `[newCheckEffects] Erro ao verificar componente principal:`,
+            error
+          );
+        }
+      }
+
       const firstEffect = node.effects.find(e => e.visible !== false);
       let effectValue = firstEffect?.type || "Efeito desconhecido";
 

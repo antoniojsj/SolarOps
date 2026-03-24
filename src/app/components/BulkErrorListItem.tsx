@@ -4,7 +4,7 @@ import { motion } from "framer-motion/dist/framer-motion";
 import StyleContent from "./StyleContent";
 import "../styles/modal.css";
 
-const DEBUG = false;
+const DEBUG = true;
 
 function useOnClickOutside(ref, handler) {
   useEffect(() => {
@@ -82,25 +82,32 @@ function BulkErrorListItem(props) {
         : lower === "effect"
         ? "effects"
         : lower;
+
     try {
       if (normalized === "fill") {
-        return libraries
-          .flatMap((lib: any) => lib?.fills || [])
+        const options = libraries
+          .flatMap((lib: any) => lib?.tokens?.fills || lib?.fills || [])
           .filter(Boolean);
+        return options;
       }
       if (normalized === "stroke") {
         // Strokes usam PaintStyles também
-        return libraries
-          .flatMap((lib: any) => lib?.fills || [])
+        const options = libraries
+          .flatMap((lib: any) => lib?.tokens?.fills || lib?.fills || [])
           .filter(Boolean);
+        return options;
       }
       if (normalized === "effects") {
-        return libraries
-          .flatMap((lib: any) => lib?.effects || [])
+        const options = libraries
+          .flatMap((lib: any) => lib?.tokens?.effects || lib?.effects || [])
           .filter(Boolean);
+        return options;
       }
       if (normalized === "text") {
-        return libraries.flatMap((lib: any) => lib?.text || []).filter(Boolean);
+        const options = libraries
+          .flatMap((lib: any) => lib?.tokens?.text || lib?.text || [])
+          .filter(Boolean);
+        return options;
       }
     } catch (e) {
       console.warn(

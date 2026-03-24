@@ -345,8 +345,10 @@ figma.on("selectionchange", () => {
             "[DEBUG] Processando reactions:",
             selectedNode.reactions.length
           );
-          const animations = selectedNode.reactions
-            .map(reaction => {
+
+          // Usar Promise.all para processar reactions de forma assíncrona
+          const animationPromises = selectedNode.reactions.map(
+            async reaction => {
               const action = reaction.action;
               console.log("[DEBUG] Reaction:", reaction);
               if (action.type === "NODE") {
@@ -378,8 +380,12 @@ figma.on("selectionchange", () => {
                 return animationData;
               }
               return null;
-            })
-            .filter(Boolean);
+            }
+          );
+
+          const animations = (await Promise.all(animationPromises)).filter(
+            Boolean
+          );
 
           if (animations.length > 0) {
             console.log("[DEBUG] Enviando animações:", animations);
@@ -1870,28 +1876,29 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         for (const nodeId of nodesToApply) {
           if (count && appliedCount >= count) break;
 
+          // CORRIGIDO: Usar figma.getNodeById ao invés de getNodeByIdAsync
           const node = figma.getNodeById(nodeId);
           if (!node) continue;
 
           switch (error.type) {
             case "text":
               if (node.type === "TEXT") {
-                node.textStyleId = suggestion.id;
+                await node.setTextStyleIdAsync(suggestion.id);
               }
               break;
             case "fill":
               if ("fillStyleId" in node) {
-                node.fillStyleId = suggestion.id;
+                await node.setFillStyleIdAsync(suggestion.id);
               }
               break;
             case "stroke":
               if ("strokeStyleId" in node) {
-                node.strokeStyleId = suggestion.id;
+                await node.setStrokeStyleIdAsync(suggestion.id);
               }
               break;
             case "effects":
               if ("effectStyleId" in node) {
-                node.effectStyleId = suggestion.id;
+                await node.setEffectStyleIdAsync(suggestion.id);
               }
               break;
             case "radius":
@@ -1962,12 +1969,12 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       console.log("[Controller] Selecionando múltiplas layers");
       const nodesToBeSelected: any[] = [];
       if (msg && Array.isArray(msg.nodes)) {
-        msg.nodes.forEach(item => {
+        for (const item of msg.nodes) {
           const layer = figma.getNodeById(item);
           if (layer) {
             nodesToBeSelected.push(layer);
           }
-        });
+        }
       }
       if (nodesToBeSelected.length > 0) {
         figma.currentPage.selection = nodesToBeSelected;
@@ -2431,13 +2438,25 @@ figma.ui.onmessage = async (msg: UIMessage) => {
         console.log(
           "[Controller] Executando auditoria com",
           effectiveLibrariesWithVariables.length,
-          "bibliotecas salvas pelo usuário:",
-          effectiveLibrariesWithVariables.map((lib: any) => ({
-            name: lib && lib.name ? lib.name : undefined,
-            id: lib && lib.id ? lib.id : undefined,
-            tokens: lib && lib.tokens ? Object.keys(lib.tokens) : []
-          }))
+          "bibliotecas salvas pelo usuário:"
         );
+
+        // Log detalhado de cada biblioteca
+        effectiveLibrariesWithVariables.forEach((lib: any, index: number) => {
+          console.log(`[Controller] Biblioteca ${index}:`, {
+            name: lib?.name,
+            id: lib?.id,
+            hasFills: !!lib?.fills,
+            fillsCount: lib?.fills ? lib.fills.length : 0,
+            hasText: !!lib?.text,
+            textCount: lib?.text ? lib.text.length : 0,
+            hasEffects: !!lib?.effects,
+            effectsCount: lib?.effects ? lib.effects.length : 0,
+            hasVariables: !!lib?.variables,
+            variablesCount: lib?.variables ? lib.variables.length : 0,
+            allKeys: lib ? Object.keys(lib) : []
+          });
+        });
 
         console.log(
           "[Controller] DEBUG - Carregando tokens salvos para a auditoria inicial..."
@@ -2633,7 +2652,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       // Tentar usar a API assíncrona para compatibilidade com dynamic-page
       (async () => {
         try {
-          const node = await figma.getNodeByIdAsync(msg.id);
+          const node = figma.getNodeById(msg.id);
           if (node) {
             console.log(
               "[Controller] Nó encontrado, focando e fazendo zoom:",
@@ -2702,16 +2721,218 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
     if (msg.type === "fetch-token-libraries") {
       try {
+        console.log("[Controller] Buscando bibliotecas de tokens...");
+
+        // Detectar tokens localmente primeiro
         const tokenLibraries = await detectTokenLibraries();
-        figma.ui.postMessage({
-          type: "fetched-token-libraries",
-          tokenLibraries
-        });
+
+        // Verificar se há token de acesso do Figma configurado
+        const figmaAccessToken =
+          (msg as any).figmaAccessToken ||
+          (await figma.clientStorage.getAsync("figma_access_token"));
+
+        // Verificar se há URL da biblioteca fornecida
+        const libraryUrl = (msg as any).libraryUrl;
+        let providedFileKey: string | null = null;
+
+        if (libraryUrl) {
+          // Extrair file_key da URL
+          const match = libraryUrl.match(/\/file\/([a-zA-Z0-9]+)/);
+          if (match) {
+            providedFileKey = match[1];
+            console.log(
+              `[Controller] File key extraído da URL: ${providedFileKey}`
+            );
+          }
+        }
+
+        if (figmaAccessToken && tokenLibraries.length > 0) {
+          console.log(
+            "[Controller] Token de acesso encontrado - usando detecção híbrida"
+          );
+
+          // Importar a função híbrida
+          const { detectTokensHybrid, getFileKeyFromStyle } = await import(
+            "./hybridTokenDetection"
+          );
+
+          // Processar cada biblioteca com detecção híbrida
+          const enhancedLibraries = [];
+
+          for (const lib of tokenLibraries) {
+            // Usar file_key fornecido pela URL ou tentar extrair
+            let fileKey = providedFileKey || lib.fileKey;
+
+            // Se não tiver fileKey, tentar extrair de um estilo remoto
+            if (!fileKey) {
+              // Tentar em fills
+              if (lib.fills && lib.fills.length > 0) {
+                for (const style of lib.fills) {
+                  if (style.key && style.key.includes(":")) {
+                    const parts = style.key.split(":");
+                    if (parts.length > 1 && parts[0].length > 10) {
+                      fileKey = parts[0];
+                      console.log(
+                        `[Controller] File key extraído de fill: ${fileKey}`
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // Tentar em text se não encontrou em fills
+              if (!fileKey && lib.text && lib.text.length > 0) {
+                for (const style of lib.text) {
+                  if (style.key && style.key.includes(":")) {
+                    const parts = style.key.split(":");
+                    if (parts.length > 1 && parts[0].length > 10) {
+                      fileKey = parts[0];
+                      console.log(
+                        `[Controller] File key extraído de text: ${fileKey}`
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // Tentar em effects se não encontrou
+              if (!fileKey && lib.effects && lib.effects.length > 0) {
+                for (const style of lib.effects) {
+                  if (style.key && style.key.includes(":")) {
+                    const parts = style.key.split(":");
+                    if (parts.length > 1 && parts[0].length > 10) {
+                      fileKey = parts[0];
+                      console.log(
+                        `[Controller] File key extraído de effect: ${fileKey}`
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (fileKey) {
+              console.log(
+                `[Controller] Processando biblioteca ${lib.name} com file_key: ${fileKey}`
+              );
+
+              try {
+                const hybridLib = await detectTokensHybrid(
+                  lib,
+                  fileKey,
+                  figmaAccessToken
+                );
+                enhancedLibraries.push(hybridLib);
+
+                console.log(`[Controller] Biblioteca ${lib.name} processada:`);
+                console.log(`  - Total: ${hybridLib.totalTokens} tokens`);
+                console.log(`  - Locais: ${hybridLib.localTokens}`);
+                console.log(`  - API: ${hybridLib.apiTokens}`);
+                console.log(`  - Duplicatas evitadas: ${hybridLib.duplicates}`);
+              } catch (error) {
+                console.error(
+                  `[Controller] Erro ao processar biblioteca ${lib.name} com API:`,
+                  error
+                );
+                // Fallback para biblioteca local
+                enhancedLibraries.push(lib);
+              }
+            } else {
+              console.log(
+                `[Controller] Biblioteca ${lib.name} sem file_key - usando apenas detecção local`
+              );
+              enhancedLibraries.push(lib);
+            }
+          }
+
+          figma.ui.postMessage({
+            type: "fetched-token-libraries",
+            tokenLibraries: enhancedLibraries,
+            hybridMode: true
+          });
+        } else {
+          console.log(
+            "[Controller] Sem token de acesso - usando apenas detecção local"
+          );
+          figma.ui.postMessage({
+            type: "fetched-token-libraries",
+            tokenLibraries,
+            hybridMode: false
+          });
+        }
       } catch (error) {
+        console.error("[Controller] Erro ao buscar bibliotecas:", error);
         figma.ui.postMessage({
           type: "fetched-token-libraries",
           tokenLibraries: [],
           error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    // Salvar token de acesso do Figma
+    if (msg.type === "save-figma-token") {
+      try {
+        const token = (msg as any).token;
+        if (token) {
+          await figma.clientStorage.setAsync("figma_access_token", token);
+          console.log("[Controller] Token de acesso salvo com sucesso");
+          figma.ui.postMessage({
+            type: "figma-token-saved",
+            success: true
+          });
+        } else {
+          throw new Error("Token não fornecido");
+        }
+      } catch (error) {
+        console.error("[Controller] Erro ao salvar token:", error);
+        figma.ui.postMessage({
+          type: "figma-token-saved",
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    // Recuperar token de acesso do Figma
+    if (msg.type === "get-figma-token") {
+      try {
+        const token = await figma.clientStorage.getAsync("figma_access_token");
+        figma.ui.postMessage({
+          type: "figma-token-loaded",
+          token: token || null,
+          hasToken: !!token
+        });
+      } catch (error) {
+        console.error("[Controller] Erro ao carregar token:", error);
+        figma.ui.postMessage({
+          type: "figma-token-loaded",
+          token: null,
+          hasToken: false
+        });
+      }
+      return;
+    }
+
+    // Remover token de acesso do Figma
+    if (msg.type === "remove-figma-token") {
+      try {
+        await figma.clientStorage.deleteAsync("figma_access_token");
+        console.log("[Controller] Token de acesso removido");
+        figma.ui.postMessage({
+          type: "figma-token-removed",
+          success: true
+        });
+      } catch (error) {
+        console.error("[Controller] Erro ao remover token:", error);
+        figma.ui.postMessage({
+          type: "figma-token-removed",
+          success: false
         });
       }
       return;
@@ -2969,10 +3190,38 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
         // Gerar sugestões baseadas no tipo de erro
         if (error.type === "fill" || error.type === "color") {
+          console.log(
+            `[Controller] Gerando sugestões para fill/color. Error type: ${error.type}`
+          );
+
           // Sugestões de cores (fills)
           libraries.forEach((lib: any) => {
+            console.log(
+              `[Controller] Estrutura completa da biblioteca ${lib.name}:`,
+              {
+                name: lib.name,
+                id: lib.id,
+                keys: Object.keys(lib),
+                hasFills: !!lib.fills,
+                fillsCount: lib.fills ? lib.fills.length : 0,
+                fillsType: typeof lib.fills,
+                fillsValue: lib.fills,
+                hasText: !!lib.text,
+                textCount: lib.text ? lib.text.length : 0,
+                textType: typeof lib.text,
+                textValue: lib.text,
+                hasEffects: !!lib.effects,
+                effectsCount: lib.effects ? lib.effects.length : 0,
+                effectsType: typeof lib.effects,
+                effectsValue: lib.effects
+              }
+            );
             if (lib.fills && Array.isArray(lib.fills)) {
               lib.fills.forEach((fill: any) => {
+                console.log(
+                  `[Controller] Adicionando fill da biblioteca:`,
+                  fill.name
+                );
                 suggestions.push({
                   id: fill.id,
                   name: fill.name,
@@ -2993,31 +3242,63 @@ figma.ui.onmessage = async (msg: UIMessage) => {
             }
           });
 
+          console.log(
+            `[Controller] Sugestões após bibliotecas: ${suggestions.length}`
+          );
+
           // Adicionar tokens salvos de cores
+          console.log(
+            `[Controller] Processando ${savedTokens.length} bibliotecas de tokens salvos`
+          );
           savedTokens.forEach((tokenLib: any) => {
+            console.log(`[Controller] Token library structure:`, {
+              name: tokenLib.name,
+              hasFlattenedTokens: !!tokenLib.flattenedTokens,
+              flattenedTokensCount: tokenLib.flattenedTokens
+                ? tokenLib.flattenedTokens.length
+                : 0,
+              firstFillToken: tokenLib.flattenedTokens
+                ? tokenLib.flattenedTokens.find(t => t.category === "fills")
+                : null
+            });
             if (tokenLib.flattenedTokens) {
-              tokenLib.flattenedTokens
-                .filter((token: any) => token.category === "fills")
-                .forEach((token: any) => {
-                  suggestions.push({
-                    id: token.id,
+              const fillTokens = tokenLib.flattenedTokens.filter(
+                (token: any) => token.category === "fills"
+              );
+              console.log(
+                `[Controller] Encontrados ${fillTokens.length} tokens de fill em ${tokenLib.name}`
+              );
+              fillTokens.forEach((token: any) => {
+                console.log(`[Controller] Processando fill token:`, {
+                  name: token.name,
+                  hasColor: !!token.color,
+                  hasPaint: !!token.paint,
+                  color: token.color,
+                  paint: token.paint
+                });
+                suggestions.push({
+                  id: token.id,
+                  name: token.name,
+                  value: token.value,
+                  type: "SAVED_TOKEN",
+                  description: `Token salvo: ${token.name}`,
+                  paint: { type: "SOLID", color: token.color },
+                  key: token.key || token.id,
+                  style: {
+                    type: "SAVED_TOKEN",
                     name: token.name,
                     value: token.value,
-                    type: "SAVED_TOKEN",
                     description: `Token salvo: ${token.name}`,
-                    paint: { type: "SOLID", color: token.color },
-                    key: token.key || token.id,
-                    style: {
-                      type: "SAVED_TOKEN",
-                      name: token.name,
-                      value: token.value,
-                      description: `Token salvo: ${token.name}`,
-                      id: token.id
-                    }
-                  });
+                    id: token.id
+                  }
                 });
+              });
             }
           });
+
+          console.log(
+            `[Controller] Total de sugestões geradas: ${suggestions.length}`
+          );
         }
 
         if (error.type === "text" || error.type === "typography") {
@@ -3449,6 +3730,32 @@ async function saveDesignTokens(tokens: any) {
       length: tokens?.length,
       keys: tokens ? Object.keys(tokens) : []
     });
+
+    // Log detalhado de cada categoria
+    if (tokens && typeof tokens === "object") {
+      console.log("[saveDesignTokens] === DETALHAMENTO POR CATEGORIA ===");
+      Object.keys(tokens).forEach(category => {
+        const categoryData = tokens[category];
+        if (Array.isArray(categoryData)) {
+          console.log(
+            `[saveDesignTokens] ${category}: ${categoryData.length} tokens`
+          );
+          // Log dos primeiros 3 tokens de cada categoria para verificar estrutura
+          if (categoryData.length > 0) {
+            console.log(`[saveDesignTokens] Exemplo de token em ${category}:`, {
+              id: categoryData[0].id,
+              key: categoryData[0].key,
+              name: categoryData[0].name,
+              hasValue: !!categoryData[0].value
+            });
+          }
+        } else {
+          console.log(
+            `[saveDesignTokens] ${category}: NÃO É ARRAY (tipo: ${typeof categoryData})`
+          );
+        }
+      });
+    }
 
     if (!tokens) {
       throw new Error("No tokens provided to save");
@@ -3951,7 +4258,7 @@ const analyzeSelectedContrast = async (msg?: any) => {
     const pageId = page && typeof page === "object" && page.id;
     let frameNodeToAnalyze: BaseNode | null = null;
     if (pageId && pageId !== "current-page") {
-      frameNodeToAnalyze = await figma.getNodeByIdAsync(pageId);
+      frameNodeToAnalyze = figma.getNodeById(pageId);
     }
     if (!frameNodeToAnalyze) {
       frameNodeToAnalyze = frameNode;

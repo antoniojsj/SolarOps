@@ -280,19 +280,24 @@ function BulkErrorList(props) {
       activeErrors.map(e => getErrorNodeId(e))
     );
 
-    // Cálculo consistente baseado em nós únicos
-    const uniqueNodesWithErrors = nodesWithActiveErrors.size;
-    const totalNonConformElements = uniqueNodesWithErrors;
+    // CORRIGIDO: Não conformes = total de ERROS, não nós únicos
+    // Um nó pode ter múltiplos erros (ex: erro de texto + erro de fill)
+    const totalNonConformElements = activeErrors.length;
+
+    // Conformes = total escaneado - não conformes
     const totalConformElements = Math.max(
       0,
-      totalScannedElements - uniqueNodesWithErrors
+      totalScannedElements - totalNonConformElements
     );
 
     console.log("=== RESUMO FINAL ===");
     console.log("Total de elementos escaneados:", totalScannedElements);
     console.log("Total de erros ativos:", activeErrors.length);
-    console.log("Nós únicos com erro:", uniqueNodesWithErrors);
-    console.log("Elementos não conformes:", totalNonConformElements);
+    console.log("Nós únicos com erro:", nodesWithActiveErrors.size);
+    console.log(
+      "Elementos não conformes (total de erros):",
+      totalNonConformElements
+    );
     console.log("Elementos conformes:", totalConformElements);
     console.log(
       "Validação:",
@@ -1133,7 +1138,7 @@ function BulkErrorList(props) {
             >
               <ConformityScoreBar
                 totalElements={totalElements}
-                nonConformElements={filteredFlatErrors.length}
+                nonConformElements={nonConformElements}
                 conformElements={conformElements}
               />
             </div>
@@ -1179,7 +1184,7 @@ function BulkErrorList(props) {
                   Não conformes
                 </span>
                 <span style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                  {filteredFlatErrors.length}
+                  {nonConformElements}
                 </span>
               </div>
               <div
@@ -1620,13 +1625,11 @@ function BulkErrorList(props) {
                 const frameErrors = filteredFlatErrors.filter(e =>
                   frameIds.has(getErrorNodeId(e))
                 );
-                const frameNonConformNodeIds = new Set(
-                  frameErrors.map(e => getErrorNodeId(e))
-                );
-                // Cálculo consistente baseado em nós únicos (alinhado com o card geral)
-                const frameNonConformElements = frameNonConformNodeIds.size;
+
+                // CORRIGIDO: Usar total de erros como na aba Geral (não nós únicos)
+                const frameNonConformElements = frameErrors.length;
                 const frameConformElements = Math.max(
-                  totalElements - frameNonConformNodeIds.size,
+                  totalElements - frameNonConformElements,
                   0
                 );
 
@@ -1639,15 +1642,11 @@ function BulkErrorList(props) {
                 console.log("Total de elementos no frame:", totalElements);
                 console.log("Erros no frame:", frameErrors.length);
                 console.log(
-                  "Nós únicos não conformes:",
+                  "Elementos não conformes:",
                   frameNonConformElements
                 );
                 console.log("Elementos conformes:", frameConformElements);
                 console.log("Total para cálculo:", frameTotalForCalculation);
-                console.log(
-                  "Nós não conformes:",
-                  Array.from(frameNonConformNodeIds)
-                );
                 const frameDetachCount = frameErrors.filter(
                   e => getErrorType(e) === "restore-component"
                 ).length;
@@ -1671,7 +1670,7 @@ function BulkErrorList(props) {
                     >
                       <ConformityScoreBar
                         totalElements={totalElements}
-                        nonConformElements={frameErrors.length}
+                        nonConformElements={frameNonConformElements}
                         conformElements={frameConformElements}
                       />
                     </div>
