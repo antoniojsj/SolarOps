@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import ContrastChecker from "./ContrastChecker";
 import WCAGContent from "./WCAGContent";
+import HeaderMarker from "./HeaderMarker";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -70,7 +71,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   selectedNode
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<
-    "main" | "contrate" | "documentacao"
+    "main" | "contrate" | "documentacao" | "headermarker"
   >("main");
 
   // Tabs dentro da subpágina de contraste
@@ -170,7 +171,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
       }
 
       const img = new Image();
-      const blob = new Blob([uint8Array], { type: "image/png" });
+      const blob = new Blob([uint8Array as BlobPart], { type: "image/png" });
       const url = URL.createObjectURL(blob);
 
       img.onload = () => {
@@ -566,7 +567,9 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               ArrayBuffer.isView(imageBytes) ||
               imageBytes instanceof ArrayBuffer)
           ) {
-            const blob = new Blob([imageBytes], { type: "image/png" });
+            const blob = new Blob([imageBytes as BlobPart], {
+              type: "image/png"
+            });
             const url = URL.createObjectURL(blob);
             setContrastPreviewImageUrl(url);
             const w = Number(result.width) || 0;
@@ -624,7 +627,9 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   }, [contrastPreviewImageUrl]);
 
   // Função para mudar de subpágina e comunicar com App.tsx
-  const changeSubPage = (page: "main" | "contrate" | "documentacao") => {
+  const changeSubPage = (
+    page: "main" | "contrate" | "documentacao" | "headermarker"
+  ) => {
     console.log("[AccessibilityTab] Mudando para subpágina:", page);
     setActiveSubPage(page);
 
@@ -640,6 +645,8 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         ? "Contrate"
         : page === "documentacao"
         ? "Documentação"
+        : page === "headermarker"
+        ? "Header Marker"
         : "";
 
     // Enviar mensagem diretamente para a janela atual
@@ -800,6 +807,94 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               }}
             >
               Ferramentas de verificação de contraste e cores
+            </p>
+          </div>
+          <div>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "rgba(255, 255, 255, 0.5)" }}
+            >
+              <path d="M9 18l6-6-6-6"></path>
+            </svg>
+          </div>
+        </div>
+
+        {/* Card Header Marker */}
+        <div
+          onClick={() => changeSubPage("headermarker")}
+          style={{
+            background: "rgba(168, 85, 247, 0.12)",
+            border: "1px solid rgba(168, 85, 247, 0.30)",
+            borderRadius: 8,
+            padding: 16,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(168, 85, 247, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(168, 85, 247, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.30)";
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              background: "rgba(168, 85, 247, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#a855f7" }}
+            >
+              <path d="M4 7V4h16v3M9 20h6M12 4v16"></path>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Header Marker
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Marcar textos como headings (H1-H6)
             </p>
           </div>
           <div>
@@ -1345,6 +1440,14 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               </footer>
             )}
           </div>
+        );
+      case "headermarker":
+        return (
+          <HeaderMarker
+            isVisible={true}
+            selectedNode={selectedNode}
+            onBack={handleBack}
+          />
         );
       case "documentacao":
         return (

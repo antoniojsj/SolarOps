@@ -1371,6 +1371,200 @@ import { importRenderedDOM } from "./domImporter";
 
 // Listener para mensagens da UI
 figma.ui.onmessage = async (msg: UIMessage) => {
+  console.log("[Controller] MENSAGEM RECEBIDA:", msg.type, msg);
+
+  // Handlers para Header Marker - MOVIDO PARA O INÍCIO
+  if (msg.type === "add-heading") {
+    try {
+      console.log("[Controller] Recebido add-heading:", msg);
+      console.log(
+        "[Controller] Estrutura completa da mensagem:",
+        JSON.stringify(msg, null, 2)
+      );
+
+      const { headingType } = msg;
+      console.log("[Controller] headingType extraído:", headingType);
+
+      const selection = figma.currentPage.selection;
+      console.log("[Controller] Seleção atual:", selection.length, "itens");
+
+      if (selection.length === 0) {
+        console.log("[Controller] Nenhum item selecionado");
+        figma.notify("Selecione um texto no Figma antes de aplicar o heading", {
+          error: true
+        });
+        return;
+      }
+
+      const selectedNode = selection[0];
+      console.log(
+        "[Controller] Primeiro item selecionado:",
+        selectedNode?.name,
+        selectedNode?.type
+      );
+
+      if (selectedNode.type !== "TEXT") {
+        console.log("[Controller] Item selecionado não é um texto");
+        figma.notify("Selecione um elemento de texto para aplicar o heading", {
+          error: true
+        });
+        return;
+      }
+
+      // Criar anotação de heading
+      const textNode = selectedNode as TextNode;
+      const bounds = textNode.absoluteBoundingBox;
+      console.log("[Controller] Bounds do texto:", bounds);
+
+      if (!bounds) {
+        console.log("[Controller] Bounds não encontrados");
+        figma.notify("Não foi possível obter as dimensões do texto", {
+          error: true
+        });
+        return;
+      }
+
+      console.log("[Controller] Iniciando criação do heading frame...");
+
+      // Carregar fonte Roboto Bold antes de usar
+      await figma.loadFontAsync({ family: "Roboto", style: "Bold" });
+
+      // Criar array de elementos para agrupar
+      const toGroupArray = [];
+
+      // Cores baseadas no heading type
+      const headingColor = getHeadingColor(headingType);
+      const white = { r: 1, g: 1, b: 1 };
+
+      // Criar heading outline (visível) - como no accessibility
+      const headingOutline = figma.createRectangle();
+      headingOutline.name = "Heading outline";
+      headingOutline.resize(bounds.width + 16, bounds.height + 32);
+      headingOutline.x = bounds.x - 8; // Coordenadas absolutas como no accessibility
+      headingOutline.y = bounds.y - 16; // Coordenadas absolutas como no accessibility
+      headingOutline.fills = [];
+      headingOutline.strokes = [
+        {
+          type: "SOLID",
+          color: headingColor
+        }
+      ];
+      headingOutline.strokeWeight = 3; // Espessura do contorno 3px
+      headingOutline.opacity = 1; // Visível para mostrar o contorno
+      headingOutline.cornerRadius = 8; // Bordas arredondadas - depois ajustamos para 0 8px 8px 8px
+      // Ajustar border-radius para: 0 8px 8px 8px
+      headingOutline.topLeftRadius = 0;
+      headingOutline.topRightRadius = 8;
+      headingOutline.bottomLeftRadius = 8;
+      headingOutline.bottomRightRadius = 8;
+      toGroupArray.push(headingOutline);
+
+      // Criar fundo para a etiqueta - como no accessibility
+      const labelBackground = figma.createRectangle();
+      labelBackground.name = "Label Background";
+      labelBackground.resize(40, 29); // Tamanho exato do accessibility
+      labelBackground.x = bounds.x - 8; // Coordenadas absolutas
+      labelBackground.y = bounds.y - 42; // Coordenadas absolutas
+      labelBackground.fills = [
+        {
+          type: "SOLID",
+          color: headingColor
+        }
+      ];
+      labelBackground.strokes = [];
+      labelBackground.opacity = 1;
+      labelBackground.cornerRadius = 8; // Bordas arredondadas - depois ajustamos para topo apenas
+      // Ajustar border-radius para apenas topo: 8px 8px 0 0
+      labelBackground.topLeftRadius = 8;
+      labelBackground.topRightRadius = 8;
+      labelBackground.bottomLeftRadius = 0;
+      labelBackground.bottomRightRadius = 0;
+      toGroupArray.push(labelBackground);
+
+      // Criar texto da etiqueta - como no accessibility
+      const labelText = figma.createText();
+      labelText.name = `Heading Type: ${headingType}`;
+      labelText.characters = headingType.toUpperCase();
+      labelText.fontSize = 18; // Tamanho exato do accessibility
+      labelText.fills = [
+        {
+          type: "SOLID",
+          color: white
+        }
+      ];
+      labelText.fontName = { family: "Roboto", style: "Bold" };
+      labelText.x = bounds.x; // Coordenadas absolutas
+      labelText.y = bounds.y - 38; // Coordenadas absolutas
+      toGroupArray.push(labelText);
+
+      // Agrupar todos os elementos (já posicionados com coordenadas absolutas)
+      const headingGroup = figma.group(toGroupArray, figma.currentPage);
+      headingGroup.name = `Heading: ${headingType} | ${textNode.name} | ${textNode.id}`;
+
+      // Não reposicionar o grupo - os elementos já estão nas coordenadas corretas
+      headingGroup.resizeWithoutConstraints(bounds.width, bounds.height);
+      headingGroup.expanded = false;
+
+      console.log(
+        "[Controller] Heading group criado e posicionado:",
+        headingGroup.name
+      );
+
+      figma.notify(
+        `Heading ${headingType.toUpperCase()} aplicado com sucesso!`,
+        {
+          timeout: 3000
+        }
+      );
+    } catch (error) {
+      console.error("[Controller] Erro ao aplicar heading:", error);
+      figma.notify("Erro ao aplicar heading", {
+        error: true
+      });
+    }
+    return;
+  }
+
+  if (msg.type === "remove-heading") {
+    try {
+      console.log("[Controller] Recebido remove-heading:", msg);
+
+      const { heading } = msg;
+
+      // Encontrar e remover o frame do heading
+      const headingFrames = figma.currentPage.findAll(
+        node => node.name.includes("Heading:") && node.name.includes(heading.id)
+      );
+
+      headingFrames.forEach(frame => frame.remove());
+
+      figma.notify("Heading removido com sucesso!", {
+        timeout: 2000
+      });
+    } catch (error) {
+      console.error("[Controller] Erro ao remover heading:", error);
+      figma.notify("Erro ao remover heading", {
+        error: true
+      });
+    }
+    return;
+  }
+
+  // Função auxiliar para obter cor do heading
+  function getHeadingColor(
+    headingType: string
+  ): { r: number; g: number; b: number } {
+    const colors = {
+      h1: { r: 0.58, g: 0.2, b: 0.92 }, // #9333ea (roxo)
+      h2: { r: 0.92, g: 0.35, b: 0.05 }, // #ea580c
+      h3: { r: 0.93, g: 0.28, b: 0.6 }, // #ec4899 (rosa)
+      h4: { r: 0.4, g: 0.64, b: 0.05 }, // #65a30d
+      h5: { r: 0.09, g: 0.8, b: 0.29 }, // #16a34a
+      h6: { r: 0.03, g: 0.57, b: 0.7 } // #0891b2
+    };
+    return colors[headingType] || { r: 0.5, g: 0.5, b: 0.5 };
+  }
+
   if (msg.type === "rename-layers-with-html-semantics") {
     try {
       const renamedCount = await renameLayersWithHtmlSemantics();
@@ -4808,5 +5002,164 @@ const analyzeSelectedContrast = async (msg?: any) => {
         error: error.message || "Erro desconhecido"
       }
     });
+  }
+
+  // Handlers para Header Marker
+  if (msg.type === "add-heading") {
+    try {
+      console.log("[Controller] Recebido add-heading:", msg);
+      console.log(
+        "[Controller] Estrutura completa da mensagem:",
+        JSON.stringify(msg, null, 2)
+      );
+
+      const { headingType } = msg;
+      console.log("[Controller] headingType extraído:", headingType);
+
+      const selection = figma.currentPage.selection;
+      console.log("[Controller] Seleção atual:", selection.length, "itens");
+
+      if (selection.length === 0) {
+        console.log("[Controller] Nenhum item selecionado");
+        figma.notify("Selecione um texto no Figma antes de aplicar o heading", {
+          error: true
+        });
+        return;
+      }
+
+      const selectedNode = selection[0];
+      console.log(
+        "[Controller] Primeiro item selecionado:",
+        selectedNode?.name,
+        selectedNode?.type
+      );
+
+      if (selectedNode.type !== "TEXT") {
+        console.log("[Controller] Item selecionado não é um texto");
+        figma.notify("Selecione um elemento de texto para aplicar o heading", {
+          error: true
+        });
+        return;
+      }
+
+      // Criar anotação de heading
+      const textNode = selectedNode as TextNode;
+      const bounds = textNode.absoluteBoundingBox;
+      console.log("[Controller] Bounds do texto:", bounds);
+
+      if (!bounds) {
+        console.log("[Controller] Bounds não encontrados");
+        figma.notify("Não foi possível obter as dimensões do texto", {
+          error: true
+        });
+        return;
+      }
+
+      console.log("[Controller] Iniciando criação do heading frame...");
+
+      // Criar frame para o heading
+      const headingFrame = figma.createFrame();
+      headingFrame.name = `Heading: ${headingType.toUpperCase()} | ${
+        textNode.name
+      } | ${textNode.id}`;
+      headingFrame.resize(bounds.width + 20, bounds.height + 8);
+      headingFrame.x = bounds.x - 8;
+      headingFrame.y = bounds.y - 24;
+      console.log("[Controller] Frame criado:", headingFrame.name);
+
+      // Criar retângulo de contorno
+      const outline = figma.createRectangle();
+      outline.resize(bounds.width + 20, bounds.height + 8);
+      outline.fills = [];
+      outline.strokes = [
+        {
+          type: "SOLID",
+          color: getHeadingColor(headingType)
+        }
+      ];
+      outline.strokeWeight = 2;
+      outline.cornerRadius = 4;
+      console.log(
+        "[Controller] Outline criado com cor:",
+        getHeadingColor(headingType)
+      );
+
+      // Criar texto da etiqueta
+      const label = figma.createText();
+      label.characters = headingType.toUpperCase();
+      label.fontSize = 14;
+      label.fills = [
+        {
+          type: "SOLID",
+          color: { r: 1, g: 1, b: 1 }
+        }
+      ];
+      label.fontName = { family: "Inter", style: "Bold" };
+      label.x = 8;
+      label.y = 0;
+      console.log("[Controller] Label criado:", headingType.toUpperCase());
+
+      // Adicionar elementos ao frame
+      headingFrame.appendChild(outline);
+      headingFrame.appendChild(label);
+      console.log("[Controller] Elementos adicionados ao frame");
+
+      // Adicionar ao documento
+      figma.currentPage.appendChild(headingFrame);
+      console.log("[Controller] Frame adicionado à página");
+
+      figma.notify(
+        `Heading ${headingType.toUpperCase()} aplicado com sucesso!`,
+        {
+          timeout: 3000
+        }
+      );
+    } catch (error) {
+      console.error("[Controller] Erro ao aplicar heading:", error);
+      figma.notify("Erro ao aplicar heading", {
+        error: true
+      });
+    }
+    return;
+  }
+
+  if (msg.type === "remove-heading") {
+    try {
+      console.log("[Controller] Recebido remove-heading:", msg);
+
+      const { heading } = msg;
+
+      // Encontrar e remover o frame do heading
+      const headingFrames = figma.currentPage.findAll(
+        node => node.name.includes("Heading:") && node.name.includes(heading.id)
+      );
+
+      headingFrames.forEach(frame => frame.remove());
+
+      figma.notify("Heading removido com sucesso!", {
+        timeout: 2000
+      });
+    } catch (error) {
+      console.error("[Controller] Erro ao remover heading:", error);
+      figma.notify("Erro ao remover heading", {
+        error: true
+      });
+    }
+    return;
+  }
+
+  // Função auxiliar para obter cor do heading
+  function getHeadingColor(
+    headingType: string
+  ): { r: number; g: number; b: number } {
+    const colors = {
+      h1: { r: 0.58, g: 0.2, b: 0.92 }, // #9333ea (roxo)
+      h2: { r: 0.92, g: 0.35, b: 0.05 }, // #ea580c
+      h3: { r: 0.93, g: 0.28, b: 0.6 }, // #ec4899 (rosa)
+      h4: { r: 0.4, g: 0.64, b: 0.05 }, // #65a30d
+      h5: { r: 0.09, g: 0.8, b: 0.29 }, // #16a34a
+      h6: { r: 0.03, g: 0.57, b: 0.7 } // #0891b2
+    };
+    return colors[headingType] || { r: 0.5, g: 0.5, b: 0.5 };
   }
 };
