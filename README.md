@@ -33,7 +33,44 @@ A principal funcionalidade do SolarOps. Realize uma varredura completa em seus f
 
 Um conjunto de ferramentas para ajudar a criar projetos mais inclusivos e acessíveis.
 
-#### 2.1 Verificador de Contraste
+#### 2.1 Header Marker
+Ferramenta para aplicar marcações hierárquicas de headings (H1-H6) em textos do Figma, garantindo estrutura semântica correta.
+
+**Funcionalidades principais:**
+- **Marcação Visual**: Aplica marcadores visuais aos textos selecionados com cores distintas por nível
+- **Hierarquia Correta**: Cores diferenciadas para cada nível (H1 roxo, H2 laranja, H3 rosa, etc.)
+- **Contorno Inteligente**: Marcadores com contorno de 3px e bordas arredondadas (8px) envolvendo o texto
+- **Etiquetas Informativas**: Cada marcador exibe o nível (H1, H2, etc.) acima do texto
+- **Guia de Hierarquia**: Referência integrada sobre uso correto de headings
+- **Remoção Simples**: Remova marcadores individualmente quando necessário
+
+**Como Usar:**
+1. Abra a aba **Acessibilidade** → **Header Marker**
+2. Selecione um texto no canvas do Figma
+3. Clique no botão do heading desejado (H1-H6)
+4. O marcador será aplicado automaticamente ao texto
+
+**Estrutura dos Marcadores:**
+- **Contorno**: Borda colorida envolvendo o texto com border-radius específico
+- **Etiqueta**: Fundo colorido com o nível do heading (H1, H2, etc.)
+- **Posicionamento**: Alinhado precisamente ao texto selecionado
+- **Cores**: Cada nível tem cor única para fácil identificação visual
+
+**Guia de Hierarquia Integrado:**
+- **H1**: Título principal da página. Use apenas um por página.
+- **H2**: Seções principais. Divida o conteúdo em tópicos principais.
+- **H3**: Subseções. Detalhe tópicos dentro das seções H2.
+- **H4**: Subtópicos específicos. Use para detalhar H3.
+- **H5**: Informações detalhadas. Nível granular de conteúdo.
+- **H6**: Menor nível hierárquico. Use apenas se necessário.
+
+**Benefícios:**
+- Garante estrutura semântica correta para acessibilidade
+- Facilita navegação por leitores de tela
+- Melhora SEO com headings bem estruturados
+- Visualização clara da hierarquia de conteúdo
+
+#### 2.2 Verificador de Contraste
 - **Modo Automático**: Analisa automaticamente o contraste de todos os elementos de texto no frame selecionado
   - Detecta pares de cores (texto vs fundo)
   - Valida contra normas WCAG (AA, AAA, AAA para texto grande)
@@ -48,7 +85,7 @@ Um conjunto de ferramentas para ajudar a criar projetos mais inclusivos e acess�
   - AA: 4.5:1 (texto normal), 3:1 (texto grande)
   - AAA: 7:1 (texto normal), 4.5:1 (texto grande)
 
-#### 2.2 Guia WCAG 2.2
+#### 2.3 Guia WCAG 2.2
 - Documentação completa dos critérios WCAG traduzida para português
 - **Funcionalidades**:
   - Busca por palavras-chave
@@ -57,11 +94,11 @@ Um conjunto de ferramentas para ajudar a criar projetos mais inclusivos e acess�
   - Visualização detalhada de cada critério com exemplos
   - Acesso rápido a critérios relevantes
 
-### 3. Ferramentas para Desenvolvedores e Designers
+### 4. Ferramentas para Desenvolvedores e Designers
 
 Recursos para acelerar o fluxo de trabalho e a comunicação entre design e desenvolvimento.
 
-#### 3.1 Inspeção de Elementos
+#### 4.1 Inspeção de Elementos
 Selecione qualquer elemento no canvas para gerar automaticamente snippets de código em múltiplos formatos:
 - **HTML**: Código estruturado que precisa (incluindo SVG embutido para vetores)
 - **CSS**: Estilos completos (flexbox, grid, cores, tipografia, bordas, sombras, blur)
@@ -77,7 +114,7 @@ Selecione qualquer elemento no canvas para gerar automaticamente snippets de có
 - Imagens e ícones
 - Cópia com um clique
 
-#### 3.2 Importar Design
+#### 4.2 Importar Design
 Cole código HTML e CSS para convertê-lo em um design no Figma. Converta protótipos web rapidamente em designs de alta fidelidade.
 
 **Como Usar:**
@@ -118,7 +155,7 @@ Cole código HTML e CSS para convertê-lo em um design no Figma. Converta protó
 - Suporta Tailwind CSS (via CDN)
 - Preserva layout flexbox e grid
 
-#### 3.3 Ferramenta de Medição
+#### 4.3 Ferramenta de Medição
 Adicione anotações e medidas visuais diretamente no canvas para documentar especificações de design.
 
 **Funcionalidades:**
@@ -130,7 +167,7 @@ Adicione anotações e medidas visuais diretamente no canvas para documentar esp
 - **Criação Rápida**: Interface intuitiva para adicionar medidas
 - **Organização**: Agrupe anotações e medidas por área do design
 
-#### 3.4 Renomear Layers
+#### 4.4 Renomear Layers
 
 Renomeie automaticamente layers e componentes com nomenclatura semântica HTML baseada no tipo e conteúdo do elemento.
 
@@ -259,6 +296,25 @@ Os arquivos de build serão armazenados no diretório `dist/`.
    - Baixe um arquivo detalhado em formato JSON ou PDF
 
 ### Acessibilidade
+
+#### Header Marker
+
+1. Abra a aba **Acessibilidade** → **Header Marker**
+2. Selecione um texto no canvas do Figma
+3. Escolha o nível de heading desejado clicando nos botões H1-H6
+4. O marcador visual será aplicado automaticamente:
+   - **Contorno colorido** envolvendo o texto
+   - **Etiqueta informativa** acima com o nível (H1, H2, etc.)
+   - **Cores distintas** para cada nível (H1 roxo, H3 rosa, etc.)
+5. Use o **Guia de Hierarquia** integrado para referência sobre uso correto
+6. Para remover, selecione o marcador e clique em "Remover" na lista
+
+**Dicas de Uso:**
+- Use **H1** apenas uma vez por página (título principal)
+- **H2** para seções principais do conteúdo
+- **H3-H6** para subseções em ordem hierárquica
+- Nunca pule níveis (ex: H1 → H3)
+- As cores ajudam a identificar visualmente a hierarquia
 
 #### Verificação de Contraste - Modo Automático
 
