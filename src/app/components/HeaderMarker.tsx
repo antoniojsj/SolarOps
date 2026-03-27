@@ -171,7 +171,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
       )}
 
       {/* Botões de heading - sem título */}
-      <div>
+      <div style={{ marginBottom: "20px" }}>
         <div
           style={{
             display: "grid",
@@ -196,7 +196,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
                     ? `1px solid ${type.color}40`
                     : "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "8px",
-                color: type.color,
+                color: hoveredLevel === type.id ? type.color : "#fff", // Branco normal, cor no hover
                 fontSize: "14px", // Fonte fixa 14px para todos os Hs
                 fontWeight: 600,
                 cursor: "pointer",
@@ -208,12 +208,83 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
               }}
             >
               <div>{type.id.toUpperCase()}</div>
-              <div style={{ fontSize: "12px", fontWeight: 400 }}>
+              <div
+                style={{ fontSize: "12px", fontWeight: 400, color: "inherit" }}
+              >
                 {type.label}
               </div>
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Seção de Orientação sobre Hierarquia */}
+      <div
+        style={{
+          background: "rgba(59, 130, 246, 0.08)",
+          border: "1px solid rgba(59, 130, 246, 0.2)",
+          borderRadius: "8px",
+          padding: "12px",
+          marginBottom: "16px"
+        }}
+      >
+        <h4
+          style={{
+            fontSize: "14px",
+            fontWeight: 600,
+            margin: "0 0 8px 0",
+            color: "#fff" // Branco
+          }}
+        >
+          📋 Guia de Hierarquia
+        </h4>
+
+        <div
+          style={{
+            fontSize: "12px",
+            lineHeight: "1.4",
+            color: "rgba(255, 255, 255, 0.9)"
+          }}
+        >
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>H1</strong> - Título principal da
+            página. Use apenas um por página.
+          </div>
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>H2</strong> - Seções principais.
+            Divida o conteúdo em tópicos principais.
+          </div>
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>H3</strong> - Subseções. Detalhe
+            tópicos dentro das seções H2.
+          </div>
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>H4</strong> - Subtópicos
+            específicos. Use para detalhar H3.
+          </div>
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>H5</strong> - Informações
+            detalhadas. Nível granular de conteúdo.
+          </div>
+          <div>
+            <strong style={{ color: "#fff" }}>H6</strong> - Menor nível
+            hierárquico. Use apenas se necessário.
+          </div>
+        </div>
+      </div>
+
+      {/* Texto Explicativo */}
+      <div
+        style={{
+          fontSize: "12px",
+          lineHeight: "1.4",
+          color: "rgba(255, 255, 255, 0.7)",
+          textAlign: "center",
+          padding: "8px"
+        }}
+      >
+        💡 <strong>Como usar:</strong> Selecione um texto no Figma e clique no
+        heading desejado para aplicar a marcação hierárquica correta.
       </div>
     </div>
   );
