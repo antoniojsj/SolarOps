@@ -687,7 +687,7 @@ export const createMeasurement = async (
     figma.currentPage
   );
   group.name = `Measurement (${Math.round(distance)}px)`;
-  group.locked = true;
+  group.locked = false;
   // Garantir que fique no topo da pilha
   try {
     figma.currentPage.appendChild(group);
@@ -879,7 +879,7 @@ export const createAnglePresetForNode = async (
 
     const group = figma.group([arc1, arc2, bg, text], figma.currentPage);
     group.name = `Angle (${value})`;
-    group.locked = true;
+    group.locked = false;
     try {
       figma.currentPage.appendChild(group);
     } catch {}
@@ -934,7 +934,7 @@ export const createAreaMeasurementForNode = async (node: SceneNode) => {
 
   const group = figma.group([text, textBackground], figma.currentPage);
   group.name = `Area (${area} px²)`;
-  group.locked = true;
+  group.locked = false;
   try {
     figma.currentPage.appendChild(group);
   } catch {}
@@ -1158,7 +1158,7 @@ export const createPresetMeasurementForNode = async (
 
   const group = figma.group(groupNodes, figma.currentPage);
   group.name = `Dimension (${labelText})`;
-  group.locked = true;
+  group.locked = false;
   try {
     figma.currentPage.appendChild(group);
   } catch {}

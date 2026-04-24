@@ -472,7 +472,7 @@ export const drawSpacing = async (
 
   if (!state.detached && spacingGroup.length > 0) {
     const group = figma.group(spacingGroup, figma.currentPage);
-    group.locked = true;
+    group.locked = false;
     group.expanded = false;
     group.name = `spacing ${rects[0].name} - ${rects[1].name}`;
 

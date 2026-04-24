@@ -44,7 +44,7 @@ export const appendElementsToGroup = ({
   node = null,
   nodes = null,
   name = GROUP_NAME_ATTACHED,
-  locked = true,
+  locked = false,
   isGlobalGroup
 }: {
   node: SceneNode;

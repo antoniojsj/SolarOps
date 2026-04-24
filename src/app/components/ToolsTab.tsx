@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion/dist/framer-motion";
 import MeasurementTool from "./MeasurementTool";
+import AnnotationsTool from "./AnnotationsTool";
 import CodeSnippetSection from "./CodeSnippetSection";
 import AnimationSnippetSection from "./AnimationSnippetSection";
 import ImportDesignTab, { ImportDesignTabRef } from "./ImportDesignTab";
@@ -58,7 +59,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
   onInspectClick
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<
-    "main" | "inspect" | "measure" | "import" | "rename"
+    "main" | "inspect" | "measure" | "annotations" | "import" | "rename"
   >("main");
   const [animationData, setAnimationData] = useState(null);
   const importDesignRef = useRef<ImportDesignTabRef>(null);
@@ -70,7 +71,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
 
   // Função para mudar de subpágina e comunicar com App.tsx
   const changeSubPage = (
-    page: "main" | "inspect" | "measure" | "import" | "rename"
+    page: "main" | "inspect" | "measure" | "annotations" | "import" | "rename"
   ) => {
     console.log("[ToolsTab] Mudando para subpágina:", page);
     setActiveSubPage(page);
@@ -82,6 +83,8 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
         ? "Inspecionar"
         : page === "measure"
         ? "Mensurar"
+        : page === "annotations"
+        ? "Anotações"
         : page === "import"
         ? "Importar Design"
         : page === "rename"
@@ -223,6 +226,92 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
               }}
             >
               Analise elementos no canvas
+            </p>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255, 255, 255, 0.5)" }}
+          >
+            <path d="M9 18l6-6-6-6"></path>
+          </svg>
+        </div>
+
+        {/* Card Anotações */}
+        <div
+          onClick={() => changeSubPage("annotations")}
+          style={{
+            background: "rgba(59, 130, 246, 0.12)",
+            border: "1px solid rgba(59, 130, 246, 0.30)",
+            borderRadius: 8,
+            padding: 16,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(59, 130, 246, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.30)";
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              background: "rgba(59, 130, 246, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#3b82f6" }}
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H7l-4 3V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Anotações
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Adicione notas e comentários aos seus designs
             </p>
           </div>
           <svg
@@ -1045,6 +1134,12 @@ const ToolsTab: React.FC<ToolsTabProps> = ({
           </div>
         );
 
+      case "annotations":
+        return (
+          <div style={{ height: "100%" }}>
+            <AnnotationsTool />
+          </div>
+        );
       case "measure":
         return (
           <div style={{ height: "100%" }}>
