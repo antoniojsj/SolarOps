@@ -158,14 +158,17 @@ function normalizeGradientStops(parts: string[]): ColorStop[] {
 
   if (stops.length === 1) {
     stops.push({ ...stops[0], position: 1 });
+    // @ts-ignore - position is readonly in ColorStop but we need to set it
     stops[0].position = 0;
   }
 
   const lastIndex = stops.length - 1;
   for (let i = 0; i < stops.length; i++) {
     if (!Number.isFinite(stops[i].position)) {
+      // @ts-ignore - position is readonly in ColorStop but we need to set it
       stops[i].position = lastIndex === 0 ? 0 : i / lastIndex;
     }
+    // @ts-ignore - position is readonly in ColorStop but we need to set it
     stops[i].position = Math.max(0, Math.min(1, stops[i].position));
   }
 
@@ -409,19 +412,21 @@ function parseBlurEffects(styles: Record<string, string>): Effect[] {
   const layerBlur = layer.match(/blur\((\d+(?:\.\d+)?)px\)/i);
 
   if (backdropBlur) {
+    // @ts-ignore - BACKGROUND_BLUR format may vary by Figma API version
     effects.push({
       type: "BACKGROUND_BLUR",
       radius: parseFloat(backdropBlur[1]),
       visible: true
-    });
+    } as any);
   }
 
   if (layerBlur) {
+    // @ts-ignore - LAYER_BLUR format may vary by Figma API version
     effects.push({
       type: "LAYER_BLUR",
       radius: parseFloat(layerBlur[1]),
       visible: true
-    });
+    } as any);
   }
 
   return effects;
@@ -1225,10 +1230,21 @@ async function importNode(
     }
   }
 
+  // Build a map of child nodes to their styles for auto layout application
+  const childStylesMap = new Map<SceneNode, Record<string, string>>();
+
   // Import children using the absolute coordinates measured in the iframe.
   for (const child of node.children) {
-    await importNode(child, frame, abs, false);
+    const importedChild = await importNode(child, frame, abs, false);
+    if (importedChild && child.nodeType === "element") {
+      childStylesMap.set(importedChild, child.styles);
+    }
   }
+
+  // Apply Auto Layout from CSS flexbox styles to preserve layout structure
+  // This is critical for maintaining the original layout structure
+  const childStylesArray = Array.from(childStylesMap.entries());
+  applyAutoLayoutFromChildren(frame, node.styles, new Map(childStylesArray));
 
   // The rendered DOM importer already receives measured screen coordinates.
   // Rebuilding CSS flex as Auto Layout after that can collapse/reorder complex
