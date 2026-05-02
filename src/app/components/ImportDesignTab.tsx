@@ -381,7 +381,8 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
 async function serializeDomTree(
   rootEl: HTMLElement,
   viewportEl: HTMLElement,
-  iconImageMap: Map<string, string>
+  iconImageMap: Map<string, string>,
+  imageMap: Map<string, string>
 ): Promise<SerializedNode> {
   const viewportRect = viewportEl.getBoundingClientRect();
 
@@ -401,8 +402,16 @@ async function serializeDomTree(
     if (absoluteUrl.startsWith("data:")) return absoluteUrl;
 
     try {
+      // Try fetch with CORS mode first
       const response = await fetch(absoluteUrl, { mode: "cors" });
-      if (!response.ok) return undefined;
+      if (!response.ok) {
+        console.warn(
+          "[ImportDesignTab] Image fetch failed:",
+          response.status,
+          absoluteUrl
+        );
+        return undefined;
+      }
       const blob = await response.blob();
       return await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -567,6 +576,8 @@ async function serializeDomTree(
 
     const iconId = el.getAttribute("data-fig-icon-id") || undefined;
     const imageData = iconId ? iconImageMap.get(iconId) : undefined;
+    const imgId = el.getAttribute("data-fig-img-id") || undefined;
+    const imgData = imgId ? imageMap.get(imgId) : undefined;
     const isIcon =
       !!iconId ||
       /material-symbols|material-icons/i.test(attrs.class || "") ||
@@ -597,7 +608,9 @@ async function serializeDomTree(
     }
 
     const embeddedImageData =
-      imageData || (imageUrl ? await urlToDataUrl(imageUrl) : undefined);
+      imageData ||
+      imgData ||
+      (imageUrl ? await urlToDataUrl(imageUrl) : undefined);
 
     return {
       nodeType: "element",
@@ -700,6 +713,45 @@ async function renderHtmlInIframeAndSerialize(
     // Choose viewport element as html element to stabilize rect origin.
     const viewportEl = doc.documentElement as HTMLElement;
 
+    // Pré-capturar todas as imagens como data URLs para evitar problemas de CORS
+    const imageMap = new Map<string, string>();
+    const imgElements = Array.from(
+      doc.querySelectorAll("img")
+    ) as HTMLImageElement[];
+
+    console.log(
+      `[ImportDesignTab] Pré-carregando ${imgElements.length} imagens...`
+    );
+
+    for (const img of imgElements) {
+      const id = `img-${imgElements.indexOf(img)}`;
+      img.setAttribute("data-fig-img-id", id);
+      try {
+        if (img.src && img.complete && img.naturalWidth > 0) {
+          // Criar canvas para converter imagem para data URL
+          const canvas = doc.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL("image/png");
+            imageMap.set(id, dataUrl);
+            console.log(
+              `[ImportDesignTab] ✓ Imagem ${id} convertida: ${img.src.substring(
+                0,
+                50
+              )}...`
+            );
+          }
+        } else {
+          console.warn(`[ImportDesignTab] ⚠️ Imagem não carregada: ${img.src}`);
+        }
+      } catch (err) {
+        console.warn("[ImportDesignTab] ❌ Falha ao converter imagem", err);
+      }
+    }
+
     // Pré-capturar ícones como imagens rasterizadas
     const iconImageMap = new Map<string, string>();
     const iconSelectors = [
@@ -771,7 +823,12 @@ async function renderHtmlInIframeAndSerialize(
       }
     }
 
-    const tree = await serializeDomTree(body, viewportEl, iconImageMap);
+    const tree = await serializeDomTree(
+      body,
+      viewportEl,
+      iconImageMap,
+      imageMap
+    );
     return tree;
   } finally {
     iframe.remove();

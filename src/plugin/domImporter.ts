@@ -231,7 +231,7 @@ function parseColor(colorStr: string): RGBWithAlpha | null {
     }
   }
 
-  // Handle named colors (CSS color names)
+  // Handle named colors (CSS color names) including Tailwind custom colors
   const namedColors: Record<string, [number, number, number]> = {
     black: [0, 0, 0],
     white: [255, 255, 255],
@@ -247,7 +247,52 @@ function parseColor(colorStr: string): RGBWithAlpha | null {
     "slate-50": [248, 250, 252],
     "slate-400": [148, 163, 184],
     "slate-500": [100, 116, 139],
-    "slate-950": [2, 6, 23]
+    "slate-950": [2, 6, 23],
+    // Tailwind custom colors from the test HTML
+    primary: [0, 74, 198],
+    background: [248, 249, 250],
+    surface: [248, 249, 250],
+    "on-surface": [25, 28, 29],
+    "on-background": [25, 28, 29],
+    "surface-container": [237, 238, 239],
+    "surface-container-lowest": [255, 255, 255],
+    "surface-container-low": [243, 244, 245],
+    "surface-container-high": [231, 232, 233],
+    "surface-container-highest": [225, 227, 228],
+    "outline-variant": [195, 198, 215],
+    "on-surface-variant": [67, 70, 85],
+    "primary-container": [37, 99, 235],
+    "on-primary": [255, 255, 255],
+    tertiary: [0, 98, 66],
+    "tertiary-container": [0, 125, 85],
+    "on-tertiary": [255, 255, 255],
+    "on-tertiary-container": [189, 255, 219],
+    error: [186, 26, 26],
+    "on-error": [255, 255, 255],
+    "secondary-fixed-dim": [189, 199, 217],
+    "on-primary-fixed": [0, 23, 75],
+    "surface-tint": [0, 83, 219],
+    secondary: [85, 95, 111],
+    "secondary-container": [214, 224, 243],
+    "on-secondary-container": [89, 99, 115],
+    "secondary-fixed": [217, 227, 246],
+    "primary-fixed-dim": [180, 197, 255],
+    "surface-variant": [225, 227, 228],
+    "on-tertiary-fixed": [0, 33, 19],
+    "on-primary-container": [238, 239, 255],
+    "on-primary-fixed-variant": [0, 62, 168],
+    "tertiary-fixed": [111, 251, 190],
+    "tertiary-fixed-dim": [78, 222, 163],
+    "inverse-on-surface": [240, 241, 242],
+    "primary-fixed": [219, 225, 255],
+    "on-secondary-fixed-variant": [61, 71, 86],
+    "on-secondary-fixed": [18, 28, 42],
+    "on-tertiary-fixed-variant": [0, 82, 54],
+    "error-container": [255, 218, 214],
+    "on-error-container": [147, 0, 10],
+    "inverse-surface": [46, 49, 50],
+    "on-secondary": [255, 255, 255],
+    "inverse-primary": [180, 197, 255]
   };
 
   if (namedColors[lower]) {
@@ -1220,6 +1265,12 @@ async function importNode(
   parent.appendChild(frame);
 
   const abs = { x: node.rect.x, y: node.rect.y };
+
+  // Check if this node should use Auto Layout (flexbox)
+  const display = node.styles.display || "";
+  const isFlexbox = display.includes("flex");
+  const shouldUseAutoLayout = isFlexbox && node.children.length > 0;
+
   if (!parentIsAutoLayout) {
     frame.x = node.rect.x - parentAbs.x;
     frame.y = node.rect.y - parentAbs.y;
@@ -1230,21 +1281,33 @@ async function importNode(
     }
   }
 
+  // Apply Auto Layout BEFORE importing children if this is a flexbox container
+  // This ensures children are positioned by Auto Layout, not absolute coordinates
+  if (shouldUseAutoLayout) {
+    applyAutoLayoutFromChildren(frame, node.styles, new Map());
+  }
+
   // Build a map of child nodes to their styles for auto layout application
   const childStylesMap = new Map<SceneNode, Record<string, string>>();
 
-  // Import children using the absolute coordinates measured in the iframe.
+  // Import children - if parent has Auto Layout, pass true to skip absolute positioning
   for (const child of node.children) {
-    const importedChild = await importNode(child, frame, abs, false);
+    const importedChild = await importNode(
+      child,
+      frame,
+      abs,
+      shouldUseAutoLayout
+    );
     if (importedChild && child.nodeType === "element") {
       childStylesMap.set(importedChild, child.styles);
     }
   }
 
-  // Apply Auto Layout from CSS flexbox styles to preserve layout structure
-  // This is critical for maintaining the original layout structure
-  const childStylesArray = Array.from(childStylesMap.entries());
-  applyAutoLayoutFromChildren(frame, node.styles, new Map(childStylesArray));
+  // Re-apply Auto Layout with child styles to set proper layoutAlign for children
+  if (shouldUseAutoLayout) {
+    const childStylesArray = Array.from(childStylesMap.entries());
+    applyAutoLayoutFromChildren(frame, node.styles, new Map(childStylesArray));
+  }
 
   // The rendered DOM importer already receives measured screen coordinates.
   // Rebuilding CSS flex as Auto Layout after that can collapse/reorder complex
