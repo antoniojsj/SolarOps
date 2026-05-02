@@ -909,6 +909,17 @@ function applyAutoLayoutFromChildren(
       try {
         const childStyles = childStylesMap.get(child) || {};
 
+        // Clear absolute positioning when using Auto Layout
+        // This prevents conflicts between absolute coordinates and Auto Layout
+        if ("x" in child) {
+          // @ts-ignore - x exists on SceneNode
+          child.x = 0;
+        }
+        if ("y" in child) {
+          // @ts-ignore - y exists on SceneNode
+          child.y = 0;
+        }
+
         if (child.type === "FRAME") {
           const childFrame = child as FrameNode;
           const flex = childStyles.flex || "";
