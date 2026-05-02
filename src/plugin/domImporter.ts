@@ -188,6 +188,68 @@ function parseColor(colorStr: string): RGBWithAlpha | null {
   const lower = colorStr.toLowerCase().trim();
   if (lower === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
 
+  // Handle CSS variables (e.g., var(--primary))
+  const varMatch = lower.match(/^var\(([^)]+)\)$/);
+  if (varMatch) {
+    const varName = varMatch[1].trim();
+    // Try to resolve the variable from our named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      primary: [0, 74, 198],
+      background: [248, 249, 250],
+      surface: [248, 249, 250],
+      "on-surface": [25, 28, 29],
+      "on-background": [25, 28, 29],
+      "surface-container": [237, 238, 239],
+      "surface-container-lowest": [255, 255, 255],
+      "surface-container-low": [243, 244, 245],
+      "surface-container-high": [231, 232, 233],
+      "surface-container-highest": [225, 227, 228],
+      "outline-variant": [195, 198, 215],
+      "on-surface-variant": [67, 70, 85],
+      "primary-container": [37, 99, 235],
+      "on-primary": [255, 255, 255],
+      tertiary: [0, 98, 66],
+      "tertiary-container": [0, 125, 85],
+      "on-tertiary": [255, 255, 255],
+      "on-tertiary-container": [189, 255, 219],
+      error: [186, 26, 26],
+      "on-error": [255, 255, 255],
+      "secondary-fixed-dim": [189, 199, 217],
+      "on-primary-fixed": [0, 23, 75],
+      "surface-tint": [0, 83, 219],
+      secondary: [85, 95, 111],
+      "secondary-container": [214, 224, 243],
+      "on-secondary-container": [89, 99, 115],
+      "secondary-fixed": [217, 227, 246],
+      "primary-fixed-dim": [180, 197, 255],
+      "surface-variant": [225, 227, 228],
+      "on-tertiary-fixed": [0, 33, 19],
+      "on-primary-container": [238, 239, 255],
+      "on-primary-fixed-variant": [0, 62, 168],
+      "tertiary-fixed": [111, 251, 190],
+      "tertiary-fixed-dim": [78, 222, 163],
+      "inverse-on-surface": [240, 241, 242],
+      "primary-fixed": [219, 225, 255],
+      "on-secondary-fixed-variant": [61, 71, 86],
+      "on-secondary-fixed": [18, 28, 42],
+      "on-tertiary-fixed-variant": [0, 82, 54],
+      "error-container": [255, 218, 214],
+      "on-error-container": [147, 0, 10],
+      "inverse-surface": [46, 49, 50],
+      "on-secondary": [255, 255, 255],
+      "inverse-primary": [180, 197, 255]
+    };
+
+    if (namedColors[varName]) {
+      const [r, g, b] = namedColors[varName];
+      return { r: r / 255, g: g / 255, b: b / 255, a: 1 };
+    }
+
+    // If variable not found, return null
+    console.warn(`[parseColor] CSS variable not resolved: ${varName}`);
+    return null;
+  }
+
   const rgbMatch = lower.match(/^rgba?\((.*)\)$/i);
   if (rgbMatch) {
     const normalized = rgbMatch[1].replace(/\s*\/\s*/, " ");
