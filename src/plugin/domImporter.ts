@@ -1340,9 +1340,16 @@ async function importNode(
   const abs = { x: node.rect.x, y: node.rect.y };
 
   // Check if this node should use Auto Layout (flexbox)
+  // Be more conservative: only apply to containers with explicit flex display AND multiple children
   const display = node.styles.display || "";
   const isFlexbox = display.includes("flex");
-  const shouldUseAutoLayout = isFlexbox && node.children.length > 0;
+  const hasMultipleChildren = node.children.length > 1;
+  const hasExplicitGap =
+    node.styles.gap &&
+    node.styles.gap !== "normal" &&
+    node.styles.gap !== "0px";
+  const shouldUseAutoLayout =
+    isFlexbox && (hasMultipleChildren || hasExplicitGap);
 
   if (!parentIsAutoLayout) {
     frame.x = node.rect.x - parentAbs.x;
@@ -1352,12 +1359,6 @@ async function importNode(
     if (hasAutoHorizontalMargins(node.styles)) {
       parent.counterAxisAlignItems = "CENTER";
     }
-  }
-
-  // Apply Auto Layout BEFORE importing children if this is a flexbox container
-  // This ensures children are positioned by Auto Layout, not absolute coordinates
-  if (shouldUseAutoLayout) {
-    applyAutoLayoutFromChildren(frame, node.styles, new Map());
   }
 
   // Build a map of child nodes to their styles for auto layout application
@@ -1376,7 +1377,8 @@ async function importNode(
     }
   }
 
-  // Re-apply Auto Layout with child styles to set proper layoutAlign for children
+  // Apply Auto Layout AFTER importing children if this is a flexbox container
+  // This ensures we have the child nodes to set layoutAlign on
   if (shouldUseAutoLayout) {
     const childStylesArray = Array.from(childStylesMap.entries());
     applyAutoLayoutFromChildren(frame, node.styles, new Map(childStylesArray));
