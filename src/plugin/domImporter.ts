@@ -1339,49 +1339,19 @@ async function importNode(
 
   const abs = { x: node.rect.x, y: node.rect.y };
 
-  // Check if this node should use Auto Layout (flexbox)
-  // Be more conservative: only apply to containers with explicit flex display AND multiple children
-  const display = node.styles.display || "";
-  const isFlexbox = display.includes("flex");
-  const hasMultipleChildren = node.children.length > 1;
-  const hasExplicitGap =
-    node.styles.gap &&
-    node.styles.gap !== "normal" &&
-    node.styles.gap !== "0px";
-  const shouldUseAutoLayout =
-    isFlexbox && (hasMultipleChildren || hasExplicitGap);
+  // DISABLE Auto Layout - use absolute positioning only
+  // The rendered DOM already has correct absolute coordinates from the iframe
+  // Auto Layout was causing layout conflicts and breaking the structure
+  const shouldUseAutoLayout = false;
 
   if (!parentIsAutoLayout) {
     frame.x = node.rect.x - parentAbs.x;
     frame.y = node.rect.y - parentAbs.y;
-  } else {
-    // Heuristic for mx-auto: center all children in this container
-    if (hasAutoHorizontalMargins(node.styles)) {
-      parent.counterAxisAlignItems = "CENTER";
-    }
   }
 
-  // Build a map of child nodes to their styles for auto layout application
-  const childStylesMap = new Map<SceneNode, Record<string, string>>();
-
-  // Import children - if parent has Auto Layout, pass true to skip absolute positioning
+  // Import children using absolute positioning
   for (const child of node.children) {
-    const importedChild = await importNode(
-      child,
-      frame,
-      abs,
-      shouldUseAutoLayout
-    );
-    if (importedChild && child.nodeType === "element") {
-      childStylesMap.set(importedChild, child.styles);
-    }
-  }
-
-  // Apply Auto Layout AFTER importing children if this is a flexbox container
-  // This ensures we have the child nodes to set layoutAlign on
-  if (shouldUseAutoLayout) {
-    const childStylesArray = Array.from(childStylesMap.entries());
-    applyAutoLayoutFromChildren(frame, node.styles, new Map(childStylesArray));
+    await importNode(child, frame, abs, false);
   }
 
   // The rendered DOM importer already receives measured screen coordinates.
