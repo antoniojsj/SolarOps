@@ -507,7 +507,9 @@ const generateHTMLFromFigmaNode = (node: any): string => {
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script id="tailwind-config">
-    tailwind.config = {
+    window.addEventListener('DOMContentLoaded', function() {
+      if (typeof tailwind !== 'undefined') {
+        tailwind.config = {
       darkMode: "class",
       theme: {
         extend: {
@@ -530,6 +532,10 @@ const generateHTMLFromFigmaNode = (node: any): string => {
         },
       },
     }
+      } else {
+        console.warn('Tailwind CSS não está disponível ainda');
+      }
+    });
   </script>
   <style>
     body {
@@ -1244,7 +1250,9 @@ const generateTailwindFromSerialized = (tree: any): string => {
   extractColors(tree);
 
   const tailwindScript = `
-        tailwind.config = {
+        window.addEventListener('DOMContentLoaded', function() {
+          if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
             darkMode: "class",
             theme: {
                 extend: {

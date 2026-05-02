@@ -28,19 +28,180 @@ interface RGBWithAlpha extends RGB {
   a?: number;
 }
 
+function parseGradient(gradientStr: string): GradientPaint | null {
+  if (!gradientStr) return null;
+
+  const gradient =
+    extractCssFunction(gradientStr, "linear-gradient") ||
+    extractCssFunction(gradientStr, "radial-gradient");
+  if (!gradient) return null;
+
+  const parts = splitCssList(gradient.content)
+    .map(s => s.trim())
+    .filter(Boolean);
+  const colorStopParts = stripGradientHints(parts);
+  const colorStops = normalizeGradientStops(colorStopParts);
+  if (colorStops.length === 0) return null;
+
+  if (gradient.name === "radial-gradient") {
+    const center = parseRadialGradientCenter(parts[0] || "");
+    return {
+      type: "GRADIENT_RADIAL",
+      gradientStops: colorStops,
+      gradientTransform: [
+        [1, 0, center.x - 0.5],
+        [0, 1, center.y - 0.5]
+      ]
+    };
+  }
+
+  const first = parts[0] || "";
+  const angle = parseLinearGradientAngle(first);
+  return {
+    type: "GRADIENT_LINEAR",
+    gradientStops: colorStops,
+    gradientTransform: gradientTransformForCssAngle(angle)
+  };
+}
+
+function stripGradientHints(parts: string[]) {
+  return parts.filter(part =>
+    /(rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-fA-F]{3,8}|transparent)/i.test(part)
+  );
+}
+
+function parseRadialGradientCenter(part: string) {
+  const match = part.match(/at\s+(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%/i);
+  if (!match) return { x: 0.5, y: 0.5 };
+  return {
+    x: Math.max(0, Math.min(1, parseFloat(match[1]) / 100)),
+    y: Math.max(0, Math.min(1, parseFloat(match[2]) / 100))
+  };
+}
+
+function extractCssFunction(value: string, functionName: string) {
+  const start = value.toLowerCase().indexOf(`${functionName}(`);
+  if (start === -1) return null;
+  const contentStart = start + functionName.length + 1;
+  let depth = 1;
+  for (let i = contentStart; i < value.length; i++) {
+    const ch = value[i];
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (depth === 0) {
+      return {
+        name: functionName,
+        content: value.slice(contentStart, i)
+      };
+    }
+  }
+  return null;
+}
+
+function splitCssList(value: string) {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const ch of value) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function parseLinearGradientAngle(part: string) {
+  const lower = part.toLowerCase();
+  const angleMatch = lower.match(/(-?\d+(?:\.\d+)?)deg/);
+  if (angleMatch) return parseFloat(angleMatch[1]);
+  if (lower.includes("to right")) return 90;
+  if (lower.includes("to left")) return 270;
+  if (lower.includes("to bottom")) return 180;
+  if (lower.includes("to top")) return 0;
+  return 180;
+}
+
+function gradientTransformForCssAngle(angle: number): Transform {
+  const rad = (angle - 90) * (Math.PI / 180);
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return [
+    [cos, sin, 0.5 - (cos + sin) / 2],
+    [-sin, cos, 0.5 - (cos - sin) / 2]
+  ];
+}
+
+function normalizeGradientStops(parts: string[]): ColorStop[] {
+  const stops = parts
+    .map(part => {
+      const colorMatch = part.match(
+        /(rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-fA-F]{3,8}|transparent|[a-zA-Z]+)/
+      );
+      if (!colorMatch) return null;
+      const color = parseColor(colorMatch[1]);
+      if (!color) return null;
+      const rest = part.slice(colorMatch.index! + colorMatch[1].length);
+      const positionMatch = rest.match(/(-?\d+(?:\.\d+)?)%/);
+      const position = positionMatch ? parseFloat(positionMatch[1]) / 100 : NaN;
+      return {
+        color: { r: color.r, g: color.g, b: color.b, a: color.a ?? 1 },
+        position
+      };
+    })
+    .filter(Boolean) as ColorStop[];
+
+  if (stops.length === 1) {
+    stops.push({ ...stops[0], position: 1 });
+    stops[0].position = 0;
+  }
+
+  const lastIndex = stops.length - 1;
+  for (let i = 0; i < stops.length; i++) {
+    if (!Number.isFinite(stops[i].position)) {
+      stops[i].position = lastIndex === 0 ? 0 : i / lastIndex;
+    }
+    stops[i].position = Math.max(0, Math.min(1, stops[i].position));
+  }
+
+  const sortedStops = stops.sort((a, b) => a.position - b.position);
+  if (sortedStops[0]?.position > 0) {
+    sortedStops.unshift({ ...sortedStops[0], position: 0 });
+  }
+  const lastStop = sortedStops[sortedStops.length - 1];
+  if (lastStop && lastStop.position < 1) {
+    sortedStops.push({ ...lastStop, position: 1 });
+  }
+  return sortedStops;
+}
+
 function parseColor(colorStr: string): RGBWithAlpha | null {
   if (!colorStr) return null;
   const lower = colorStr.toLowerCase().trim();
   if (lower === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
 
-  const rgbMatch = colorStr.match(
-    /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/i
-  );
+  const rgbMatch = lower.match(/^rgba?\((.*)\)$/i);
   if (rgbMatch) {
-    const r = Math.min(255, parseInt(rgbMatch[1], 10)) / 255;
-    const g = Math.min(255, parseInt(rgbMatch[2], 10)) / 255;
-    const b = Math.min(255, parseInt(rgbMatch[3], 10)) / 255;
-    const a = rgbMatch[4] ? parseFloat(rgbMatch[4]) : 1;
+    const normalized = rgbMatch[1].replace(/\s*\/\s*/, " ");
+    const raw = normalized.includes(",")
+      ? normalized.split(",")
+      : normalized.trim().split(/\s+/);
+    if (raw.length < 3) return null;
+    const parseChannel = (value: string) => {
+      const n = parseFloat(value);
+      return value.includes("%")
+        ? Math.min(100, n) / 100
+        : Math.min(255, n) / 255;
+    };
+    const r = parseChannel(raw[0]);
+    const g = parseChannel(raw[1]);
+    const b = parseChannel(raw[2]);
+    const a = raw[3] ? parseAlpha(raw[3]) : 1;
     return { r, g, b, a };
   }
 
@@ -67,7 +228,80 @@ function parseColor(colorStr: string): RGBWithAlpha | null {
     }
   }
 
+  // Handle named colors (CSS color names)
+  const namedColors: Record<string, [number, number, number]> = {
+    black: [0, 0, 0],
+    white: [255, 255, 255],
+    red: [255, 0, 0],
+    green: [0, 128, 0],
+    blue: [0, 0, 255],
+    yellow: [255, 255, 0],
+    cyan: [0, 255, 255],
+    magenta: [255, 0, 255],
+    gray: [128, 128, 128],
+    grey: [128, 128, 128],
+    "slate-900": [15, 23, 42],
+    "slate-50": [248, 250, 252],
+    "slate-400": [148, 163, 184],
+    "slate-500": [100, 116, 139],
+    "slate-950": [2, 6, 23]
+  };
+
+  if (namedColors[lower]) {
+    const [r, g, b] = namedColors[lower];
+    return { r: r / 255, g: g / 255, b: b / 255, a: 1 };
+  }
+
   return null;
+}
+
+function parseAlpha(value: string) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return 1;
+  return value.includes("%")
+    ? Math.max(0, Math.min(1, n / 100))
+    : Math.max(0, Math.min(1, n));
+}
+
+function applyTextTransform(text: string, transform?: string) {
+  switch ((transform || "").toLowerCase()) {
+    case "uppercase":
+      return text.toUpperCase();
+    case "lowercase":
+      return text.toLowerCase();
+    case "capitalize":
+      return text.replace(/\b\p{L}/gu, char => char.toUpperCase());
+    default:
+      return text;
+  }
+}
+
+function mapTextAlign(align?: string): TextNode["textAlignHorizontal"] {
+  if (!align || align === "normal" || align === "start") return "LEFT";
+  switch ((align || "").toLowerCase()) {
+    case "center":
+      return "CENTER";
+    case "right":
+    case "end":
+      return "RIGHT";
+    case "justify":
+      return "JUSTIFIED";
+    default:
+      return "LEFT";
+  }
+}
+
+function mapComputedTextAlign(
+  styles: Record<string, string>
+): TextNode["textAlignHorizontal"] {
+  if (
+    styles.display.includes("flex") &&
+    styles.justifyContent === "center" &&
+    styles.alignItems === "center"
+  ) {
+    return "CENTER";
+  }
+  return mapTextAlign(styles.textAlign);
 }
 
 function pxToNumber(px: string | undefined): number {
@@ -120,29 +354,159 @@ function parseBorderRadius(
   return Math.max(0, Math.min(r, max));
 }
 
-function parseBoxShadow(boxShadow?: string): DropShadowEffect | null {
-  if (!boxShadow || boxShadow === "none") return null;
-  // Best-effort parsing of first shadow:
-  // e.g. "rgba(59, 130, 246, 0.2) 0px 10px 15px -3px"
-  const parts = boxShadow.split(",");
-  // If comma-separated colors exist, this naive split breaks; so we parse with regex.
-  const m = boxShadow.match(
-    /(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})\s+(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px\s+(\d+(?:\.\d+)?)px(?:\s+(-?\d+(?:\.\d+)?)px)?/
-  );
-  if (!m) return null;
-  const color = parseColor(m[1]);
-  if (!color) return null;
-  const offsetX = parseFloat(m[2]);
-  const offsetY = parseFloat(m[3]);
-  const blur = parseFloat(m[4]);
-  return {
-    type: "DROP_SHADOW",
-    color: { r: color.r, g: color.g, b: color.b, a: color.a ?? 1 },
-    offset: { x: offsetX, y: offsetY },
-    radius: blur,
-    visible: true,
-    blendMode: "NORMAL"
-  };
+function parseBoxShadows(
+  boxShadow?: string
+): Array<DropShadowEffect | InnerShadowEffect> {
+  if (!boxShadow || boxShadow === "none") return [];
+
+  const effects: Array<DropShadowEffect | InnerShadowEffect> = [];
+  for (const rawShadow of splitCssList(boxShadow)) {
+    const shadow = rawShadow.trim();
+    if (!shadow || shadow === "none") continue;
+
+    const isInset = /\binset\b/i.test(shadow);
+    const colorMatch = shadow.match(
+      /(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}|transparent|[a-zA-Z]+)/
+    );
+    const color = colorMatch ? parseColor(colorMatch[1]) : null;
+    if (!color) continue;
+
+    const withoutColor = shadow
+      .replace(colorMatch![0], "")
+      .replace(/\binset\b/i, "")
+      .trim();
+    const lengths = withoutColor.match(/-?\d+(?:\.\d+)?px/g) || [];
+    if (lengths.length < 2) continue;
+
+    const offsetX = pxToNumber(lengths[0]);
+    const offsetY = pxToNumber(lengths[1]);
+    const blur = lengths[2] ? Math.max(0, pxToNumber(lengths[2])) : 0;
+    const spread = lengths[3] ? pxToNumber(lengths[3]) : 0;
+    const base = {
+      color: { r: color.r, g: color.g, b: color.b, a: color.a ?? 1 },
+      offset: { x: offsetX, y: offsetY },
+      radius: blur,
+      spread,
+      visible: true,
+      blendMode: "NORMAL" as const
+    };
+
+    effects.push(
+      isInset
+        ? { ...base, type: "INNER_SHADOW" }
+        : { ...base, type: "DROP_SHADOW" }
+    );
+  }
+
+  return effects;
+}
+
+function parseBlurEffects(styles: Record<string, string>): Effect[] {
+  const effects: Effect[] = [];
+  const backdrop = styles.backdropFilter || styles.webkitBackdropFilter || "";
+  const layer = styles.filter || "";
+  const backdropBlur = backdrop.match(/blur\((\d+(?:\.\d+)?)px\)/i);
+  const layerBlur = layer.match(/blur\((\d+(?:\.\d+)?)px\)/i);
+
+  if (backdropBlur) {
+    effects.push({
+      type: "BACKGROUND_BLUR",
+      radius: parseFloat(backdropBlur[1]),
+      visible: true
+    });
+  }
+
+  if (layerBlur) {
+    effects.push({
+      type: "LAYER_BLUR",
+      radius: parseFloat(layerBlur[1]),
+      visible: true
+    });
+  }
+
+  return effects;
+}
+
+function applyEffectsSafely(frame: FrameNode, effects: Effect[]) {
+  if (effects.length === 0) return;
+  try {
+    frame.effects = effects;
+  } catch (error) {
+    console.warn(
+      "[domImporter] Failed to apply effects; retrying one by one",
+      error
+    );
+    const accepted: Effect[] = [];
+    for (const effect of effects) {
+      try {
+        frame.effects = [...accepted, effect];
+        accepted.push(effect);
+      } catch (effectError) {
+        console.warn(
+          "[domImporter] Skipping unsupported effect",
+          effect,
+          effectError
+        );
+      }
+    }
+  }
+}
+
+function applyFillsSafely(
+  frame: FrameNode,
+  fills: Paint[],
+  fallback?: Paint[]
+) {
+  try {
+    frame.fills = fills;
+  } catch (error) {
+    console.warn("[domImporter] Failed to apply fills; using fallback", error);
+    frame.fills = fallback || [];
+  }
+}
+
+function createSingleBorderLine(
+  frame: FrameNode,
+  side: string,
+  width: number,
+  colorCss?: string
+) {
+  const color = colorCss ? parseColor(colorCss) : null;
+  const line = figma.createVector();
+  line.name = `border-${side}`;
+
+  if (side === "left" || side === "right") {
+    line.vectorPaths = [
+      {
+        windingRule: "NONE",
+        data: `M 0 0 L 0 ${frame.height}`
+      }
+    ];
+    line.x = side === "right" ? frame.width : 0;
+    line.y = 0;
+  } else {
+    line.vectorPaths = [
+      {
+        windingRule: "NONE",
+        data: `M 0 0 L ${frame.width} 0`
+      }
+    ];
+    line.x = 0;
+    line.y = side === "bottom" ? frame.height : 0;
+  }
+
+  line.strokes = [
+    color
+      ? {
+          type: "SOLID",
+          color: { r: color.r, g: color.g, b: color.b },
+          opacity: color.a ?? 1
+        }
+      : { type: "SOLID", color: { r: 0.93, g: 0.93, b: 0.93 }, opacity: 1 }
+  ];
+  line.strokeWeight = Math.max(1, width);
+  line.strokeCap = "NONE";
+  frame.appendChild(line);
 }
 
 async function safeLoadFont(
@@ -192,7 +556,7 @@ async function createImageFillFromUrl(url: string): Promise<Paint[] | null> {
       return null;
     }
 
-    const res = await fetchWithRetry(url, { timeout: 5000, retries: 2 });
+    const res = await fetchWithRetry(url, { timeout: 12000, retries: 3 });
     if (!res.ok) {
       console.warn(
         "[domImporter] Failed to fetch image (status " + res.status + "):",
@@ -374,6 +738,101 @@ async function tryCreateMaterialSymbolVector(
   }
 }
 
+function applyAutoLayoutFromChildren(
+  frame: FrameNode,
+  styles: Record<string, string>,
+  childStylesMap: Map<SceneNode, Record<string, string>>
+) {
+  if (frame.children.length < 1) return;
+
+  const display = styles.display || "";
+  const isFlexbox = display.includes("flex");
+
+  console.log(
+    `[applyAutoLayout] Frame: ${frame.name}, display: ${display}, isFlexbox: ${isFlexbox}`
+  );
+
+  // Only apply to flexbox containers
+  if (!isFlexbox) return;
+
+  try {
+    // Set layoutMode based on flex-direction
+    const flexDirection = styles.flexDirection || "column";
+    if (flexDirection.includes("row")) {
+      frame.layoutMode = "HORIZONTAL";
+    } else {
+      frame.layoutMode = "VERTICAL";
+    }
+
+    console.log(`[applyAutoLayout] layoutMode set to: ${frame.layoutMode}`);
+
+    // Set spacing from gap
+    const gap = pxToNumber(styles.gap);
+    const rowGap = pxToNumber(styles.rowGap);
+    const columnGap = pxToNumber(styles.columnGap);
+
+    if (frame.layoutMode === "VERTICAL") {
+      frame.itemSpacing = rowGap > 0 ? rowGap : gap;
+    } else {
+      frame.itemSpacing = columnGap > 0 ? columnGap : gap;
+    }
+
+    // Set padding
+    const paddingTop = pxToNumber(styles.paddingTop);
+    const paddingBottom = pxToNumber(styles.paddingBottom);
+    const paddingLeft = pxToNumber(styles.paddingLeft);
+    const paddingRight = pxToNumber(styles.paddingRight);
+
+    frame.paddingTop = paddingTop;
+    frame.paddingBottom = paddingBottom;
+    frame.paddingLeft = paddingLeft;
+    frame.paddingRight = paddingRight;
+
+    console.log(
+      `[applyAutoLayout] itemSpacing: ${frame.itemSpacing}, padding: ${paddingTop},${paddingBottom},${paddingLeft},${paddingRight}`
+    );
+
+    // Set children properties with error handling
+    for (const child of frame.children) {
+      try {
+        const childStyles = childStylesMap.get(child) || {};
+
+        if (child.type === "FRAME") {
+          const childFrame = child as FrameNode;
+          const flex = childStyles.flex || "";
+          const flexGrow = childStyles.flexGrow || "";
+
+          // flex: 1 or flexGrow > 0 → Fill container (STRETCH)
+          if (
+            flex === "1" ||
+            flexGrow === "1" ||
+            flexGrow === "1 1 0%" ||
+            (flexGrow && parseFloat(flexGrow) > 0)
+          ) {
+            childFrame.layoutAlign = "STRETCH";
+          }
+        } else if (child.type === "TEXT") {
+          const textNode = child as TextNode;
+          // Text elements - STRETCH in vertical layouts to fill container width
+          if (frame.layoutMode === "VERTICAL") {
+            textNode.layoutAlign = "STRETCH";
+          }
+        }
+      } catch (childError) {
+        console.warn(
+          `[applyAutoLayout] Error setting child properties for ${child.name}:`,
+          childError
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      `[applyAutoLayout] Error applying auto layout to frame ${frame.name}:`,
+      error
+    );
+  }
+}
+
 async function importNode(
   node: SerializedNode,
   parent: FrameNode,
@@ -387,7 +846,7 @@ async function importNode(
       node.styles.fontWeight
     );
     t.fontName = font;
-    t.characters = node.text;
+    t.characters = applyTextTransform(node.text, node.styles.textTransform);
 
     const fontSize = pxToNumber(node.styles.fontSize);
     if (fontSize > 0) t.fontSize = fontSize;
@@ -412,6 +871,20 @@ async function importNode(
     if (Number.isFinite(opacity)) t.opacity = opacity;
 
     parent.appendChild(t);
+
+    t.textAlignHorizontal = mapComputedTextAlign(node.styles);
+    if (node.styles.whiteSpace !== "nowrap" && node.rect.width > 1) {
+      try {
+        t.textAutoResize = "HEIGHT";
+        t.resizeWithoutConstraints(
+          Math.max(1, node.rect.width),
+          Math.max(1, node.rect.height)
+        );
+      } catch (error) {
+        console.warn("[domImporter] Failed to size text node", error);
+      }
+    }
+
     if (!parentIsAutoLayout) {
       t.x = node.rect.x - parentAbs.x;
       t.y = node.rect.y - parentAbs.y;
@@ -504,42 +977,189 @@ async function importNode(
     (isTransparentColor(node.styles.backgroundColor) ||
       !node.styles.backgroundColor);
 
+  // DETECÇÃO DE BORDA ÚNICA: elementos com apenas uma borda (top, bottom, left ou right)
+  const hasSingleBorder = (() => {
+    const borders = [
+      {
+        side: "top",
+        width: pxToNumber(node.styles.borderTopWidth),
+        color: node.styles.borderTopColor
+      },
+      {
+        side: "bottom",
+        width: pxToNumber(node.styles.borderBottomWidth),
+        color: node.styles.borderBottomColor
+      },
+      {
+        side: "left",
+        width: pxToNumber(node.styles.borderLeftWidth),
+        color: node.styles.borderLeftColor
+      },
+      {
+        side: "right",
+        width: pxToNumber(node.styles.borderRightWidth),
+        color: node.styles.borderRightColor
+      }
+    ];
+    const nonZeroBorders = borders.filter(b => b.width > 0);
+    return nonZeroBorders.length === 1 ? nonZeroBorders[0] : null;
+  })();
+  const shouldRenderAsLine =
+    isDivider ||
+    node.tagName === "hr" ||
+    (hasSingleBorder && node.children.length === 0);
+
+  // Só transformar em linha quando o elemento não carrega conteúdo.
+  // Containers como section-header/step usam border-bottom e precisam manter filhos.
+  if (shouldRenderAsLine) {
+    let borderW, borderC, borderSide;
+
+    if (hasSingleBorder) {
+      borderW = hasSingleBorder.width;
+      borderC = hasSingleBorder.color;
+      borderSide = hasSingleBorder.side;
+    } else {
+      borderW = maxBorderWidth(node.styles) || 1;
+      borderC =
+        firstNonTransparentBorderColor(node.styles) || node.styles.borderColor;
+      borderSide = "bottom"; // default para dividers
+    }
+
+    const c = borderC ? parseColor(borderC) : null;
+
+    // Criar linha vetorial
+    const line = figma.createVector();
+    line.name = node.tagName;
+
+    // Definir posição e direção da linha baseado na borda
+    let lineX, lineY, lineW, lineH;
+    const opacity = parseFloat(node.styles.opacity || "1");
+
+    if (borderSide === "top") {
+      line.vectorPaths = [
+        {
+          windingRule: "NONE",
+          data: `M 0 0 L ${node.rect.width} 0`
+        }
+      ];
+      lineX = node.rect.x - parentAbs.x;
+      lineY = node.rect.y - parentAbs.y;
+    } else if (borderSide === "bottom") {
+      line.vectorPaths = [
+        {
+          windingRule: "NONE",
+          data: `M 0 0 L ${node.rect.width} 0`
+        }
+      ];
+      lineX = node.rect.x - parentAbs.x;
+      lineY = node.rect.y - parentAbs.y + node.rect.height;
+    } else if (borderSide === "left") {
+      line.vectorPaths = [
+        {
+          windingRule: "NONE",
+          data: `M 0 0 L 0 ${node.rect.height}`
+        }
+      ];
+      lineX = node.rect.x - parentAbs.x;
+      lineY = node.rect.y - parentAbs.y;
+    } else if (borderSide === "right") {
+      line.vectorPaths = [
+        {
+          windingRule: "NONE",
+          data: `M 0 0 L 0 ${node.rect.height}`
+        }
+      ];
+      lineX = node.rect.x - parentAbs.x + node.rect.width;
+      lineY = node.rect.y - parentAbs.y;
+    }
+
+    // Cor da linha
+    const lineColor: SolidPaint = c
+      ? { type: "SOLID", color: { r: c.r, g: c.g, b: c.b }, opacity: c.a ?? 1 }
+      : { type: "SOLID", color: { r: 0.93, g: 0.93, b: 0.93 }, opacity: 1 };
+
+    line.strokes = [lineColor];
+    line.strokeWeight = borderW;
+    line.strokeCap = "NONE";
+
+    // Posicionar a linha
+    line.x = lineX;
+    line.y = lineY;
+
+    if (Number.isFinite(opacity)) line.opacity = opacity;
+
+    parent.appendChild(line);
+    return line;
+  }
+
   const frame = figma.createFrame();
   frame.name = node.tagName;
   frame.resizeWithoutConstraints(
     Math.max(1, node.rect.width),
     Math.max(1, node.rect.height)
   );
+  const overflow = `${node.styles.overflow || ""} ${node.styles.overflowX ||
+    ""} ${node.styles.overflowY || ""}`;
+  frame.clipsContent = /\bhidden\b/i.test(overflow);
 
   const opacity = parseFloat(node.styles.opacity || "1");
   if (Number.isFinite(opacity)) frame.opacity = opacity;
 
-  // Background fill - NUNCA aplicar em dividers, NEM EM ÍCONES
+  // Background fill - NUNCA aplicar em ícones
   // Ícones devem ter frame transparente porque a cor já está no PNG rasterizado
   const bg = node.styles.backgroundColor;
-  if (!isDivider && !node.isIcon) {
-    if (bg && !isTransparentColor(bg)) {
-      const c = parseColor(bg);
-      if (c) {
-        frame.fills = [
-          {
-            type: "SOLID",
-            color: { r: c.r, g: c.g, b: c.b },
-            opacity: c.a ?? 1
-          }
-        ];
+  const background = node.styles.background;
+  const solidBackgroundFill = (() => {
+    if (!bg || isTransparentColor(bg)) return null;
+    const c = parseColor(bg);
+    if (!c) return null;
+    return {
+      type: "SOLID",
+      color: { r: c.r, g: c.g, b: c.b },
+      opacity: c.a ?? 1
+    } as SolidPaint;
+  })();
+
+  if (!node.isIcon) {
+    // Check for gradient first in both background and backgroundImage
+    const hasGradient =
+      (background &&
+        (background.includes("linear-gradient") ||
+          background.includes("radial-gradient"))) ||
+      (node.styles.backgroundImage &&
+        (node.styles.backgroundImage.includes("linear-gradient") ||
+          node.styles.backgroundImage.includes("radial-gradient")));
+
+    if (hasGradient) {
+      const gradientStr = background || node.styles.backgroundImage;
+      console.log("[domImporter] Found gradient:", gradientStr);
+      const gradientFill = parseGradient(gradientStr);
+      if (gradientFill) {
+        console.log("[domImporter] Parsed gradient successfully");
+        applyFillsSafely(
+          frame,
+          [gradientFill],
+          solidBackgroundFill ? [solidBackgroundFill] : []
+        );
+      } else {
+        console.log(
+          "[domImporter] Failed to parse gradient, falling back to solid color"
+        );
+        frame.fills = solidBackgroundFill ? [solidBackgroundFill] : [];
       }
+    } else if (solidBackgroundFill) {
+      frame.fills = [solidBackgroundFill];
     } else {
       frame.fills = [];
     }
   } else {
-    // Dividers e ícones nunca recebem backgroundColor
+    // Ícones nunca recebem backgroundColor
     frame.fills = [];
   }
 
-  // Border - para dividers, garantir que o stroke nunca fica oculto
+  // Border
   const borderW = maxBorderWidth(node.styles);
-  if (borderW > 0) {
+  if (borderW > 0 && !hasSingleBorder) {
     const borderC =
       firstNonTransparentBorderColor(node.styles) || node.styles.borderColor;
     const c = borderC ? parseColor(borderC) : null;
@@ -552,38 +1172,19 @@ async function importNode(
         }
       ];
       frame.strokeWeight = borderW;
-      // Para dividers, centralizar o stroke
-      if (isDivider || node.tagName === "hr") {
-        frame.strokeAlign = "CENTER";
-      }
     }
   }
 
-  // Tratamento especial para dividers/HR elements
-  if (isDivider || node.tagName === "hr") {
-    frame.fills = [];
-    if (!borderW || borderW === 0) {
-      // Divider padrão: borda cinza clara
-      const defaultBorder: SolidPaint = {
-        type: "SOLID",
-        color: { r: 0.93, g: 0.93, b: 0.93 },
-        opacity: 1
-      };
-      frame.strokes = [defaultBorder];
-      frame.strokeWeight = 1;
-      frame.strokeAlign = "CENTER";
-    }
-  }
-
-  // Corner radius - NUNCA aplicar em dividers
-  const r = isDivider
-    ? 0
-    : parseBorderRadius(node.styles, node.rect.width, node.rect.height);
+  // Corner radius
+  const r = parseBorderRadius(node.styles, node.rect.width, node.rect.height);
   if (r > 0) frame.cornerRadius = r;
 
-  // Shadow - NUNCA aplicar em dividers
-  const shadow = isDivider ? null : parseBoxShadow(node.styles.boxShadow);
-  if (shadow) frame.effects = [shadow];
+  // Effects: supports multiple shadows plus CSS blur/backdrop-filter.
+  const effects = [
+    ...parseBoxShadows(node.styles.boxShadow),
+    ...parseBlurEffects(node.styles)
+  ];
+  applyEffectsSafely(frame, effects);
 
   // Image fills (img tag or background-image) - não processa aqui se for ícone (já foi tratado acima)
   if (!node.isIcon) {
@@ -624,9 +1225,21 @@ async function importNode(
     }
   }
 
-  // Import children (always using absolute positioning relative ao frame)
+  // Import children using the absolute coordinates measured in the iframe.
   for (const child of node.children) {
     await importNode(child, frame, abs, false);
+  }
+
+  // The rendered DOM importer already receives measured screen coordinates.
+  // Rebuilding CSS flex as Auto Layout after that can collapse/reorder complex
+  // pages, leaving only the parent background visible.
+  if (hasSingleBorder) {
+    createSingleBorderLine(
+      frame,
+      hasSingleBorder.side,
+      hasSingleBorder.width,
+      hasSingleBorder.color
+    );
   }
 
   // Special-case inputs: add placeholder text if empty
@@ -671,6 +1284,8 @@ export async function importRenderedDOM(
   root.name = "Imported Design";
   root.resizeWithoutConstraints(viewport.width, viewport.height);
   root.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
+  root.clipsContent = false; // Disable clipping on root frame
+  root.layoutMode = "NONE";
 
   // Place in viewport
   root.x = figma.viewport.bounds.x + 80;

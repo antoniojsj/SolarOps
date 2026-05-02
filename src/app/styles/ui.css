@@ -1363,6 +1363,11 @@ button,
   max-width: 320px;
 }
 
+.analysis-footer .button.button--primary {
+  max-width: none;
+  width: 100%;
+}
+
 /* Scrollbar sobreposta, não empurra conteúdo */
 .panel-body.panel-body-errors,
 body,

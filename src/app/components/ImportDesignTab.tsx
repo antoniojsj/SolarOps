@@ -273,6 +273,10 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
     // Box
     "backgroundColor",
     "backgroundImage",
+    "background",
+    "backgroundSize",
+    "backgroundPosition",
+    "backgroundRepeat",
     "borderTopWidth",
     "borderRightWidth",
     "borderBottomWidth",
@@ -281,9 +285,23 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
     "borderRightColor",
     "borderBottomColor",
     "borderLeftColor",
+    "borderColor",
     "borderRadius",
     "boxShadow",
+    "filter",
+    "backdropFilter",
+    "webkitBackdropFilter",
     "opacity",
+    "gap",
+    "rowGap",
+    "columnGap",
+    "flex",
+    "flexGrow",
+    "flexShrink",
+    "flexBasis",
+    "width",
+    "maxWidth",
+    "whiteSpace",
 
     // Text
     "color",
@@ -294,7 +312,61 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
     "textAlign",
     "letterSpacing",
     "textTransform",
-    "whiteSpace"
+    "whiteSpace",
+
+    // Additional for Tailwind custom colors
+    "--primary",
+    "--on-primary",
+    "--background",
+    "--on-background",
+    "--surface",
+    "--on-surface",
+    "--primary-container",
+    "--on-primary-container",
+    "--secondary",
+    "--on-secondary",
+    "--secondary-container",
+    "--on-secondary-container",
+    "--tertiary",
+    "--on-tertiary",
+    "--tertiary-container",
+    "--on-tertiary-container",
+    "--error",
+    "--on-error",
+    "--error-container",
+    "--on-error-container",
+    "--outline",
+    "--outline-variant",
+    "--surface-container",
+    "--surface-container-low",
+    "--surface-container-high",
+    "--surface-container-highest",
+    "--on-surface-variant",
+    "--on-surface-variant",
+    "--on-secondary-container",
+    "--surface-tint",
+    "--primary-dim",
+    "--secondary-dim",
+    "--tertiary-dim",
+    "--error-dim",
+    "--primary-fixed",
+    "--on-primary-fixed",
+    "--primary-fixed-dim",
+    "--on-primary-fixed-variant",
+    "--secondary-fixed",
+    "--on-secondary-fixed",
+    "--secondary-fixed-dim",
+    "--on-secondary-fixed-variant",
+    "--tertiary-fixed",
+    "--on-tertiary-fixed",
+    "--tertiary-fixed-dim",
+    "--on-tertiary-fixed-variant",
+    "--surface-dim",
+    "--surface-bright",
+    "--surface-container-lowest",
+    "--inverse-surface",
+    "--inverse-on-surface",
+    "--inverse-primary"
   ] as const;
 
   const out: Record<string, string> = {};
@@ -306,14 +378,49 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
   return out;
 }
 
-function serializeDomTree(
+async function serializeDomTree(
   rootEl: HTMLElement,
   viewportEl: HTMLElement,
   iconImageMap: Map<string, string>
-): SerializedNode {
+): Promise<SerializedNode> {
   const viewportRect = viewportEl.getBoundingClientRect();
 
-  const serializeNode = (node: Node): SerializedNode | null => {
+  const toAbsoluteUrl = (rawUrl?: string) => {
+    if (!rawUrl) return undefined;
+    if (rawUrl.startsWith("data:")) return rawUrl;
+    try {
+      return new URL(rawUrl, rootEl.ownerDocument.baseURI).href;
+    } catch {
+      return rawUrl;
+    }
+  };
+
+  const urlToDataUrl = async (rawUrl?: string): Promise<string | undefined> => {
+    const absoluteUrl = toAbsoluteUrl(rawUrl);
+    if (!absoluteUrl) return undefined;
+    if (absoluteUrl.startsWith("data:")) return absoluteUrl;
+
+    try {
+      const response = await fetch(absoluteUrl, { mode: "cors" });
+      if (!response.ok) return undefined;
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.warn(
+        "[ImportDesignTab] Não foi possível embutir asset:",
+        absoluteUrl,
+        error
+      );
+      return undefined;
+    }
+  };
+
+  const serializeNode = async (node: Node): Promise<SerializedNode | null> => {
     // Text node
     if (node.nodeType === Node.TEXT_NODE) {
       const text = (node.textContent || "").replace(/\s+/g, " ").trim();
@@ -348,20 +455,67 @@ function serializeDomTree(
 
       // Fallback: parent element rect
       const parentRect = parentEl?.getBoundingClientRect();
+      const parentStyles = parentEl ? getComputedStyle(parentEl) : null;
+      const paddingLeft = parentStyles
+        ? parseFloat(parentStyles.paddingLeft || "0") || 0
+        : 0;
+      const paddingRight = parentStyles
+        ? parseFloat(parentStyles.paddingRight || "0") || 0
+        : 0;
       const fallbackRect: SerializedRect = {
         x: clampNumber(
-          (parentRect?.left || viewportRect.left) - viewportRect.left
+          (parentRect?.left || viewportRect.left) +
+            paddingLeft -
+            viewportRect.left
         ),
         y: clampNumber(
           (parentRect?.top || viewportRect.top) - viewportRect.top
         ),
-        width: clampNumber(parentRect?.width || 0),
+        width: clampNumber(
+          Math.max(0, (parentRect?.width || 0) - paddingLeft - paddingRight)
+        ),
         height: clampNumber(parentRect?.height || 0)
       };
-      const rect = measuredRect || fallbackRect;
-      const styles = parentEl
-        ? pickComputedStyles(getComputedStyle(parentEl))
-        : {};
+      const styles = parentStyles ? pickComputedStyles(parentStyles) : {};
+      const isCenteredFlexText =
+        styles.display.includes("flex") &&
+        styles.justifyContent === "center" &&
+        styles.alignItems === "center" &&
+        parentEl?.children.length === 0;
+      const hasInlineElementSiblings =
+        !!parentEl &&
+        Array.from(parentEl.childNodes).some(
+          child => child.nodeType === Node.ELEMENT_NODE
+        );
+      const shouldUseParentTextWidth =
+        !isCenteredFlexText &&
+        !hasInlineElementSiblings &&
+        styles.whiteSpace !== "nowrap" &&
+        parentRect &&
+        parentRect.width > 0 &&
+        fallbackRect.width > (measuredRect?.width || 0);
+      const rect =
+        isCenteredFlexText && parentRect
+          ? {
+              x: fallbackRect.x,
+              y: clampNumber(
+                parentRect.top +
+                  ((parentRect.height || 0) -
+                    (measuredRect?.height || fallbackRect.height)) /
+                    2 -
+                  viewportRect.top
+              ),
+              width: fallbackRect.width,
+              height: measuredRect?.height || fallbackRect.height
+            }
+          : shouldUseParentTextWidth && measuredRect
+          ? {
+              x: fallbackRect.x,
+              y: measuredRect.y,
+              width: fallbackRect.width,
+              height: measuredRect.height
+            }
+          : measuredRect || fallbackRect;
       return { nodeType: "text", text, rect, styles };
     }
 
@@ -407,7 +561,9 @@ function serializeDomTree(
 
     const styles = pickComputedStyles(cs);
     const bgUrl = getUrlFromCssBackgroundImage(styles.backgroundImage || "");
-    const imageUrl = tagName === "img" ? attrs.src || undefined : bgUrl;
+    const imageUrl = toAbsoluteUrl(
+      tagName === "img" ? attrs.src || undefined : bgUrl
+    );
 
     const iconId = el.getAttribute("data-fig-icon-id") || undefined;
     const imageData = iconId ? iconImageMap.get(iconId) : undefined;
@@ -435,10 +591,13 @@ function serializeDomTree(
     if (!isIcon) {
       // Para ícones, não serializamos o texto interno para evitar "gavel" etc.
       for (const child of Array.from(el.childNodes)) {
-        const s = serializeNode(child);
+        const s = await serializeNode(child);
         if (s) children.push(s);
       }
     }
+
+    const embeddedImageData =
+      imageData || (imageUrl ? await urlToDataUrl(imageUrl) : undefined);
 
     return {
       nodeType: "element",
@@ -447,7 +606,7 @@ function serializeDomTree(
       rect,
       styles: finalStyles,
       imageUrl,
-      imageData,
+      imageData: embeddedImageData,
       isIcon,
       iconName,
       children
@@ -455,7 +614,7 @@ function serializeDomTree(
   };
 
   // We serialize the root element itself.
-  const result = serializeNode(rootEl);
+  const result = await serializeNode(rootEl);
   if (!result || result.nodeType !== "element") {
     // Fallback: minimal node
     return {
@@ -478,6 +637,7 @@ function serializeDomTree(
 
 async function renderHtmlInIframeAndSerialize(
   fullHtml: string,
+  rawCss: string,
   viewport: { width: number; height: number }
 ) {
   const iframe = document.createElement("iframe");
@@ -495,9 +655,13 @@ async function renderHtmlInIframeAndSerialize(
   // If the user pasted only a fragment, wrap it.
   const looksLikeFullDoc =
     /<html[\s>]/i.test(fullHtml) && /<body[\s>]/i.test(fullHtml);
-  const html = looksLikeFullDoc
-    ? fullHtml
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>${fullHtml}</body></html>`;
+  const cssTag = rawCss.trim() ? `<style>${rawCss}</style>` : "";
+  const htmlWithCss = looksLikeFullDoc
+    ? /<\/head>/i.test(fullHtml)
+      ? fullHtml.replace(/<\/head>/i, `${cssTag}</head>`)
+      : fullHtml.replace(/<body/i, `<head>${cssTag}</head><body`)
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cssTag}</head><body>${fullHtml}</body></html>`;
+  const html = normalizeTailwindConfigOrder(htmlWithCss);
 
   // Use srcdoc so we can read the DOM (same-origin).
   iframe.srcdoc = html;
@@ -520,15 +684,18 @@ async function renderHtmlInIframeAndSerialize(
     if (!doc || !win)
       throw new Error("Não foi possível acessar o conteúdo do iframe");
 
-    // Wait a bit for Tailwind CDN + fonts to apply styles.
-    // (This is best-effort; Tailwind injects CSS async.)
-    await new Promise(r => setTimeout(r, 900));
-    await new Promise(r =>
-      requestAnimationFrame(() => requestAnimationFrame(r))
-    );
-
     const body = doc.body as HTMLElement | null;
     if (!body) throw new Error("Iframe sem body");
+    await waitForRenderedStylesAndAssets(doc, win, body);
+    if (isTailwindDocument(doc) && !isTailwindReady(doc, win, body)) {
+      console.warn(
+        "[ImportDesignTab] Tailwind CDN não aplicou estilos; usando fallback local"
+      );
+      applyTailwindFallbackStyles(doc, win);
+      await new Promise(r =>
+        requestAnimationFrame(() => requestAnimationFrame(r))
+      );
+    }
 
     // Choose viewport element as html element to stabilize rect origin.
     const viewportEl = doc.documentElement as HTMLElement;
@@ -604,11 +771,330 @@ async function renderHtmlInIframeAndSerialize(
       }
     }
 
-    const tree = serializeDomTree(body, viewportEl, iconImageMap);
+    const tree = await serializeDomTree(body, viewportEl, iconImageMap);
     return tree;
   } finally {
     iframe.remove();
   }
+}
+
+function normalizeTailwindConfigOrder(html: string) {
+  const configMatch = html.match(
+    /<script\b[^>]*id=["']tailwind-config["'][^>]*>[\s\S]*?<\/script>/i
+  );
+  if (!configMatch) return html;
+
+  const configScript = configMatch[0];
+  const withoutConfig = html.replace(configScript, "");
+  return withoutConfig.replace(
+    /<script\b([^>]*src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*)><\/script>/i,
+    `${configScript}<script$1></script>`
+  );
+}
+
+function isTailwindDocument(doc: Document) {
+  return !!doc.querySelector('script[src*="cdn.tailwindcss.com"]');
+}
+
+function isTailwindReady(doc: Document, win: Window, body: HTMLElement) {
+  const bodyStyles = win.getComputedStyle(body);
+  const main = doc.querySelector("main") as HTMLElement | null;
+  const mainStyles = main ? win.getComputedStyle(main) : null;
+  return (
+    bodyStyles.display === "flex" &&
+    (!mainStyles ||
+      mainStyles.paddingTop !== "0px" ||
+      mainStyles.maxWidth !== "none")
+  );
+}
+
+function readTailwindTheme(doc: Document) {
+  const text = doc.getElementById("tailwind-config")?.textContent || "";
+  const readSection = (name: string) => {
+    const match = text.match(
+      new RegExp(`"${name}"\\s*:\\s*\\{([\\s\\S]*?)\\n\\s*\\}`, "m")
+    );
+    const out: Record<string, string> = {};
+    if (!match) return out;
+    for (const item of match[1].matchAll(/"([^"]+)"\s*:\s*"([^"]+)"/g)) {
+      out[item[1]] = item[2];
+    }
+    return out;
+  };
+  return {
+    colors: readSection("colors"),
+    spacing: readSection("spacing"),
+    radius: readSection("borderRadius")
+  };
+}
+
+function applyTailwindFallbackStyles(doc: Document, win: Window) {
+  const theme = readTailwindTheme(doc);
+  const colors: Record<string, string> = {
+    white: "#ffffff",
+    transparent: "transparent",
+    primary: "#004ac6",
+    background: "#f8f9fa",
+    surface: "#f8f9fa",
+    "on-surface": "#191c1d",
+    "on-background": "#191c1d",
+    "surface-container": "#edeeef",
+    "surface-container-lowest": "#ffffff",
+    "surface-container-low": "#f3f4f5",
+    "surface-container-high": "#e7e8e9",
+    "surface-container-highest": "#e1e3e4",
+    "outline-variant": "#c3c6d7",
+    "on-surface-variant": "#434655",
+    "primary-container": "#2563eb",
+    "on-primary": "#ffffff",
+    tertiary: "#006242",
+    "tertiary-container": "#007d55",
+    "on-tertiary": "#ffffff",
+    "on-tertiary-container": "#bdffdb",
+    error: "#ba1a1a",
+    "on-error": "#ffffff",
+    "slate-50": "#f8fafc",
+    "slate-200": "#e2e8f0",
+    "slate-400": "#94a3b8",
+    "slate-500": "#64748b",
+    "slate-600": "#475569",
+    "slate-900": "#0f172a",
+    "blue-600": "#2563eb",
+    "blue-700": "#1d4ed8",
+    "gray-900": "#111827",
+    ...theme.colors
+  };
+  const spacing: Record<string, string> = {
+    "0": "0px",
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "6": "24px",
+    "8": "32px",
+    "10": "40px",
+    "12": "48px",
+    xs: "4px",
+    sm: "8px",
+    md: "16px",
+    lg: "24px",
+    xl: "32px",
+    gutter: "12px",
+    "container-margin": "16px",
+    ...theme.spacing
+  };
+  const radii = {
+    DEFAULT: "4px",
+    lg: "8px",
+    xl: "12px",
+    full: "9999px",
+    ...theme.radius
+  };
+  const fontSizes: Record<string, [string, string, string?]> = {
+    "body-md": ["14px", "20px", "400"],
+    "body-lg": ["16px", "24px", "400"],
+    "headline-md": ["20px", "28px", "600"],
+    "headline-lg": ["24px", "32px", "700"],
+    "headline-xl": ["32px", "40px", "700"],
+    "label-md": ["12px", "16px", "600"],
+    "price-display": ["18px", "24px", "700"]
+  };
+  const getColor = (name: string) =>
+    colors[name] || colors[name.replace("/", "-")];
+  const getSpace = (value: string) =>
+    value.startsWith("[") ? value.slice(1, -1) : spacing[value];
+  const applySpace = (
+    style: CSSStyleDeclaration,
+    prop: string,
+    value: string
+  ) => {
+    const v = getSpace(value);
+    if (v) (style as any)[prop] = v;
+  };
+  const applyColorWithOpacity = (
+    style: CSSStyleDeclaration,
+    prop: "backgroundColor" | "color" | "borderColor",
+    value: string
+  ) => {
+    const [name, opacity] = value.split("/");
+    const color = getColor(name);
+    if (!color) return;
+    (style as any)[prop] = color;
+    if (prop === "backgroundColor" && opacity)
+      style.opacity = String(parseInt(opacity, 10) / 100);
+  };
+
+  doc.querySelectorAll<HTMLElement>("[class]").forEach(el => {
+    const classes = Array.from(el.classList);
+    el.style.boxSizing = "border-box";
+
+    for (const original of classes) {
+      if (original.includes(":") && !/^(md|lg|xl):/.test(original)) continue;
+      const cls = original.replace(/^(md|lg|xl):/, "");
+      const s = el.style;
+
+      if (cls === "flex") s.display = "flex";
+      else if (cls === "grid") s.display = "grid";
+      else if (cls === "hidden") s.display = "none";
+      else if (cls === "block") s.display = "block";
+      else if (cls === "inline-flex") s.display = "inline-flex";
+      else if (cls === "flex-col") s.flexDirection = "column";
+      else if (cls === "flex-row") s.flexDirection = "row";
+      else if (cls === "flex-grow") s.flexGrow = "1";
+      else if (cls === "flex-wrap") s.flexWrap = "wrap";
+      else if (cls === "items-center") s.alignItems = "center";
+      else if (cls === "items-start") s.alignItems = "flex-start";
+      else if (cls === "items-end") s.alignItems = "flex-end";
+      else if (cls === "justify-center") s.justifyContent = "center";
+      else if (cls === "justify-between") s.justifyContent = "space-between";
+      else if (cls === "justify-end") s.justifyContent = "flex-end";
+      else if (cls === "relative") s.position = "relative";
+      else if (cls === "absolute") s.position = "absolute";
+      else if (cls === "fixed") s.position = "fixed";
+      else if (cls === "top-0") s.top = "0px";
+      else if (cls === "bottom-0") s.bottom = "0px";
+      else if (cls === "left-0") s.left = "0px";
+      else if (cls === "right-0") s.right = "0px";
+      else if (cls === "inset-0") {
+        s.top = s.right = s.bottom = s.left = "0px";
+      } else if (cls === "w-full") s.width = "100%";
+      else if (cls === "h-full") s.height = "100%";
+      else if (cls === "min-h-screen") s.minHeight = `${win.innerHeight}px`;
+      else if (cls === "mx-auto") {
+        s.marginLeft = "auto";
+        s.marginRight = "auto";
+      } else if (cls === "overflow-hidden") s.overflow = "hidden";
+      else if (cls === "cursor-pointer") s.cursor = "pointer";
+      else if (cls === "object-cover") s.objectFit = "cover";
+      else if (cls === "text-center") s.textAlign = "center";
+      else if (cls === "tracking-tight") s.letterSpacing = "-0.01em";
+      else if (cls === "tracking-widest") s.letterSpacing = "0.1em";
+      else if (cls === "font-bold") s.fontWeight = "700";
+      else if (cls === "font-semibold") s.fontWeight = "600";
+      else if (cls === "font-medium") s.fontWeight = "500";
+      else if (cls === "font-black") s.fontWeight = "900";
+      else if (cls.startsWith("font-")) s.fontFamily = "Inter, sans-serif";
+      else if (cls.startsWith("gap-")) applySpace(s, "gap", cls.slice(4));
+      else if (cls.startsWith("p-")) applySpace(s, "padding", cls.slice(2));
+      else if (cls.startsWith("px-")) {
+        applySpace(s, "paddingLeft", cls.slice(3));
+        applySpace(s, "paddingRight", cls.slice(3));
+      } else if (cls.startsWith("py-")) {
+        applySpace(s, "paddingTop", cls.slice(3));
+        applySpace(s, "paddingBottom", cls.slice(3));
+      } else if (cls.startsWith("pt-"))
+        applySpace(s, "paddingTop", cls.slice(3));
+      else if (cls.startsWith("pb-"))
+        applySpace(s, "paddingBottom", cls.slice(3));
+      else if (cls.startsWith("mt-")) applySpace(s, "marginTop", cls.slice(3));
+      else if (cls.startsWith("mb-"))
+        applySpace(s, "marginBottom", cls.slice(3));
+      else if (cls.startsWith("w-")) applySpace(s, "width", cls.slice(2));
+      else if (cls.startsWith("h-")) applySpace(s, "height", cls.slice(2));
+      else if (cls.startsWith("max-w-")) {
+        if (cls === "max-w-7xl") s.maxWidth = "1280px";
+        else if (cls === "max-w-3xl") s.maxWidth = "768px";
+      } else if (cls.startsWith("rounded-")) {
+        const key = cls.slice(8) || "DEFAULT";
+        s.borderRadius = (radii as any)[key] || key;
+      } else if (cls === "rounded") s.borderRadius = radii.DEFAULT;
+      else if (cls === "border") {
+        s.borderWidth = "1px";
+        s.borderStyle = "solid";
+      } else if (cls === "border-2") {
+        s.borderWidth = "2px";
+        s.borderStyle = "solid";
+      } else if (cls.startsWith("border-"))
+        applyColorWithOpacity(s, "borderColor", cls.slice(7));
+      else if (cls.startsWith("bg-gradient-to-r"))
+        s.backgroundImage =
+          "linear-gradient(to right, transparent, rgba(255,255,255,.2), transparent)";
+      else if (cls.startsWith("bg-"))
+        applyColorWithOpacity(s, "backgroundColor", cls.slice(3));
+      else if (cls.startsWith("text-[") && cls.endsWith("]"))
+        s.fontSize = cls.slice(6, -1);
+      else if (cls.startsWith("text-")) {
+        const token = cls.slice(5);
+        if (fontSizes[token]) {
+          const [size, lineHeight, weight] = fontSizes[token];
+          s.fontSize = size;
+          s.lineHeight = lineHeight;
+          if (weight) s.fontWeight = weight;
+        } else {
+          applyColorWithOpacity(s, "color", token);
+        }
+      } else if (cls.startsWith("aspect-[")) {
+        s.aspectRatio = cls.slice(8, -1).replace("/", " / ");
+      } else if (cls === "shadow-sm") {
+        s.boxShadow = "0 1px 2px rgba(0,0,0,.08)";
+      } else if (cls === "shadow-md") {
+        s.boxShadow = "0 4px 6px rgba(0,0,0,.12)";
+      } else if (cls.startsWith("opacity-")) {
+        s.opacity = String(parseInt(cls.slice(8), 10) / 100);
+      } else if (cls === "z-10") s.zIndex = "10";
+      else if (cls === "z-40") s.zIndex = "40";
+      else if (cls === "z-50") s.zIndex = "50";
+    }
+  });
+}
+
+async function waitForRenderedStylesAndAssets(
+  doc: Document,
+  win: Window,
+  body: HTMLElement
+) {
+  const hasTailwind = !!doc.querySelector('script[src*="cdn.tailwindcss.com"]');
+
+  if (hasTailwind) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 5000) {
+      const bodyStyles = win.getComputedStyle(body);
+      const hasGeneratedCss =
+        bodyStyles.display === "flex" ||
+        bodyStyles.backgroundColor !== "rgba(0, 0, 0, 0)";
+      const main = doc.querySelector("main") as HTMLElement | null;
+      const mainStyles = main ? win.getComputedStyle(main) : null;
+      const layoutLooksReady =
+        !mainStyles ||
+        mainStyles.paddingTop !== "0px" ||
+        mainStyles.maxWidth !== "none";
+      if (hasGeneratedCss && layoutLooksReady) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  } else {
+    await new Promise(r => setTimeout(r, 900));
+  }
+
+  try {
+    await (doc as any).fonts?.ready;
+  } catch {
+    // Font loading is best-effort inside Figma's iframe.
+  }
+
+  const images = Array.from(doc.images);
+  await Promise.all(
+    images.map(
+      img =>
+        new Promise<void>(resolve => {
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+            return;
+          }
+          const done = () => resolve();
+          const timeout = window.setTimeout(done, 3000);
+          img.onload = () => {
+            window.clearTimeout(timeout);
+            done();
+          };
+          img.onerror = () => {
+            window.clearTimeout(timeout);
+            done();
+          };
+        })
+    )
+  );
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 }
 
 const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
@@ -744,8 +1230,9 @@ const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
 
       (async () => {
         try {
-          // If Tailwind CDN is present (or CSS is empty), we need rendered import.
-          const shouldRender = hasTailwindCdn || !css.trim();
+          // Rendered import preserves computed gradients, shadows, blur and images
+          // better than the legacy HTML/CSS parser. Legacy remains as fallback.
+          const shouldRender = true;
           console.log(
             "[ImportDesignTab] shouldRender:",
             shouldRender,
@@ -754,41 +1241,59 @@ const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
           );
 
           if (shouldRender) {
-            console.log("[ImportDesignTab] ✓ Usando rendering (Tailwind)");
-            const tree = await renderHtmlInIframeAndSerialize(html, {
-              width: viewportWidth,
-              height: viewportHeight
-            });
-            console.log("[ImportDesignTab] ✓ Tree criada:", {
-              nodeType: tree.nodeType,
-              tagName: tree.tagName,
-              childrenCount: tree.children?.length || 0,
-              hasRect: !!tree.rect,
-              rectSize: `${tree.rect.width}x${tree.rect.height}`
-            });
+            try {
+              console.log("[ImportDesignTab] ✓ Usando rendering (Tailwind)");
+              const tree = await renderHtmlInIframeAndSerialize(html, css, {
+                width: viewportWidth,
+                height: viewportHeight
+              });
+              console.log("[ImportDesignTab] ✓ Tree criada:", {
+                nodeType: tree.nodeType,
+                tagName: tree.nodeType === "element" ? tree.tagName : undefined,
+                childrenCount:
+                  tree.nodeType === "element" ? tree.children?.length || 0 : 0,
+                hasRect: !!tree.rect,
+                rectSize: `${tree.rect.width}x${tree.rect.height}`
+              });
 
-            if (!tree || tree.nodeType !== "element") {
-              throw new Error(
-                "Árvore de DOM inválida - elementos não foram encontrados"
+              if (!tree || tree.nodeType !== "element") {
+                throw new Error(
+                  "Árvore de DOM inválida - elementos não foram encontrados"
+                );
+              }
+
+              console.log(
+                "[ImportDesignTab] ✓ Enviando postMessage type=import-rendered-dom"
+              );
+              parent.postMessage(
+                {
+                  pluginMessage: {
+                    type: "import-rendered-dom",
+                    tree,
+                    viewport: { width: viewportWidth, height: viewportHeight }
+                  }
+                },
+                "*"
+              );
+              console.log(
+                "[ImportDesignTab] ✓ Mensagem postMessage enviada com sucesso"
+              );
+            } catch (renderError) {
+              console.warn(
+                "[ImportDesignTab] Rendered import falhou, usando legacy:",
+                renderError
+              );
+              parent.postMessage(
+                {
+                  pluginMessage: {
+                    type: "import-html-css",
+                    html,
+                    css
+                  }
+                },
+                "*"
               );
             }
-
-            console.log(
-              "[ImportDesignTab] ✓ Enviando postMessage type=import-rendered-dom"
-            );
-            parent.postMessage(
-              {
-                pluginMessage: {
-                  type: "import-rendered-dom",
-                  tree,
-                  viewport: { width: viewportWidth, height: viewportHeight }
-                }
-              },
-              "*"
-            );
-            console.log(
-              "[ImportDesignTab] ✓ Mensagem postMessage enviada com sucesso"
-            );
           } else {
             // Fallback to legacy importer for raw HTML+CSS
             console.log("[ImportDesignTab] ✓ Usando HTML+CSS legacy");

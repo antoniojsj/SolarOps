@@ -8,6 +8,7 @@ export const ALLOWED_DOMAINS = [
   "cdn.tailwindcss.com",
   "fonts.googleapis.com",
   "fonts.gstatic.com",
+  "googleusercontent.com",
   "lh3.googleusercontent.com",
   "www.figma.com",
   "static.figma.com"

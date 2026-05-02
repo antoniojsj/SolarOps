@@ -529,6 +529,22 @@ const App = ({}) => {
       } = pluginMessage;
       console.log("[UI] Mensagem recebida:", type, pluginMessage);
 
+      // Tratar mensagem de seleção atualizada
+      if (type === "selection-updated") {
+        console.log("[UI] Seleção atualizada:", pluginMessage.payload);
+        const { count } = pluginMessage.payload;
+        if (count > 0) {
+          // Habilitar botão de auditoria quando há objetos selecionados
+          console.log("[UI] Objetos selecionados, habilitando auditoria");
+          // Atualizar activeNodeIds para refletir a seleção
+          setActiveNodeIds(["selected"]); // Indica que há seleção
+        } else {
+          // Desabilitar quando não há seleção
+          console.log("[UI] Nenhum objeto selecionado");
+          setActiveNodeIds([]);
+        }
+      }
+
       if (type === "show-preloader") {
         console.log("[LOG] show-preloader", { t: performance.now() - t0 });
         setEmptyState(false);

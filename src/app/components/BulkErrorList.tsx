@@ -2005,13 +2005,6 @@ function BulkErrorList(props) {
         >
           Refazer análise
         </button>
-        <button
-          className="button button--secondary analysis-refazer"
-          type="button"
-          onClick={props.onExportReport || (() => alert("Exportar relatório!"))}
-        >
-          Exportar relatório
-        </button>
       </footer>
     </motion.div>
   );
