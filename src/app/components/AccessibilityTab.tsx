@@ -3,6 +3,7 @@ import styled from "styled-components";
 import ContrastChecker from "./ContrastChecker";
 import WCAGContent from "./WCAGContent";
 import HeaderMarker from "./HeaderMarker";
+import Landmarks from "./Landmarks";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -71,7 +72,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   selectedNode
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<
-    "main" | "contrate" | "documentacao" | "headermarker"
+    "main" | "contrate" | "documentacao" | "headermarker" | "landmarks"
   >("main");
 
   // Tabs dentro da subpágina de contraste
@@ -628,7 +629,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
 
   // Função para mudar de subpágina e comunicar com App.tsx
   const changeSubPage = (
-    page: "main" | "contrate" | "documentacao" | "headermarker"
+    page: "main" | "contrate" | "documentacao" | "headermarker" | "landmarks"
   ) => {
     console.log("[AccessibilityTab] Mudando para subpágina:", page);
     setActiveSubPage(page);
@@ -647,6 +648,8 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         ? "Documentação"
         : page === "headermarker"
         ? "Header Marker"
+        : page === "landmarks"
+        ? "Landmarks"
         : "";
 
     // Enviar mensagem diretamente para a janela atual
@@ -830,8 +833,8 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         <div
           onClick={() => changeSubPage("headermarker")}
           style={{
-            background: "rgba(168, 85, 247, 0.12)",
-            border: "1px solid rgba(168, 85, 247, 0.30)",
+            background: "rgba(249, 115, 22, 0.12)",
+            border: "1px solid rgba(249, 115, 22, 0.30)",
             borderRadius: 8,
             padding: 16,
             cursor: "pointer",
@@ -841,19 +844,19 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             gap: 16
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = "rgba(168, 85, 247, 0.18)";
-            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.50)";
+            e.currentTarget.style.background = "rgba(249, 115, 22, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(249, 115, 22, 0.50)";
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.background = "rgba(168, 85, 247, 0.12)";
-            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.30)";
+            e.currentTarget.style.background = "rgba(249, 115, 22, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(249, 115, 22, 0.30)";
           }}
         >
           <div
             style={{
               width: 40,
               height: 40,
-              background: "rgba(168, 85, 247, 0.2)",
+              background: "rgba(249, 115, 22, 0.2)",
               borderRadius: 8,
               display: "flex",
               alignItems: "center",
@@ -870,7 +873,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ color: "#a855f7" }}
+              style={{ color: "#f97316" }}
             >
               <path d="M4 7V4h16v3M9 20h6M12 4v16"></path>
             </svg>
@@ -895,6 +898,95 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               }}
             >
               Marcar textos como headings (H1-H6)
+            </p>
+          </div>
+          <div>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "rgba(255, 255, 255, 0.5)" }}
+            >
+              <path d="M9 18l6-6-6-6"></path>
+            </svg>
+          </div>
+        </div>
+
+        {/* Card Landmarks */}
+        <div
+          onClick={() => changeSubPage("landmarks")}
+          style={{
+            background: "rgba(147, 51, 234, 0.12)",
+            border: "1px solid rgba(147, 51, 234, 0.30)",
+            borderRadius: 8,
+            padding: 16,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(147, 51, 234, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(147, 51, 234, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(147, 51, 234, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(147, 51, 234, 0.30)";
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              background: "rgba(147, 51, 234, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#9333ea" }}
+            >
+              <path d="M4 4h16v16H4z"></path>
+              <path d="M4 9h16"></path>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Landmarks
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Marque regiões semânticas da página
             </p>
           </div>
           <div>
@@ -1444,6 +1536,14 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
       case "headermarker":
         return (
           <HeaderMarker
+            isVisible={true}
+            selectedNode={selectedNode}
+            onBack={handleBack}
+          />
+        );
+      case "landmarks":
+        return (
+          <Landmarks
             isVisible={true}
             selectedNode={selectedNode}
             onBack={handleBack}

@@ -286,6 +286,11 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
     "borderBottomColor",
     "borderLeftColor",
     "borderColor",
+    "borderStyle",
+    "borderTopStyle",
+    "borderRightStyle",
+    "borderBottomStyle",
+    "borderLeftStyle",
     "borderRadius",
     "boxShadow",
     "filter",
@@ -301,7 +306,21 @@ function pickComputedStyles(cs: CSSStyleDeclaration): Record<string, string> {
     "flexBasis",
     "width",
     "maxWidth",
+    "height",
+    "minHeight",
+    "maxHeight",
+    "minWidth",
     "whiteSpace",
+    "boxSizing",
+
+    // Grid
+    "gridTemplateColumns",
+    "gridTemplateRows",
+    "gridAutoFlow",
+    "gridAutoColumns",
+    "gridAutoRows",
+    "gridColumn",
+    "gridRow",
 
     // Text
     "color",
@@ -648,6 +667,45 @@ async function serializeDomTree(
   return result;
 }
 
+async function fetchAndInlineExternalScripts(html: string): Promise<string> {
+  const scriptRegex = /<script\b[^>]*src=["']([^"']+)["'][^>]*><\/script>/gi;
+  let inlinedHtml = html;
+
+  const matches = [...html.matchAll(scriptRegex)];
+  for (const match of matches) {
+    const fullTag = match[0];
+    const src = match[1];
+
+    // Inline Tailwind CSS scripts to bypass CSP restrictions
+    if (src.includes("cdn.tailwindcss.com")) {
+      try {
+        console.log(
+          `[ImportDesignTab] Buscando script externo para inline: ${src}`
+        );
+        const response = await fetch(src);
+        if (response.ok) {
+          const scriptContent = await response.text();
+          inlinedHtml = inlinedHtml.replace(
+            fullTag,
+            `<script data-tailwind-cdn="true">${scriptContent}</script>`
+          );
+          console.log(`[ImportDesignTab] Script inlined com sucesso: ${src}`);
+        } else {
+          console.warn(
+            `[ImportDesignTab] Falha ao buscar script ${src}, status: ${response.status}`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[ImportDesignTab] Falha ao buscar script externo ${src}:`,
+          err
+        );
+      }
+    }
+  }
+  return inlinedHtml;
+}
+
 async function renderHtmlInIframeAndSerialize(
   fullHtml: string,
   rawCss: string,
@@ -674,7 +732,8 @@ async function renderHtmlInIframeAndSerialize(
       ? fullHtml.replace(/<\/head>/i, `${cssTag}</head>`)
       : fullHtml.replace(/<body/i, `<head>${cssTag}</head><body`)
     : `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cssTag}</head><body>${fullHtml}</body></html>`;
-  const html = normalizeTailwindConfigOrder(htmlWithCss);
+  let html = normalizeTailwindConfigOrder(htmlWithCss);
+  html = await fetchAndInlineExternalScripts(html);
 
   // Use srcdoc so we can read the DOM (same-origin).
   iframe.srcdoc = html;
@@ -845,24 +904,55 @@ function normalizeTailwindConfigOrder(html: string) {
   const withoutConfig = html.replace(configScript, "");
   return withoutConfig.replace(
     /<script\b([^>]*src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*)><\/script>/i,
-    `${configScript}<script$1></script>`
+    `<script$1></script>\n${configScript}`
   );
 }
 
 function isTailwindDocument(doc: Document) {
-  return !!doc.querySelector('script[src*="cdn.tailwindcss.com"]');
+  return !!doc.querySelector(
+    'script[src*="cdn.tailwindcss.com"], script[data-tailwind-cdn="true"]'
+  );
 }
 
 function isTailwindReady(doc: Document, win: Window, body: HTMLElement) {
+  // Check for style tags injected by Tailwind CDN
+  const hasTailwindStyleTag =
+    doc.querySelectorAll('style[id^="tailwindcss"], style[data-tailwindcss]')
+      .length > 0;
+  if (hasTailwindStyleTag) return true;
+
+  // Generic heuristic checks
   const bodyStyles = win.getComputedStyle(body);
-  const main = doc.querySelector("main") as HTMLElement | null;
-  const mainStyles = main ? win.getComputedStyle(main) : null;
-  return (
-    bodyStyles.display === "flex" &&
-    (!mainStyles ||
-      mainStyles.paddingTop !== "0px" ||
-      mainStyles.maxWidth !== "none")
+  const hasGeneratedCss =
+    bodyStyles.display !== "block" ||
+    bodyStyles.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+    bodyStyles.padding !== "0px" ||
+    bodyStyles.margin !== "0px" ||
+    (bodyStyles.fontFamily !== "Times" && bodyStyles.fontFamily !== "serif");
+
+  const elementsWithTailwind = doc.querySelectorAll(
+    '[class*="flex"], [class*="grid"], [class*="bg-"], [class*="text-"], [class*="p-"], [class*="m-"]'
   );
+  let tailwindApplied = false;
+  if (elementsWithTailwind.length > 0) {
+    for (let i = 0; i < Math.min(5, elementsWithTailwind.length); i++) {
+      const el = elementsWithTailwind[i] as HTMLElement;
+      const styles = win.getComputedStyle(el);
+      if (
+        (el.className.includes("flex") && styles.display === "flex") ||
+        (el.className.includes("grid") && styles.display === "grid") ||
+        (el.className.includes("bg-") &&
+          styles.backgroundColor !== "rgba(0, 0, 0, 0)") ||
+        (el.className.includes("p-") && styles.padding !== "0px") ||
+        (el.className.includes("m-") && styles.margin !== "0px")
+      ) {
+        tailwindApplied = true;
+        break;
+      }
+    }
+  }
+
+  return hasGeneratedCss || tailwindApplied;
 }
 
 function readTailwindTheme(doc: Document) {
@@ -1100,34 +1190,56 @@ async function waitForRenderedStylesAndAssets(
   win: Window,
   body: HTMLElement
 ) {
-  const hasTailwind = !!doc.querySelector('script[src*="cdn.tailwindcss.com"]');
+  const hasTailwind = !!doc.querySelector(
+    'script[src*="cdn.tailwindcss.com"], script[data-tailwind-cdn="true"]'
+  );
+  const hasInlineStyles = !!doc.querySelector("style");
 
   if (hasTailwind) {
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 5000) {
+    let checksPerformed = 0;
+    const maxChecks = 50; // 5 segundos com intervalos de 100ms
+
+    while (Date.now() - startedAt < 5000 && checksPerformed < maxChecks) {
+      checksPerformed++;
+
+      const tailwindStyleTags = doc.querySelectorAll(
+        'style[id^="tailwindcss"], style[data-tailwindcss]'
+      );
       const bodyStyles = win.getComputedStyle(body);
-      const hasGeneratedCss =
-        bodyStyles.display === "flex" ||
-        bodyStyles.backgroundColor !== "rgba(0, 0, 0, 0)";
-      const main = doc.querySelector("main") as HTMLElement | null;
-      const mainStyles = main ? win.getComputedStyle(main) : null;
-      const layoutLooksReady =
-        !mainStyles ||
-        mainStyles.paddingTop !== "0px" ||
-        mainStyles.maxWidth !== "none";
-      if (hasGeneratedCss && layoutLooksReady) break;
+
+      // Quando o Tailwind (preflight) aplica os estilos, a margem padrão do body de 8px é zerada.
+      // E também uma tag style com id="tailwindcss" ou data-tailwindcss é injetada.
+      if (tailwindStyleTags.length > 0 || bodyStyles.margin === "0px") {
+        console.log(
+          `[ImportDesignTab] Tailwind pronto após ${Date.now() -
+            startedAt}ms (${checksPerformed} checks)`
+        );
+        break;
+      }
+
       await new Promise(r => setTimeout(r, 100));
     }
+
+    // Aguardar mais um pouco para garantir que tudo foi aplicado
+    await new Promise(r => setTimeout(r, 200));
+  } else if (hasInlineStyles) {
+    // Para HTML com estilos inline (como o exemplo que funciona),
+    // aguardar menos tempo pois os estilos já estão no documento
+    await new Promise(r => setTimeout(r, 500));
   } else {
+    // Sem Tailwind e sem estilos inline, aguardar tempo padrão
     await new Promise(r => setTimeout(r, 900));
   }
 
+  // Aguardar fontes carregarem (best-effort)
   try {
     await (doc as any).fonts?.ready;
   } catch {
     // Font loading is best-effort inside Figma's iframe.
   }
 
+  // Aguardar imagens carregarem
   const images = Array.from(doc.images);
   await Promise.all(
     images.map(
@@ -1151,6 +1263,7 @@ async function waitForRenderedStylesAndAssets(
     )
   );
 
+  // Aguardar frames de animação para garantir que tudo foi renderizado
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 }
 

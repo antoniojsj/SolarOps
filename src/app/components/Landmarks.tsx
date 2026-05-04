@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 
-interface HeadingData {
+interface LandmarkData {
   id: string;
   title: string;
-  type: "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+  type: string;
   bounds: {
     x: number;
     y: number;
@@ -12,63 +12,57 @@ interface HeadingData {
   };
 }
 
-interface HeaderMarkerProps {
+interface LandmarksProps {
   isVisible: boolean;
   selectedNode: any;
   onBack: () => void;
 }
 
-const HeaderMarker: React.FC<HeaderMarkerProps> = ({
+const Landmarks: React.FC<LandmarksProps> = ({
   isVisible,
   selectedNode,
   onBack
 }) => {
-  const [headings, setHeadings] = useState<HeadingData[]>([]);
+  const [landmarks, setLandmarks] = useState<LandmarkData[]>([]);
   const [hoveredLevel, setHoveredLevel] = useState<string | null>(null);
 
-  const headingTypes = [
-    { id: "h1", label: "Heading level 1", color: "#9333ea", size: 32 }, // Roxo
-    { id: "h2", label: "Heading level 2", color: "#ea580c", size: 28 },
-    { id: "h3", label: "Heading level 3", color: "#ec4899", size: 24 }, // Rosa
-    { id: "h4", label: "Heading level 4", color: "#65a30d", size: 20 },
-    { id: "h5", label: "Heading level 5", color: "#16a34a", size: 18 },
-    { id: "h6", label: "Heading level 6", color: "#0891b2", size: 16 }
+  const landmarkTypes = [
+    { id: "header", label: "Cabeçalho da página ou seção", color: "#9333ea" },
+    { id: "nav", label: "Navegação principal ou secundária", color: "#9333ea" },
+    { id: "main", label: "Conteúdo principal (único)", color: "#9333ea" },
+    { id: "section", label: "Seções temáticas", color: "#9333ea" },
+    { id: "article", label: "Conteúdo independente", color: "#9333ea" },
+    { id: "aside", label: "Conteúdo complementar", color: "#9333ea" },
+    { id: "footer", label: "Rodapé da página ou seção", color: "#9333ea" }
   ];
 
-  // Aplicar heading ao texto selecionado
-  const applyHeading = (
-    headingType: "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-  ) => {
-    // Enviar mensagem para o plugin aplicar heading ao texto selecionado
+  const applyLandmark = (landmarkType: string) => {
     parent.postMessage(
       {
         pluginMessage: {
-          type: "add-heading",
-          headingType: headingType
+          type: "add-landmark",
+          landmarkType: landmarkType
         }
       },
       "*"
     );
   };
 
-  // Remover heading
-  const removeHeading = (id: string) => {
-    const headingToRemove = headings.find(h => h.id === id);
-    if (!headingToRemove) return;
+  const removeLandmark = (id: string) => {
+    const landmarkToRemove = landmarks.find(h => h.id === id);
+    if (!landmarkToRemove) return;
 
-    // Enviar mensagem para o plugin remover o heading
     parent.postMessage(
       {
         pluginMessage: {
-          type: "remove-heading",
-          heading: headingToRemove
+          type: "remove-landmark",
+          landmark: landmarkToRemove
         }
       },
       "*"
     );
 
-    // Remover da lista local
-    setHeadings(headings.filter(h => h.id !== id));
+    setLandmarks(landmarks.filter(h => h.id !== id));
   };
 
   if (!isVisible) return null;
@@ -85,8 +79,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
         color: "#e0e0e0"
       }}
     >
-      {/* Lista de headings existentes */}
-      {headings.length > 0 && (
+      {landmarks.length > 0 && (
         <div style={{ marginBottom: "24px" }}>
           <h3
             style={{
@@ -96,7 +89,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
               color: "#fff"
             }}
           >
-            Headings Marcados ({headings.length})
+            Landmarks Marcados ({landmarks.length})
           </h3>
           <div
             style={{
@@ -105,9 +98,9 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
               gap: "8px"
             }}
           >
-            {headings.map(heading => (
+            {landmarks.map(landmark => (
               <div
-                key={heading.id}
+                key={landmark.id}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -126,9 +119,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
                       width: "8px",
                       height: "8px",
                       borderRadius: "50%",
-                      backgroundColor:
-                        headingTypes.find(h => h.id === heading.type)?.color ||
-                        "#666"
+                      backgroundColor: "#9333ea"
                     }}
                   />
                   <div>
@@ -139,7 +130,7 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
                         color: "#fff"
                       }}
                     >
-                      {heading.title}
+                      {landmark.title}
                     </div>
                     <div
                       style={{
@@ -147,12 +138,12 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
                         color: "rgba(255, 255, 255, 0.6)"
                       }}
                     >
-                      {heading.type.toUpperCase()}
+                      {landmark.type.toUpperCase()}
                     </div>
                   </div>
                 </div>
                 <button
-                  onClick={() => removeHeading(heading.id)}
+                  onClick={() => removeLandmark(landmark.id)}
                   style={{
                     background: "rgba(239, 68, 68, 0.1)",
                     border: "1px solid rgba(239, 68, 68, 0.2)",
@@ -171,19 +162,18 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
         </div>
       )}
 
-      {/* Botões de heading - sem título */}
       <div style={{ marginBottom: "20px" }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "repeat(2, 1fr)",
             gap: "16px"
           }}
         >
-          {headingTypes.map(type => (
+          {landmarkTypes.map(type => (
             <button
               key={type.id}
-              onClick={() => applyHeading(type.id as any)}
+              onClick={() => applyLandmark(type.id)}
               onMouseEnter={() => setHoveredLevel(type.id)}
               onMouseLeave={() => setHoveredLevel(null)}
               style={{
@@ -197,8 +187,8 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
                     ? `1px solid ${type.color}40`
                     : "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "8px",
-                color: hoveredLevel === type.id ? type.color : "#fff", // Branco normal, cor no hover
-                fontSize: "14px", // Fonte fixa 14px para todos os Hs
+                color: hoveredLevel === type.id ? type.color : "#fff",
+                fontSize: "14px",
                 fontWeight: 600,
                 cursor: "pointer",
                 transition: "all 0.2s ease",
@@ -210,7 +200,12 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
             >
               <div>{type.id.toUpperCase()}</div>
               <div
-                style={{ fontSize: "12px", fontWeight: 400, color: "inherit" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 400,
+                  color: "inherit",
+                  textAlign: "center"
+                }}
               >
                 {type.label}
               </div>
@@ -219,11 +214,10 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
         </div>
       </div>
 
-      {/* Seção de Orientação sobre Hierarquia */}
       <div
         style={{
-          background: "rgba(59, 130, 246, 0.08)",
-          border: "1px solid rgba(59, 130, 246, 0.2)",
+          background: "rgba(147, 51, 234, 0.08)",
+          border: "1px solid rgba(147, 51, 234, 0.2)",
           borderRadius: "8px",
           padding: "12px",
           marginBottom: "16px"
@@ -234,12 +228,11 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
             fontSize: "14px",
             fontWeight: 600,
             margin: "0 0 8px 0",
-            color: "#fff" // Branco
+            color: "#fff"
           }}
         >
-          📋 Guia de Hierarquia
+          📋 Guia de Landmarks
         </h4>
-
         <div
           style={{
             fontSize: "12px",
@@ -248,33 +241,36 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
           }}
         >
           <div style={{ marginBottom: "6px" }}>
-            <strong style={{ color: "#fff" }}>H1</strong> - Título principal da
-            página. Use apenas um por página.
+            <strong style={{ color: "#fff" }}>header</strong> - Cabeçalho da
+            página ou seção.
           </div>
           <div style={{ marginBottom: "6px" }}>
-            <strong style={{ color: "#fff" }}>H2</strong> - Seções principais.
-            Divida o conteúdo em tópicos principais.
+            <strong style={{ color: "#fff" }}>nav</strong> - Navegação principal
+            ou secundária.
           </div>
           <div style={{ marginBottom: "6px" }}>
-            <strong style={{ color: "#fff" }}>H3</strong> - Subseções. Detalhe
-            tópicos dentro das seções H2.
+            <strong style={{ color: "#fff" }}>main</strong> - Conteúdo principal
+            (único por página).
           </div>
           <div style={{ marginBottom: "6px" }}>
-            <strong style={{ color: "#fff" }}>H4</strong> - Subtópicos
-            específicos. Use para detalhar H3.
+            <strong style={{ color: "#fff" }}>section</strong> - Seções
+            temáticas do conteúdo.
           </div>
           <div style={{ marginBottom: "6px" }}>
-            <strong style={{ color: "#fff" }}>H5</strong> - Informações
-            detalhadas. Nível granular de conteúdo.
+            <strong style={{ color: "#fff" }}>article</strong> - Conteúdo
+            independente (post, card).
+          </div>
+          <div style={{ marginBottom: "6px" }}>
+            <strong style={{ color: "#fff" }}>aside</strong> - Conteúdo
+            complementar (sidebar).
           </div>
           <div>
-            <strong style={{ color: "#fff" }}>H6</strong> - Menor nível
-            hierárquico. Use apenas se necessário.
+            <strong style={{ color: "#fff" }}>footer</strong> - Rodapé da página
+            ou seção.
           </div>
         </div>
       </div>
 
-      {/* Texto Explicativo */}
       <div
         style={{
           fontSize: "12px",
@@ -284,11 +280,11 @@ const HeaderMarker: React.FC<HeaderMarkerProps> = ({
           padding: "4px 8px"
         }}
       >
-        💡 <strong>Como usar:</strong> Selecione um texto no Figma e clique no
-        heading desejado para aplicar a marcação hierárquica correta.
+        💡 <strong>Como usar:</strong> Selecione um elemento no Figma e clique
+        no landmark desejado para aplicar a marcação semântica correta.
       </div>
     </div>
   );
 };
 
-export default HeaderMarker;
+export default Landmarks;

@@ -1550,6 +1550,112 @@ figma.ui.onmessage = async (msg: UIMessage) => {
     return;
   }
 
+  // Handlers para Landmark
+  if (msg.type === "add-landmark") {
+    try {
+      console.log("[Controller] Recebido add-landmark:", msg);
+
+      const { landmarkType } = msg;
+
+      const selection = figma.currentPage.selection;
+      if (selection.length === 0) {
+        figma.notify(
+          "Selecione um elemento no Figma antes de aplicar o landmark",
+          { error: true }
+        );
+        return;
+      }
+
+      const selectedNode = selection[0];
+      const bounds = selectedNode.absoluteBoundingBox;
+      if (!bounds) {
+        figma.notify("Não foi possível obter as dimensões do elemento", {
+          error: true
+        });
+        return;
+      }
+
+      await figma.loadFontAsync({ family: "Roboto", style: "Bold" });
+
+      const toGroupArray = [];
+      const landmarkColor = { r: 147 / 255, g: 51 / 255, b: 234 / 255 }; // Roxa (#9333ea)
+      const white = { r: 1, g: 1, b: 1 };
+
+      const outline = figma.createRectangle();
+      outline.name = "Landmark outline";
+      outline.resize(bounds.width + 16, bounds.height + 32);
+      outline.x = bounds.x - 8;
+      outline.y = bounds.y - 16;
+      outline.fills = [];
+      outline.strokes = [{ type: "SOLID", color: landmarkColor }];
+      outline.strokeWeight = 3;
+      outline.opacity = 1;
+      outline.cornerRadius = 8;
+      outline.topLeftRadius = 0;
+      outline.topRightRadius = 8;
+      outline.bottomLeftRadius = 8;
+      outline.bottomRightRadius = 8;
+      toGroupArray.push(outline);
+
+      const labelBackground = figma.createRectangle();
+      labelBackground.name = "Label Background";
+      labelBackground.resize(40, 29); // Será redimensionado
+      labelBackground.x = bounds.x - 8;
+      labelBackground.y = bounds.y - 42;
+      labelBackground.fills = [{ type: "SOLID", color: landmarkColor }];
+      labelBackground.strokes = [];
+      labelBackground.opacity = 1;
+      labelBackground.cornerRadius = 8;
+      labelBackground.topLeftRadius = 8;
+      labelBackground.topRightRadius = 8;
+      labelBackground.bottomLeftRadius = 0;
+      labelBackground.bottomRightRadius = 0;
+      toGroupArray.push(labelBackground);
+
+      const labelText = figma.createText();
+      labelText.name = `Landmark Type: ${landmarkType}`;
+      labelText.characters = landmarkType.toUpperCase();
+      labelText.fontSize = 18;
+      labelText.fills = [{ type: "SOLID", color: white }];
+      labelText.fontName = { family: "Roboto", style: "Bold" };
+      labelText.x = bounds.x;
+      labelText.y = bounds.y - 38;
+      toGroupArray.push(labelText);
+
+      labelBackground.resize(labelText.width + 16, 29);
+
+      const landmarkGroup = figma.group(toGroupArray, figma.currentPage);
+      landmarkGroup.name = `Landmark: ${landmarkType} | ${selectedNode.name} | ${selectedNode.id}`;
+      landmarkGroup.resizeWithoutConstraints(bounds.width, bounds.height);
+      landmarkGroup.expanded = false;
+
+      figma.notify(
+        `Landmark ${landmarkType.toUpperCase()} aplicado com sucesso!`,
+        { timeout: 3000 }
+      );
+    } catch (error) {
+      console.error("[Controller] Erro ao aplicar landmark:", error);
+      figma.notify("Erro ao aplicar landmark", { error: true });
+    }
+    return;
+  }
+
+  if (msg.type === "remove-landmark") {
+    try {
+      const { landmark } = msg;
+      const landmarkFrames = figma.currentPage.findAll(
+        node =>
+          node.name.includes("Landmark:") && node.name.includes(landmark.id)
+      );
+      landmarkFrames.forEach(frame => frame.remove());
+      figma.notify("Landmark removido com sucesso!", { timeout: 2000 });
+    } catch (error) {
+      console.error("[Controller] Erro ao remover landmark:", error);
+      figma.notify("Erro ao remover landmark", { error: true });
+    }
+    return;
+  }
+
   // Função auxiliar para obter cor do heading
   function getHeadingColor(
     headingType: string

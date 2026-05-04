@@ -439,15 +439,24 @@ function firstNonTransparentBorderColor(
   return candidates.find(c => c && !isTransparentColor(c));
 }
 
+function getEffectiveBorderWidth(
+  styles: Record<string, string>,
+  side: "Top" | "Right" | "Bottom" | "Left"
+) {
+  const style = styles[`border${side}Style`] || styles.borderStyle || "";
+  if (style.includes("none") || style.includes("hidden")) return 0;
+  const widthStr = styles[`border${side}Width`] || styles.borderWidth;
+  return pxToNumber(widthStr);
+}
+
 function maxBorderWidth(styles: Record<string, string>) {
   const widths = [
-    pxToNumber(styles.borderTopWidth),
-    pxToNumber(styles.borderRightWidth),
-    pxToNumber(styles.borderBottomWidth),
-    pxToNumber(styles.borderLeftWidth),
-    pxToNumber(styles.borderWidth) // fallback para border shorthand
+    getEffectiveBorderWidth(styles, "Top"),
+    getEffectiveBorderWidth(styles, "Right"),
+    getEffectiveBorderWidth(styles, "Bottom"),
+    getEffectiveBorderWidth(styles, "Left")
   ];
-  return Math.max(...widths.filter(w => w > 0), 0);
+  return Math.max(...widths, 0);
 }
 
 function parseBorderRadius(
@@ -859,21 +868,30 @@ function applyAutoLayoutFromChildren(
 
   const display = styles.display || "";
   const isFlexbox = display.includes("flex");
+  const isGrid = display.includes("grid");
 
   console.log(
-    `[applyAutoLayout] Frame: ${frame.name}, display: ${display}, isFlexbox: ${isFlexbox}`
+    `[applyAutoLayout] Frame: ${frame.name}, display: ${display}, isFlexbox: ${isFlexbox}, isGrid: ${isGrid}`
   );
 
-  // Only apply to flexbox containers
-  if (!isFlexbox) return;
+  // Apply to flexbox or grid containers
+  if (!isFlexbox && !isGrid) return;
 
   try {
-    // Set layoutMode based on flex-direction
+    // Set layoutMode based on flex-direction or grid
     const flexDirection = styles.flexDirection || "column";
-    if (flexDirection.includes("row")) {
+    if (flexDirection.includes("row") || isGrid) {
       frame.layoutMode = "HORIZONTAL";
     } else {
       frame.layoutMode = "VERTICAL";
+    }
+
+    if (isGrid) {
+      try {
+        frame.layoutWrap = "WRAP";
+      } catch (e) {
+        // Ignorar se a API do Figma estiver desatualizada
+      }
     }
 
     console.log(`[applyAutoLayout] layoutMode set to: ${frame.layoutMode}`);
@@ -996,11 +1014,22 @@ async function importNode(
     parent.appendChild(t);
 
     t.textAlignHorizontal = mapComputedTextAlign(node.styles);
-    if (node.styles.whiteSpace !== "nowrap" && node.rect.width > 1) {
+
+    // Fallback: se for nowrap explicitamente, usar hug
+    if (node.styles.whiteSpace === "nowrap") {
+      try {
+        t.textAutoResize = "WIDTH_AND_HEIGHT";
+      } catch (error) {
+        console.warn("[domImporter] Failed to set auto resize", error);
+      }
+    } else if (node.rect.width > 1) {
       try {
         t.textAutoResize = "HEIGHT";
+        // Adiciona 5px de "folga" na largura para compensar diferenças de renderização
+        // entre a engine de fonte do Chrome e do Figma, evitando quebras de linha acidentais
+        // sem causar sobreposição horizontal (falha de espaçamento)
         t.resizeWithoutConstraints(
-          Math.max(1, node.rect.width),
+          Math.max(1, node.rect.width + 5),
           Math.max(1, node.rect.height)
         );
       } catch (error) {
@@ -1095,33 +1124,31 @@ async function importNode(
 
   // DETECÇÃO DE DIVIDERS: elementos que são apenas linhas (border-top, border-bottom, etc)
   const isDivider =
-    node.rect.height < 3 &&
-    maxBorderWidth(node.styles) > 0 &&
-    (isTransparentColor(node.styles.backgroundColor) ||
-      !node.styles.backgroundColor);
+    (node.rect.height <= 2 || node.rect.width <= 2) &&
+    node.children.length === 0;
 
   // DETECÇÃO DE BORDA ÚNICA: elementos com apenas uma borda (top, bottom, left ou right)
   const hasSingleBorder = (() => {
     const borders = [
       {
         side: "top",
-        width: pxToNumber(node.styles.borderTopWidth),
-        color: node.styles.borderTopColor
+        width: getEffectiveBorderWidth(node.styles, "Top"),
+        color: node.styles.borderTopColor || node.styles.borderColor
       },
       {
         side: "bottom",
-        width: pxToNumber(node.styles.borderBottomWidth),
-        color: node.styles.borderBottomColor
+        width: getEffectiveBorderWidth(node.styles, "Bottom"),
+        color: node.styles.borderBottomColor || node.styles.borderColor
       },
       {
         side: "left",
-        width: pxToNumber(node.styles.borderLeftWidth),
-        color: node.styles.borderLeftColor
+        width: getEffectiveBorderWidth(node.styles, "Left"),
+        color: node.styles.borderLeftColor || node.styles.borderColor
       },
       {
         side: "right",
-        width: pxToNumber(node.styles.borderRightWidth),
-        color: node.styles.borderRightColor
+        width: getEffectiveBorderWidth(node.styles, "Right"),
+        color: node.styles.borderRightColor || node.styles.borderColor
       }
     ];
     const nonZeroBorders = borders.filter(b => b.width > 0);
@@ -1142,10 +1169,23 @@ async function importNode(
       borderC = hasSingleBorder.color;
       borderSide = hasSingleBorder.side;
     } else {
-      borderW = maxBorderWidth(node.styles) || 1;
+      borderW =
+        maxBorderWidth(node.styles) || node.rect.height <= 2
+          ? node.rect.height
+          : node.rect.width;
+      if (borderW < 1) borderW = 1;
+
       borderC =
-        firstNonTransparentBorderColor(node.styles) || node.styles.borderColor;
-      borderSide = "bottom"; // default para dividers
+        firstNonTransparentBorderColor(node.styles) ||
+        node.styles.borderColor ||
+        node.styles.backgroundColor ||
+        node.styles.background;
+
+      // Determine if vertical or horizontal based on aspect ratio
+      borderSide =
+        node.rect.height > node.rect.width && node.rect.width <= 2
+          ? "left"
+          : "bottom";
     }
 
     const c = borderC ? parseColor(borderC) : null;
