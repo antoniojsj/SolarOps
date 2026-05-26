@@ -96,6 +96,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     null
   );
   const [hoveredResultId, setHoveredResultId] = useState<string | null>(null);
+  const [deepScan, setDeepScan] = useState(false);
   // Screenshot do frame analisado (como no plugin accessibility)
   const [contrastPreviewImageUrl, setContrastPreviewImageUrl] = useState<
     string | null
@@ -276,6 +277,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         {
           pluginMessage: {
             type: "color-contrast-scan",
+            deepScan,
             page: {
               id: "current-page"
             }
@@ -301,7 +303,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         setAutoAnalysisLoading(false);
       }
     }
-  }, [selectedNode, activeSubPage, activeContrastTab]);
+  }, [activeSubPage, activeContrastTab, selectedNode, deepScan]);
 
   // Ouvir mensagem com resultados de análise automática
   useEffect(() => {
@@ -1596,6 +1598,77 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                       )}
                     </>
                   )}
+
+                  {/* Switch de Deep Scan */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      padding: "16px",
+                      background: "rgba(30, 30, 30, 0.95)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      zIndex: 10
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: "rgba(255, 255, 255, 0.9)",
+                          fontWeight: 500
+                        }}
+                      >
+                        Análise em profundidade
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "rgba(255, 255, 255, 0.5)"
+                        }}
+                      >
+                        Verifica todos os elementos internos
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setDeepScan(!deepScan)}
+                      style={{
+                        width: 36,
+                        height: 20,
+                        borderRadius: 10,
+                        background: deepScan
+                          ? "#3b82f6"
+                          : "rgba(255, 255, 255, 0.2)",
+                        border: "none",
+                        position: "relative",
+                        cursor: "pointer",
+                        transition: "background 0.2s",
+                        flexShrink: 0
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: 8,
+                          background: "white",
+                          position: "absolute",
+                          top: 2,
+                          left: deepScan ? 18 : 2,
+                          transition: "left 0.2s"
+                        }}
+                      />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <ContrastChecker

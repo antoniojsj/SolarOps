@@ -4938,6 +4938,8 @@ const analyzeSelectedContrast = async (msg?: any) => {
       return null;
     };
 
+    const deepScan = msg && msg.deepScan !== undefined ? msg.deepScan : false;
+
     contrast.walk(
       duplicate,
       (node, { opacity }) => {
@@ -4967,6 +4969,10 @@ const analyzeSelectedContrast = async (msg?: any) => {
         }
 
         if (!("visible" in node) || !node.visible) {
+          return "skipchildren";
+        }
+
+        if (!deepScan && node === duplicate) {
           return "skipchildren";
         }
 
