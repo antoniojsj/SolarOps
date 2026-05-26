@@ -4769,8 +4769,8 @@ const analyzeSelectedContrast = async (msg?: any) => {
       };
     };
 
-    const computeTypeContrast = (textNodeInfo, bgImageData) => {
-      const { x, y, w, h, textStyleSamples, effectiveOpacity } = textNodeInfo;
+    const computeTypeContrast = (nodeInfo, bgImageData) => {
+      const { x, y, w, h, textStyleSamples, effectiveOpacity } = nodeInfo;
 
       if (!textStyleSamples || textStyleSamples.length === 0) {
         return {
@@ -4779,7 +4779,7 @@ const analyzeSelectedContrast = async (msg?: any) => {
         };
       }
 
-      // Sample 4 points around the text node (corners)
+      // Sample 4 points around the node (corners)
       const samplePoints = [
         [x, y],
         [x + w - 1, y],
@@ -4796,53 +4796,47 @@ const analyzeSelectedContrast = async (msg?: any) => {
         maxCR: 0
       };
 
-      for (const { textSize, isBold, color } of textStyleSamples) {
-        // Convert CSS px to pt for large text calculation
-        const pointSize = textSize / 1.333333333;
-        const isLargeText = pointSize >= 18 || (isBold && pointSize >= 14);
-        const passingAAContrastForLayer = isLargeText ? 3 : 4.5;
-        const passingAAAContrastForLayer = isLargeText ? 4.5 : 7;
+      for (const sample of textStyleSamples) {
+        const { isGraphic, textSize, isBold, color } = sample;
+
+        let passingAA = 4.5;
+        let passingAAA = 7.0;
+
+        if (isGraphic) {
+          passingAA = 3.0; // Graphics only require 3:1 for AA
+          passingAAA = 3.0; // Graphics don't have a distinct AAA requirement in WCAG 2.1, but we use 3.0 for both
+        } else {
+          const pointSize = textSize / 1.333333333;
+          const isLargeText = pointSize >= 18 || (isBold && pointSize >= 14);
+          passingAA = isLargeText ? 3.0 : 4.5;
+          passingAAA = isLargeText ? 4.5 : 7.0;
+        }
 
         for (const [x_, y_] of samplePoints) {
           let bgColor = getImageDataPixel(bgImageData, x_, y_);
 
-          if (!bgColor) {
-            // Sample point out of bounds - skip
-            continue;
-          }
+          if (!bgColor) continue;
 
-          // Flatten background color on white matte (handle transparency)
           bgColor = flattenColors(bgColor, { r: 1, g: 1, b: 1, a: 1 });
-
-          // Mix text color with background based on opacity
           const blendedTextColor = mixColors(
             bgColor,
             color,
             color.a * (effectiveOpacity || 1)
           );
 
-          // Calculate luminance of both colors
           const lum1 = srgbLuminance(blendedTextColor);
           const lum2 = srgbLuminance(bgColor);
-
-          // Calculate contrast ratio
           const contrastRatio =
             (Math.max(lum1, lum2) + 0.05) / (Math.min(lum1, lum2) + 0.05);
 
           stats.minCR = Math.min(stats.minCR, contrastRatio);
           stats.maxCR = Math.max(stats.maxCR, contrastRatio);
 
-          if (contrastRatio < passingAAContrastForLayer) {
-            stats.aaFail += 1;
-          } else {
-            stats.aaPass += 1;
-          }
+          if (contrastRatio < passingAA) stats.aaFail += 1;
+          else stats.aaPass += 1;
 
-          if (contrastRatio < passingAAAContrastForLayer) {
-            stats.aaaFail += 1;
-          } else {
-            stats.aaaPass += 1;
-          }
+          if (contrastRatio < passingAAA) stats.aaaFail += 1;
+          else stats.aaaPass += 1;
         }
       }
 
@@ -4908,7 +4902,35 @@ const analyzeSelectedContrast = async (msg?: any) => {
       "[Controller] Imagem com texto exportada, processando nós de texto..."
     );
 
-    const textNodes = [];
+    const analysisNodes = [];
+
+    const isGraphicNode = n =>
+      [
+        "RECTANGLE",
+        "ELLIPSE",
+        "POLYGON",
+        "STAR",
+        "VECTOR",
+        "BOOLEAN_OPERATION",
+        "LINE"
+      ].includes(n.type);
+
+    const getPrimarySolidColor = n => {
+      let paints = n.fills;
+      if (!paints || !Array.isArray(paints) || paints.length === 0) {
+        paints = n.strokes;
+      }
+      if (!paints || !Array.isArray(paints)) return null;
+      for (const paint of paints) {
+        if (paint.type === "SOLID" && paint.visible !== false) {
+          return {
+            ...paint.color,
+            a: paint.opacity === undefined ? 1 : paint.opacity
+          };
+        }
+      }
+      return null;
+    };
 
     contrast.walk(
       duplicate,
@@ -4918,11 +4940,24 @@ const analyzeSelectedContrast = async (msg?: any) => {
           newOpacity *= node.opacity;
         }
 
-        if (node.type === "TEXT" && !!node.visible) {
-          textNodes.push({
-            textNode: node,
-            effectiveOpacity: newOpacity * node.opacity
-          });
+        if (node.visible !== false) {
+          if (node.type === "TEXT") {
+            analysisNodes.push({
+              node,
+              isText: true,
+              effectiveOpacity: newOpacity * node.opacity
+            });
+          } else if (isGraphicNode(node)) {
+            const solidColor = getPrimarySolidColor(node);
+            if (solidColor) {
+              analysisNodes.push({
+                node,
+                isText: false,
+                primaryColor: solidColor,
+                effectiveOpacity: newOpacity * node.opacity
+              });
+            }
+          }
         }
 
         if (!("visible" in node) || !node.visible) {
@@ -4934,80 +4969,94 @@ const analyzeSelectedContrast = async (msg?: any) => {
       { opacity: 1 }
     );
 
-    console.log(`[Controller] ${textNodes.length} nós de texto encontrados`);
+    console.log(
+      `[Controller] ${analysisNodes.length} nós para análise encontrados`
+    );
 
-    const textNodeInfos = textNodes
-      .map(({ textNode, effectiveOpacity }) => {
+    const textNodeInfos = analysisNodes
+      .map(({ node, isText, primaryColor, effectiveOpacity }) => {
         let textStyleSamples = [];
 
-        const colorsForPaint = paint => {
-          switch (paint.type) {
-            case "SOLID":
-              return [
-                {
-                  ...paint.color,
-                  a: paint.opacity === undefined ? 1 : paint.opacity
-                }
-              ];
-            case "GRADIENT_LINEAR":
-            case "GRADIENT_RADIAL":
-            case "GRADIENT_ANGULAR":
-            case "GRADIENT_DIAMOND":
-              return paint.gradientStops.map(stop => stop.color);
-            case "IMAGE":
-            default:
-              return [];
-          }
-        };
+        if (isText) {
+          const colorsForPaint = paint => {
+            switch (paint.type) {
+              case "SOLID":
+                return [
+                  {
+                    ...paint.color,
+                    a: paint.opacity === undefined ? 1 : paint.opacity
+                  }
+                ];
+              case "GRADIENT_LINEAR":
+              case "GRADIENT_RADIAL":
+              case "GRADIENT_ANGULAR":
+              case "GRADIENT_DIAMOND":
+                return paint.gradientStops.map(stop => stop.color);
+              case "IMAGE":
+              default:
+                return [];
+            }
+          };
 
-        const isBold = ({ style }) => !!style.match(/medium|bold|black/i);
-        const { fills, fontName, fontSize } = textNode;
-        const { mixed } = figma;
+          const isBold = ({ style }) => !!style.match(/medium|bold|black/i);
+          const { fills, fontName, fontSize } = node as TextNode;
+          const { mixed } = figma;
 
-        if (fontName === mixed || fontSize === mixed || fills === mixed) {
-          const samples = new Set();
-          for (let i = textNode.characters.length - 1; i >= 0; i -= 1) {
-            const colors = Array.from(
-              textNode.getRangeFills(i, i + 1)
-            ).flatMap(paint => colorsForPaint(paint));
-            colors.forEach(color => {
-              samples.add(
-                JSON.stringify({
-                  isBold: isBold(textNode.getRangeFontName(i, i + 1)),
-                  textSize: textNode.getRangeFontSize(i, i + 1),
-                  color
-                })
-              );
-            });
+          if (fontName === mixed || fontSize === mixed || fills === mixed) {
+            const samples = new Set();
+            for (
+              let i = (node as TextNode).characters.length - 1;
+              i >= 0;
+              i -= 1
+            ) {
+              const colors = Array.from(
+                (node as TextNode).getRangeFills(i, i + 1)
+              ).flatMap(paint => colorsForPaint(paint));
+              colors.forEach(color => {
+                samples.add(
+                  JSON.stringify({
+                    isBold: isBold(
+                      (node as TextNode).getRangeFontName(i, i + 1)
+                    ),
+                    textSize: (node as TextNode).getRangeFontSize(i, i + 1),
+                    color
+                  })
+                );
+              });
+            }
+            textStyleSamples = [...samples].map(s => JSON.parse(s as string));
+          } else {
+            textStyleSamples = (fills as ReadonlyArray<Paint>)
+              .flatMap(paint => colorsForPaint(paint))
+              .map(color => ({
+                isBold: isBold(fontName),
+                textSize: fontSize,
+                color
+              }));
           }
-          textStyleSamples = [...samples].map(s => JSON.parse(s));
         } else {
-          textStyleSamples = fills
-            .flatMap(paint => colorsForPaint(paint))
-            .map(color => ({
-              isBold: isBold(fontName),
-              textSize: fontSize,
-              color
-            }));
+          textStyleSamples = [
+            {
+              isGraphic: true,
+              color: primaryColor
+            }
+          ];
         }
 
         const textNodeInfo = {
-          x:
-            textNode.absoluteTransform[0][2] -
-            duplicate.absoluteTransform[0][2],
-          y:
-            textNode.absoluteTransform[1][2] -
-            duplicate.absoluteTransform[1][2],
-          w: textNode.width,
-          h: textNode.height,
-          name: textNode.name,
-          value: textNode.characters,
-          nodeId: nodeIdMap.get(textNode.id),
+          x: node.absoluteTransform[0][2] - duplicate.absoluteTransform[0][2],
+          y: node.absoluteTransform[1][2] - duplicate.absoluteTransform[1][2],
+          w: node.width,
+          h: node.height,
+          name: node.name,
+          value: isText ? (node as TextNode).characters : node.name,
+          nodeId: nodeIdMap.get(node.id),
+          isText,
           textStyleSamples,
           effectiveOpacity
         };
 
-        textNode.opacity = 0;
+        node.opacity = 0;
         return textNodeInfo;
       })
       .filter(x => !!x);

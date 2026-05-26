@@ -4,6 +4,7 @@ import ContrastChecker from "./ContrastChecker";
 import WCAGContent from "./WCAGContent";
 import HeaderMarker from "./HeaderMarker";
 import Landmarks from "./Landmarks";
+import { SingleContrastResult } from "./SingleContrastResult";
 import { VisionSimulatorTab } from "./VisionSimulatorTab";
 
 // Add CSS for scrollbar
@@ -525,33 +526,56 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
 
                 const avgContrastRatio = totalContrastRatio / validSamples;
 
-                // Determine if large text
-                const pointSize = (sample.textSize || 16) / 1.333333;
-                const isLarge =
-                  pointSize >= 18 || (sample.isBold && pointSize >= 14);
+                // Determine if large text or graphic
+                let aa, aaa, aaLarge;
+                let issues = [];
+                let isGraphic = !!sample.isGraphic;
 
-                // Evaluate compliance
-                const aa = avgContrastRatio >= (isLarge ? 3 : 4.5);
-                const aaa = avgContrastRatio >= (isLarge ? 4.5 : 7);
+                if (isGraphic) {
+                  aa = avgContrastRatio >= 3;
+                  aaa = avgContrastRatio >= 3; // Graphics typically only require AA (3:1)
+                  aaLarge = aa;
+                  if (!aa) {
+                    issues.push(
+                      `Contraste ${avgContrastRatio.toFixed(
+                        1
+                      )}:1 (mínimo 3:1 para gráficos)`
+                    );
+                  }
+                } else {
+                  const pointSize = (sample.textSize || 16) / 1.333333;
+                  const isLarge =
+                    pointSize >= 18 || (sample.isBold && pointSize >= 14);
+                  aa = avgContrastRatio >= (isLarge ? 3 : 4.5);
+                  aaa = avgContrastRatio >= (isLarge ? 4.5 : 7);
+                  aaLarge = avgContrastRatio >= 3;
+                  if (!aa) {
+                    issues.push(
+                      `Contraste ${avgContrastRatio.toFixed(1)}:1 (mínimo ${
+                        isLarge ? "3:1 para texto grande" : "4.5:1"
+                      })`
+                    );
+                  }
+                }
 
-                const contrastResult: ContrastResult = {
+                const contrastResult: ContrastResult & {
+                  isGraphic?: boolean;
+                } = {
                   id: textInfo.nodeId || `node-${index}`,
-                  nodeName: textInfo.name || `Texto ${index + 1}`,
-                  text: (textInfo.value || "").substring(0, 100),
+                  nodeName: textInfo.name || `Elemento ${index + 1}`,
+                  nodeType: textInfo.nodeType,
+                  isGraphic,
+                  text: textInfo.isText
+                    ? (textInfo.value || "").substring(0, 100)
+                    : "",
                   textColor: colorToHex(textColor),
                   bgColor: colorToHex(sampledBgColor!), // Use the sampled color!
                   contrastRatio: Math.round(avgContrastRatio * 100) / 100,
                   aa,
                   aaa,
-                  aaLarge: avgContrastRatio >= 3,
+                  aaLarge,
                   hasIssues: !aa,
-                  issues: !aa
-                    ? [
-                        `Contraste ${avgContrastRatio.toFixed(1)}:1 (mínimo ${
-                          isLarge ? "3:1 para texto grande" : "4.5:1"
-                        })`
-                      ]
-                    : [],
+                  issues,
                   fontSize: sample.textSize || 16,
                   fontWeight: sample.isBold ? 700 : 400,
                   textOpacity: textColor.a || 1,
@@ -1315,251 +1339,270 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                     </div>
                   )}
 
-                  {contrastPreviewImageUrl && (
-                    <div style={{ marginBottom: 16 }}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowContrastPreview(!showContrastPreview)
-                        }
-                        style={{
-                          background: "transparent",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                          borderRadius: 6,
-                          color: "#e0e0e0",
-                          fontSize: 12,
-                          padding: "6px 12px",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6
-                        }}
-                      >
-                        <span
-                          style={{
-                            transform: showContrastPreview
-                              ? "rotate(0deg)"
-                              : "rotate(-90deg)",
-                            transition: "transform 0.2s"
-                          }}
-                        >
-                          ▼
-                        </span>
-                        {showContrastPreview
-                          ? "Ocultar preview"
-                          : "Mostrar preview"}
-                      </button>
-                      {showContrastPreview && (
-                        <div
-                          style={{
-                            marginTop: 12,
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            background: "rgba(0,0,0,0.2)",
-                            maxWidth: "100%",
-                            maxHeight: 320,
-                            overflowY: "auto",
-                            overflowX: "auto"
-                          }}
-                        >
-                          <img
-                            src={contrastPreviewImageUrl}
-                            alt="Preview do frame analisado"
+                  {autoAnalysisResults.length === 1 ? (
+                    <SingleContrastResult
+                      result={autoAnalysisResults[0]}
+                      previewUrl={contrastPreviewImageUrl}
+                    />
+                  ) : (
+                    <>
+                      {contrastPreviewImageUrl && (
+                        <div style={{ marginBottom: 16 }}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowContrastPreview(!showContrastPreview)
+                            }
                             style={{
-                              display: "block",
-                              maxWidth: "100%",
-                              height: "auto",
-                              width: contrastPreviewSize ? undefined : "100%"
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {autoAnalysisResults.length > 0 && (
-                    <div style={{ flex: 1, overflowY: "auto" }}>
-                      {autoAnalysisResults.map((result, index) => (
-                        <div
-                          key={result.id}
-                          style={{
-                            padding: 12,
-                            borderRadius: 6,
-                            background: result.hasIssues
-                              ? "rgba(239, 68, 68, 0.1)"
-                              : "rgba(34, 197, 94, 0.1)",
-                            border: result.hasIssues
-                              ? "1px solid rgba(239, 68, 68, 0.2)"
-                              : "1px solid rgba(34, 197, 94, 0.2)",
-                            marginBottom: 8
-                          }}
-                        >
-                          <div
-                            style={{
+                              background: "transparent",
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              borderRadius: 6,
+                              color: "#e0e0e0",
+                              fontSize: 12,
+                              padding: "6px 12px",
+                              cursor: "pointer",
                               display: "flex",
-                              justifyContent: "space-between",
                               alignItems: "center",
-                              marginBottom: 8
+                              gap: 6
                             }}
                           >
                             <span
                               style={{
-                                fontSize: 12,
-                                fontWeight: 500,
-                                color: "#fff"
+                                transform: showContrastPreview
+                                  ? "rotate(0deg)"
+                                  : "rotate(-90deg)",
+                                transition: "transform 0.2s"
                               }}
                             >
-                              {result.nodeName}
+                              ▼
                             </span>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: result.hasIssues ? "#ef4444" : "#22c55e"
-                              }}
-                            >
-                              {result.contrastRatio.toFixed(2)}:1
-                            </span>
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 11,
-                              color: "rgba(255, 255, 255, 0.7)",
-                              marginBottom: 4
-                            }}
-                          >
-                            <span style={{ marginRight: 8 }}>
-                              Texto: {result.textColor}
-                            </span>
-                            <span>Fundo: {result.bgColor}</span>
-                          </div>
-
-                          {result.text && (
+                            {showContrastPreview
+                              ? "Ocultar preview"
+                              : "Mostrar preview"}
+                          </button>
+                          {showContrastPreview && (
                             <div
                               style={{
-                                fontSize: 11,
-                                color: "rgba(255, 255, 255, 0.6)",
-                                marginBottom: 4
+                                marginTop: 12,
+                                borderRadius: 8,
+                                overflow: "hidden",
+                                background: "rgba(0,0,0,0.2)",
+                                maxWidth: "100%",
+                                maxHeight: 320,
+                                overflowY: "auto",
+                                overflowX: "auto"
                               }}
                             >
-                              "{result.text}"
+                              <img
+                                src={contrastPreviewImageUrl}
+                                alt="Preview do frame analisado"
+                                style={{
+                                  display: "block",
+                                  maxWidth: "100%",
+                                  height: "auto",
+                                  width: contrastPreviewSize
+                                    ? undefined
+                                    : "100%"
+                                }}
+                              />
                             </div>
                           )}
-
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
-                              marginTop: 8
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 4,
-                                flexWrap: "wrap"
-                              }}
-                            >
-                              {result.aa && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    background: "rgba(34, 197, 94, 0.2)",
-                                    color: "#22c55e",
-                                    padding: "2px 6px",
-                                    borderRadius: 3
-                                  }}
-                                >
-                                  AA
-                                </span>
-                              )}
-                              {result.aaa && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    background: "rgba(34, 197, 94, 0.2)",
-                                    color: "#22c55e",
-                                    padding: "2px 6px",
-                                    borderRadius: 3
-                                  }}
-                                >
-                                  AAA
-                                </span>
-                              )}
-                              {result.aaLarge && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    background: "rgba(34, 197, 94, 0.2)",
-                                    color: "#22c55e",
-                                    padding: "2px 6px",
-                                    borderRadius: 3
-                                  }}
-                                >
-                                  AA Large
-                                </span>
-                              )}
-                              {result.hasIssues &&
-                                result.issues.map((issue, i) => (
-                                  <span
-                                    key={i}
-                                    style={{
-                                      fontSize: 10,
-                                      background: "rgba(239, 68, 68, 0.2)",
-                                      color: "#ef4444",
-                                      padding: "2px 6px",
-                                      borderRadius: 3
-                                    }}
-                                  >
-                                    {issue}
-                                  </span>
-                                ))}
-                            </div>
-                            <button
-                              onClick={() => handleSelectNode(result.id)}
-                              onMouseEnter={() => setHoveredResultId(result.id)}
-                              onMouseLeave={() => setHoveredResultId(null)}
-                              style={{
-                                background:
-                                  hoveredResultId === result.id
-                                    ? "rgba(255, 255, 255, 0.1)"
-                                    : "none",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                padding: "4px",
-                                display: "flex",
-                                alignItems: "center",
-                                flexShrink: 0
-                              }}
-                            >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 16 16"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <g>
-                                  <path
-                                    fillRule="evenodd"
-                                    clipRule="evenodd"
-                                    d="M7.5 6V3.025C5.138 3.259 3.26 5.138 3.025 7.5H6V8.5H3.025C3.259 10.862 5.138 12.74 7.5 12.975V10H8.5V12.975C10.862 12.741 12.74 10.862 12.975 8.5H10V7.5H12.975C12.741 5.138 10.862 3.26 8.5 3.025V6H7.5ZM13.98 7.5C13.739 4.585 11.415 2.261 8.5 2.02V0H7.5V2.02C4.585 2.261 2.261 4.585 2.02 7.5H0V8.5H2.02C2.261 11.415 4.585 13.739 7.5 13.98V16H8.5V13.98C11.415 13.739 13.739 11.415 13.98 8.5H16V7.5H13.98Z"
-                                    fill="white"
-                                  />
-                                </g>
-                                <defs>
-                                  <clipPath>
-                                    <rect width="16" height="16" fill="white" />
-                                  </clipPath>
-                                </defs>
-                              </svg>
-                            </button>
-                          </div>
                         </div>
-                      ))}
-                    </div>
+                      )}
+
+                      {autoAnalysisResults.length > 0 && (
+                        <div style={{ flex: 1, overflowY: "auto" }}>
+                          {autoAnalysisResults.map((result, index) => (
+                            <div
+                              key={result.id}
+                              style={{
+                                padding: 12,
+                                borderRadius: 6,
+                                background: result.hasIssues
+                                  ? "rgba(239, 68, 68, 0.1)"
+                                  : "rgba(34, 197, 94, 0.1)",
+                                border: result.hasIssues
+                                  ? "1px solid rgba(239, 68, 68, 0.2)"
+                                  : "1px solid rgba(34, 197, 94, 0.2)",
+                                marginBottom: 8
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: 8
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 500,
+                                    color: "#fff"
+                                  }}
+                                >
+                                  {result.nodeName}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: result.hasIssues
+                                      ? "#ef4444"
+                                      : "#22c55e"
+                                  }}
+                                >
+                                  {result.contrastRatio.toFixed(2)}:1
+                                </span>
+                              </div>
+
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: "rgba(255, 255, 255, 0.7)",
+                                  marginBottom: 4
+                                }}
+                              >
+                                <span style={{ marginRight: 8 }}>
+                                  Foreground: {result.textColor}
+                                </span>
+                                <span>Background: {result.bgColor}</span>
+                              </div>
+
+                              {result.text && (
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: "rgba(255, 255, 255, 0.6)",
+                                    marginBottom: 4
+                                  }}
+                                >
+                                  "{result.text}"
+                                </div>
+                              )}
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  marginTop: 8
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: 4,
+                                    flexWrap: "wrap"
+                                  }}
+                                >
+                                  {result.aa && (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        background: "rgba(34, 197, 94, 0.2)",
+                                        color: "#22c55e",
+                                        padding: "2px 6px",
+                                        borderRadius: 3
+                                      }}
+                                    >
+                                      AA
+                                    </span>
+                                  )}
+                                  {result.aaa && (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        background: "rgba(34, 197, 94, 0.2)",
+                                        color: "#22c55e",
+                                        padding: "2px 6px",
+                                        borderRadius: 3
+                                      }}
+                                    >
+                                      AAA
+                                    </span>
+                                  )}
+                                  {result.aaLarge && (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        background: "rgba(34, 197, 94, 0.2)",
+                                        color: "#22c55e",
+                                        padding: "2px 6px",
+                                        borderRadius: 3
+                                      }}
+                                    >
+                                      AA Large
+                                    </span>
+                                  )}
+                                  {result.hasIssues &&
+                                    result.issues.map((issue, i) => (
+                                      <span
+                                        key={i}
+                                        style={{
+                                          fontSize: 10,
+                                          background: "rgba(239, 68, 68, 0.2)",
+                                          color: "#ef4444",
+                                          padding: "2px 6px",
+                                          borderRadius: 3
+                                        }}
+                                      >
+                                        {issue}
+                                      </span>
+                                    ))}
+                                </div>
+                                <button
+                                  onClick={() => handleSelectNode(result.id)}
+                                  onMouseEnter={() =>
+                                    setHoveredResultId(result.id)
+                                  }
+                                  onMouseLeave={() => setHoveredResultId(null)}
+                                  style={{
+                                    background:
+                                      hoveredResultId === result.id
+                                        ? "rgba(255, 255, 255, 0.1)"
+                                        : "none",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    cursor: "pointer",
+                                    padding: "4px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 16 16"
+                                    fill="none"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <g>
+                                      <path
+                                        fillRule="evenodd"
+                                        clipRule="evenodd"
+                                        d="M7.5 6V3.025C5.138 3.259 3.26 5.138 3.025 7.5H6V8.5H3.025C3.259 10.862 5.138 12.74 7.5 12.975V10H8.5V12.975C10.862 12.741 12.74 10.862 12.975 8.5H10V7.5H12.975C12.741 5.138 10.862 3.26 8.5 3.025V6H7.5ZM13.98 7.5C13.739 4.585 11.415 2.261 8.5 2.02V0H7.5V2.02C4.585 2.261 2.261 4.585 2.02 7.5H0V8.5H2.02C2.261 11.415 4.585 13.739 7.5 13.98V16H8.5V13.98C11.415 13.739 13.739 11.415 13.98 8.5H16V7.5H13.98Z"
+                                        fill="white"
+                                      />
+                                    </g>
+                                    <defs>
+                                      <clipPath>
+                                        <rect
+                                          width="16"
+                                          height="16"
+                                          fill="white"
+                                        />
+                                      </clipPath>
+                                    </defs>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {autoAnalysisResults.length === 0 &&
