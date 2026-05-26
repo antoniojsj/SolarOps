@@ -1693,12 +1693,14 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       console.log("[Controller] ✓ Recebido message type=import-rendered-dom");
       const tree = (msg as any).tree;
       const viewport = (msg as any).viewport || { width: 1440, height: 900 };
+      const useAutoLayout = (msg as any).useAutoLayout !== false;
 
       console.log("[Controller] Tree details:", {
         nodeType: tree?.nodeType,
         tagName: tree?.tagName,
         hasChildren: Array.isArray(tree?.children),
-        childrenCount: tree?.children?.length || 0
+        childrenCount: tree?.children?.length || 0,
+        useAutoLayout
       });
 
       if (!tree) {
@@ -1719,7 +1721,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
       console.log("[Controller] ✓ Iniciando importRenderedDOM...");
       figma.notify("Importando layout renderizado...");
-      await importRenderedDOM(tree, viewport);
+      await importRenderedDOM(tree, viewport, useAutoLayout);
       console.log("[Controller] ✓ importRenderedDOM completado com sucesso!");
       figma.notify("Layout importado com sucesso!");
     } catch (error) {
@@ -1741,6 +1743,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
   if (msg.type === "import-html-css") {
     try {
       const { html, css } = msg;
+      const useAutoLayout = (msg as any).useAutoLayout !== false;
 
       if (!html && !css) {
         figma.notify("Por favor, forneça HTML ou CSS para importar", {
@@ -1754,7 +1757,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
       try {
         // Chamar a função de importação
-        await importHTML(html || "<div></div>", css || "");
+        await importHTML(html || "<div></div>", css || "", useAutoLayout);
 
         // Notificar sucesso
         figma.notify("HTML/CSS importado com sucesso!");

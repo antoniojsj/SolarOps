@@ -23,6 +23,23 @@ function Navigation(props) {
     props.onPageSelection("bulk");
   };
 
+  const stylesClick = () => {
+    props.onPageSelection("styles");
+    parent.postMessage({ pluginMessage: { type: "update-styles-page" } }, "*");
+  };
+
+  const componentsClick = () => {
+    props.onPageSelection("components");
+    parent.postMessage(
+      { pluginMessage: { type: "fetch-active-libraries" } },
+      "*"
+    );
+  };
+
+  const documentationClick = () => {
+    props.onPageSelection("documentation");
+  };
+
   const handlePanelVisible = boolean => {
     setPanelVisible(boolean);
   };
@@ -76,6 +93,34 @@ function Navigation(props) {
             style={{ cursor: "pointer" }}
           >
             Camadas
+          </motion.div>
+          <motion.div
+            className={`nav-item ${activePage === "styles" ? "active" : ""}`}
+            onClick={stylesClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Estilos
+          </motion.div>
+          <motion.div
+            className={`nav-item ${
+              activePage === "components" ? "active" : ""
+            }`}
+            onClick={componentsClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Bibliotecas
+          </motion.div>
+          <motion.div
+            className={`nav-item ${
+              activePage === "documentation" ? "active" : ""
+            }`}
+            onClick={documentationClick}
+            whileTap={{ scale: 0.98, opacity: 0.8 }}
+            style={{ cursor: "pointer" }}
+          >
+            Documentação
           </motion.div>
 
           <div className="nav-icon-wrapper" style={{ paddingRight: 16 }}>

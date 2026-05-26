@@ -789,6 +789,46 @@ function normalizeMaterialSymbolName(name: string) {
     .replace(/[^a-z0-9_]/g, "");
 }
 
+/**
+ * Gera um nome legível para o frame Figma baseado nos atributos do elemento HTML.
+ * Prioridade: id > aria-label > primeira classe significativa > tagName
+ */
+function frameName(tagName: string, attrs: Record<string, string>): string {
+  if (attrs.id) return `#${attrs.id}`;
+  if (attrs["aria-label"]) return attrs["aria-label"].slice(0, 40);
+  const classes = (attrs.class || "")
+    .split(/\s+/)
+    .filter(
+      c =>
+        c &&
+        !/^(flex|grid|block|inline|relative|absolute|fixed|hidden|overflow|z-|w-|h-|p-|m-|gap-|rounded|border|shadow|bg-|text-|font-|leading|tracking|justify|items|self|col-|row-)/.test(
+          c
+        )
+    );
+  if (classes.length) return classes[0];
+  return tagName;
+}
+
+/**
+ * Converte letterSpacing CSS para o formato do Figma.
+ * CSS usa em (relativo ao fontSize) ou px (absoluto).
+ */
+function parseLetterSpacing(
+  letterSpacing: string | undefined,
+  fontSize: number
+): LetterSpacing | null {
+  if (!letterSpacing || letterSpacing === "normal" || letterSpacing === "0px")
+    return null;
+  const n = parseFloat(letterSpacing);
+  if (!Number.isFinite(n)) return null;
+  if (letterSpacing.includes("em")) {
+    // Figma usa % como "PERCENT" onde 1em = 100%
+    return { value: n * 100, unit: "PERCENT" };
+  }
+  // px
+  return { value: n, unit: "PIXELS" };
+}
+
 async function tryCreateMaterialSymbolVector(
   iconName: string,
   colorCss: string | undefined,
@@ -859,117 +899,150 @@ async function tryCreateMaterialSymbolVector(
   }
 }
 
-function applyAutoLayoutFromChildren(
+/**
+ * Aplica Auto Layout a um frame baseado nos estilos CSS computados.
+ * Suporta flex (horizontal/vertical) e grid (horizontal+wrap).
+ * Também configura os filhos: layoutGrow, layoutAlign, layoutPositioning.
+ */
+function applyAutoLayout(
   frame: FrameNode,
   styles: Record<string, string>,
-  childStylesMap: Map<SceneNode, Record<string, string>>
+  childrenData: Array<{ node: SceneNode; styles: Record<string, string> }>
 ) {
-  if (frame.children.length < 1) return;
-
   const display = styles.display || "";
   const isFlexbox = display.includes("flex");
   const isGrid = display.includes("grid");
 
-  console.log(
-    `[applyAutoLayout] Frame: ${frame.name}, display: ${display}, isFlexbox: ${isFlexbox}, isGrid: ${isGrid}`
-  );
-
-  // Apply to flexbox or grid containers
   if (!isFlexbox && !isGrid) return;
 
   try {
-    // Set layoutMode based on flex-direction or grid
-    const flexDirection = styles.flexDirection || "column";
-    if (flexDirection.includes("row") || isGrid) {
+    // ── Direção do layout ─────────────────────────────────────────────────
+    const flexDir = (styles.flexDirection || "row").toLowerCase();
+    if (isGrid || flexDir.includes("row")) {
       frame.layoutMode = "HORIZONTAL";
     } else {
       frame.layoutMode = "VERTICAL";
     }
 
-    if (isGrid) {
+    // ── Wrap (grid ou flex-wrap) ──────────────────────────────────────────
+    if (isGrid || (styles.flexWrap || "").includes("wrap")) {
       try {
         frame.layoutWrap = "WRAP";
-      } catch (e) {
-        // Ignorar se a API do Figma estiver desatualizada
+      } catch {
+        // API mais antiga do Figma não suporta layoutWrap
       }
     }
 
-    console.log(`[applyAutoLayout] layoutMode set to: ${frame.layoutMode}`);
-
-    // Set spacing from gap
+    // ── Gap (itemSpacing e counterAxisSpacing) ────────────────────────────
     const gap = pxToNumber(styles.gap);
-    const rowGap = pxToNumber(styles.rowGap);
-    const columnGap = pxToNumber(styles.columnGap);
+    const rowGapStr = styles.rowGap;
+    const colGapStr = styles.columnGap;
+    const rowGap =
+      rowGapStr !== undefined && rowGapStr !== "" ? pxToNumber(rowGapStr) : gap;
+    const colGap =
+      colGapStr !== undefined && colGapStr !== "" ? pxToNumber(colGapStr) : gap;
 
     if (frame.layoutMode === "VERTICAL") {
-      frame.itemSpacing = rowGap > 0 ? rowGap : gap;
+      frame.itemSpacing = rowGap;
+      try {
+        (frame as any).counterAxisSpacing = colGap;
+      } catch {
+        /* API antiga */
+      }
     } else {
-      frame.itemSpacing = columnGap > 0 ? columnGap : gap;
+      frame.itemSpacing = colGap;
+      try {
+        (frame as any).counterAxisSpacing = rowGap;
+      } catch {
+        /* API antiga */
+      }
     }
 
-    // Set padding
-    const paddingTop = pxToNumber(styles.paddingTop);
-    const paddingBottom = pxToNumber(styles.paddingBottom);
-    const paddingLeft = pxToNumber(styles.paddingLeft);
-    const paddingRight = pxToNumber(styles.paddingRight);
+    // ── Padding ───────────────────────────────────────────────────────────
+    frame.paddingTop = pxToNumber(styles.paddingTop);
+    frame.paddingBottom = pxToNumber(styles.paddingBottom);
+    frame.paddingLeft = pxToNumber(styles.paddingLeft);
+    frame.paddingRight = pxToNumber(styles.paddingRight);
 
-    frame.paddingTop = paddingTop;
-    frame.paddingBottom = paddingBottom;
-    frame.paddingLeft = paddingLeft;
-    frame.paddingRight = paddingRight;
+    // ── Alinhamento principal e cruzado ───────────────────────────────────
+    frame.primaryAxisAlignItems = mapJustifyContent(styles.justifyContent);
+    frame.counterAxisAlignItems = mapAlignItems(styles.alignItems);
 
-    console.log(
-      `[applyAutoLayout] itemSpacing: ${frame.itemSpacing}, padding: ${paddingTop},${paddingBottom},${paddingLeft},${paddingRight}`
-    );
+    // ── Sizing do container ───────────────────────────────────────────────
+    // Se for flex-wrap e altura fixa, manter FIXED. Senão, tentar deixar o layout fluir mais natural.
+    // Deixaremos FIXED por padrão para não quebrar caixas exatas, mas o texto interno será HUG.
+    frame.primaryAxisSizingMode = "FIXED";
+    frame.counterAxisSizingMode = "FIXED";
 
-    // Set children properties with error handling
-    for (const child of frame.children) {
+    // ── Configurar cada filho ─────────────────────────────────────────────
+    for (const { node: child, styles: childStyles } of childrenData) {
       try {
-        const childStyles = childStylesMap.get(child) || {};
+        const isAbsoluteChild =
+          (childStyles.position || "").includes("absolute") ||
+          (childStyles.position || "").includes("fixed");
 
-        // Clear absolute positioning when using Auto Layout
-        // This prevents conflicts between absolute coordinates and Auto Layout
-        if ("x" in child) {
-          // @ts-ignore - x exists on SceneNode
-          child.x = 0;
-        }
-        if ("y" in child) {
-          // @ts-ignore - y exists on SceneNode
-          child.y = 0;
-        }
-
-        if (child.type === "FRAME") {
-          const childFrame = child as FrameNode;
-          const flex = childStyles.flex || "";
-          const flexGrow = childStyles.flexGrow || "";
-
-          // flex: 1 or flexGrow > 0 → Fill container (STRETCH)
-          if (
-            flex === "1" ||
-            flexGrow === "1" ||
-            flexGrow === "1 1 0%" ||
-            (flexGrow && parseFloat(flexGrow) > 0)
-          ) {
-            childFrame.layoutAlign = "STRETCH";
+        // position: absolute/fixed → sair do fluxo Auto Layout
+        if (isAbsoluteChild) {
+          try {
+            (child as any).layoutPositioning = "ABSOLUTE";
+          } catch {
+            /* API antiga */
           }
-        } else if (child.type === "TEXT") {
-          const textNode = child as TextNode;
-          // Text elements - STRETCH in vertical layouts to fill container width
-          if (frame.layoutMode === "VERTICAL") {
-            textNode.layoutAlign = "STRETCH";
+          continue; // não aplicar layoutGrow/layoutAlign
+        }
+
+        // layoutGrow: flex-grow > 0
+        const flexGrow = parseFloat(childStyles.flexGrow || "0");
+        if (flexGrow > 0 && "layoutGrow" in child) {
+          try {
+            (child as any).layoutGrow = flexGrow;
+          } catch {
+            /* ignore */
           }
         }
-      } catch (childError) {
+
+        // layoutAlign: align-self ou width:100%
+        const alignSelf = (childStyles.alignSelf || "").toLowerCase();
+        const childWidth = childStyles.width || "";
+        const stretchSelf =
+          alignSelf === "stretch" ||
+          childWidth === "100%" ||
+          (frame.layoutMode === "HORIZONTAL" &&
+            childStyles.alignItems === "stretch") ||
+          (frame.layoutMode === "VERTICAL" &&
+            childStyles.justifyContent === "stretch");
+
+        if ("layoutAlign" in child) {
+          try {
+            (child as any).layoutAlign = stretchSelf ? "STRETCH" : "INHERIT";
+          } catch {
+            /* ignore */
+          }
+        }
+
+        // mx-auto (margin: auto nos dois lados) → layoutAlign CENTER no eixo cruzado
+        if (
+          childStyles.marginLeft === "auto" &&
+          childStyles.marginRight === "auto" &&
+          "layoutAlign" in child
+        ) {
+          try {
+            (child as any).layoutAlign = "CENTER";
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (childErr) {
         console.warn(
-          `[applyAutoLayout] Error setting child properties for ${child.name}:`,
-          childError
+          `[applyAutoLayout] Erro ao configurar filho ${child.name}:`,
+          childErr
         );
       }
     }
-  } catch (error) {
+  } catch (err) {
     console.error(
-      `[applyAutoLayout] Error applying auto layout to frame ${frame.name}:`,
-      error
+      `[applyAutoLayout] Erro ao aplicar Auto Layout em ${frame.name}:`,
+      err
     );
   }
 }
@@ -978,7 +1051,9 @@ async function importNode(
   node: SerializedNode,
   parent: FrameNode,
   parentAbs: { x: number; y: number },
-  parentIsAutoLayout: boolean
+  parentIsAutoLayout: boolean,
+  parentStyles?: Record<string, string>,
+  useAutoLayout: boolean = true
 ): Promise<SceneNode | null> {
   if (node.nodeType === "text") {
     const t = figma.createText();
@@ -995,6 +1070,16 @@ async function importNode(
     const lineHeight = pxToNumber(node.styles.lineHeight);
     if (lineHeight > 0) {
       t.lineHeight = { value: lineHeight, unit: "PIXELS" };
+    }
+
+    // Aplicar letter spacing (em ou px) → formato Figma
+    const ls = parseLetterSpacing(node.styles.letterSpacing, fontSize || 16);
+    if (ls) {
+      try {
+        t.letterSpacing = ls;
+      } catch {
+        /* ignore */
+      }
     }
 
     const color = parseColor(node.styles.color || "");
@@ -1015,8 +1100,15 @@ async function importNode(
 
     t.textAlignHorizontal = mapComputedTextAlign(node.styles);
 
-    // Fallback: se for nowrap explicitamente, usar hug
-    if (node.styles.whiteSpace === "nowrap") {
+    // Default to HUG contents (WIDTH_AND_HEIGHT) to prevent text clipping
+    // Figma handles this gracefully in AutoLayout.
+    // If it spans multiple lines natively, the bounding box helps set fixed width.
+    const isMultiLine = node.rect.height > (fontSize || 16) * 1.8;
+
+    if (
+      node.styles.whiteSpace === "nowrap" ||
+      (!isMultiLine && parentIsAutoLayout)
+    ) {
       try {
         t.textAutoResize = "WIDTH_AND_HEIGHT";
       } catch (error) {
@@ -1025,9 +1117,7 @@ async function importNode(
     } else if (node.rect.width > 1) {
       try {
         t.textAutoResize = "HEIGHT";
-        // Adiciona 5px de "folga" na largura para compensar diferenças de renderização
-        // entre a engine de fonte do Chrome e do Figma, evitando quebras de linha acidentais
-        // sem causar sobreposição horizontal (falha de espaçamento)
+        // Adiciona 5px de margem para compensar diferenças entre engines de fonte
         t.resizeWithoutConstraints(
           Math.max(1, node.rect.width + 5),
           Math.max(1, node.rect.height)
@@ -1040,6 +1130,20 @@ async function importNode(
     if (!parentIsAutoLayout) {
       t.x = node.rect.x - parentAbs.x;
       t.y = node.rect.y - parentAbs.y;
+    } else {
+      // Em Auto Layout, position:absolute ainda precisa de coordenadas
+      const isAbsolute =
+        (node.styles.position || "").includes("absolute") ||
+        (node.styles.position || "").includes("fixed");
+      if (isAbsolute) {
+        try {
+          (t as any).layoutPositioning = "ABSOLUTE";
+        } catch {
+          /* ignore */
+        }
+        t.x = node.rect.x - parentAbs.x;
+        t.y = node.rect.y - parentAbs.y;
+      }
     }
     return t;
   }
@@ -1256,7 +1360,7 @@ async function importNode(
   }
 
   const frame = figma.createFrame();
-  frame.name = node.tagName;
+  frame.name = frameName(node.tagName, node.attrs);
   frame.resizeWithoutConstraints(
     Math.max(1, node.rect.width),
     Math.max(1, node.rect.height)
@@ -1379,24 +1483,64 @@ async function importNode(
 
   const abs = { x: node.rect.x, y: node.rect.y };
 
-  // DISABLE Auto Layout - use absolute positioning only
-  // The rendered DOM already has correct absolute coordinates from the iframe
-  // Auto Layout was causing layout conflicts and breaking the structure
-  const shouldUseAutoLayout = false;
+  // ── Posicionar o frame no pai ──────────────────────────────────────────
+  const isAbsolutePos =
+    (node.styles.position || "").includes("absolute") ||
+    (node.styles.position || "").includes("fixed");
 
   if (!parentIsAutoLayout) {
+    // Pai sem Auto Layout: usar coordenadas absolutas
     frame.x = node.rect.x - parentAbs.x;
     frame.y = node.rect.y - parentAbs.y;
+  } else {
+    // Pai com Auto Layout: elementos position:absolute saem do fluxo
+    if (isAbsolutePos) {
+      try {
+        (frame as any).layoutPositioning = "ABSOLUTE";
+      } catch {
+        /* API antiga */
+      }
+      frame.x = node.rect.x - parentAbs.x;
+      frame.y = node.rect.y - parentAbs.y;
+    }
+    // Elementos normais em Auto Layout: Figma controla a posição
   }
 
-  // Import children using absolute positioning
+  // ── Detectar se este frame usa Auto Layout (flex ou grid) ──────────────
+  const display = node.styles.display || "";
+  const thisIsAutoLayout =
+    useAutoLayout && (display.includes("flex") || display.includes("grid"));
+
+  // ── Importar filhos ────────────────────────────────────────────────────
+  // Coletar os nós filhos e seus estilos para depois configurar Auto Layout
+  const childrenData: Array<{
+    node: SceneNode;
+    styles: Record<string, string>;
+  }> = [];
+
   for (const child of node.children) {
-    await importNode(child, frame, abs, false);
+    const childNode = await importNode(
+      child,
+      frame,
+      abs,
+      thisIsAutoLayout,
+      node.styles,
+      useAutoLayout
+    );
+    if (childNode && child.nodeType === "element") {
+      childrenData.push({ node: childNode, styles: child.styles });
+    } else if (childNode && child.nodeType === "text") {
+      childrenData.push({ node: childNode, styles: child.styles });
+    }
   }
 
-  // The rendered DOM importer already receives measured screen coordinates.
-  // Rebuilding CSS flex as Auto Layout after that can collapse/reorder complex
-  // pages, leaving only the parent background visible.
+  // ── Aplicar Auto Layout DEPOIS de importar os filhos ──────────────────
+  // (o Figma exige que o frame já tenha filhos para Auto Layout funcionar)
+  if (thisIsAutoLayout && frame.children.length > 0) {
+    applyAutoLayout(frame, node.styles, childrenData);
+  }
+
+  // ── Border única (decorativa) ──────────────────────────────────────────
   if (hasSingleBorder) {
     createSingleBorderLine(
       frame,
@@ -1406,7 +1550,7 @@ async function importNode(
     );
   }
 
-  // Special-case inputs: add placeholder text if empty
+  // ── Inputs: adicionar texto de placeholder ────────────────────────────
   if (node.tagName === "input") {
     const placeholder = node.attrs.placeholder || node.attrs.value;
     if (placeholder) {
@@ -1442,7 +1586,8 @@ async function importNode(
 
 export async function importRenderedDOM(
   tree: SerializedNode,
-  viewport: { width: number; height: number }
+  viewport: { width: number; height: number },
+  useAutoLayout: boolean = true
 ) {
   const root = figma.createFrame();
   root.name = "Imported Design";
@@ -1465,7 +1610,7 @@ export async function importRenderedDOM(
     console.warn("[domImporter] Failed to store plugin data:", e);
   }
 
-  await importNode(tree, root, { x: 0, y: 0 }, false);
+  await importNode(tree, root, { x: 0, y: 0 }, false, undefined, useAutoLayout);
 
   // Select
   figma.currentPage.selection = [root];

@@ -404,7 +404,8 @@ async function processNode(
     parent?: any;
   },
   parent: FrameNode | InstanceNode | ComponentNode | GroupNode,
-  styles: any
+  styles: any,
+  useAutoLayout: boolean = true
 ) {
   console.log("Processing node:", node.tag, node);
 
@@ -548,7 +549,12 @@ async function processNode(
         "html"
       ].includes(tag)
     ) {
-      await createFrame(node, parent, { ...styles, ...elementStyles });
+      await createFrame(
+        node,
+        parent,
+        { ...styles, ...elementStyles },
+        useAutoLayout
+      );
     }
     // Handle headings
     else if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)) {
@@ -588,11 +594,13 @@ async function processNode(
           : tag === "ul"
           ? "Unordered List"
           : "Ordered List";
-      listFrame.layoutMode = tag === "li" ? "HORIZONTAL" : "VERTICAL";
-      listFrame.primaryAxisSizingMode = "AUTO";
-      listFrame.counterAxisSizingMode = "AUTO";
-      listFrame.itemSpacing = tag === "li" ? 8 : 4;
-      listFrame.paddingLeft = tag === "ul" || tag === "ol" ? 20 : 0;
+      if (useAutoLayout) {
+        listFrame.layoutMode = tag === "li" ? "HORIZONTAL" : "VERTICAL";
+        listFrame.primaryAxisSizingMode = "AUTO";
+        listFrame.counterAxisSizingMode = "AUTO";
+        listFrame.itemSpacing = tag === "li" ? 8 : 4;
+        listFrame.paddingLeft = tag === "ul" || tag === "ol" ? 20 : 0;
+      }
 
       // Add bullet for list items
       if (tag === "li") {
@@ -610,7 +618,12 @@ async function processNode(
       // Process children
       if (node.children && node.children.length > 0) {
         for (const child of node.children) {
-          await processNode(child, listFrame, { ...styles, ...elementStyles });
+          await processNode(
+            child,
+            listFrame,
+            { ...styles, ...elementStyles },
+            useAutoLayout
+          );
         }
       } else if (tag === "li" && node.text) {
         // Handle direct text content in list items
@@ -630,14 +643,16 @@ async function processNode(
       );
       const frame = figma.createFrame();
       frame.name = tag;
-      frame.layoutMode = "VERTICAL";
-      frame.primaryAxisSizingMode = "AUTO";
-      frame.counterAxisSizingMode = "AUTO";
-      frame.itemSpacing = 8;
-      frame.paddingTop = 8;
-      frame.paddingRight = 8;
-      frame.paddingBottom = 8;
-      frame.paddingLeft = 8;
+      if (useAutoLayout) {
+        frame.layoutMode = "VERTICAL";
+        frame.primaryAxisSizingMode = "AUTO";
+        frame.counterAxisSizingMode = "AUTO";
+        frame.itemSpacing = 8;
+        frame.paddingTop = 8;
+        frame.paddingRight = 8;
+        frame.paddingBottom = 8;
+        frame.paddingLeft = 8;
+      }
 
       // Apply background color if specified
       if (elementStyles["background-color"] || elementStyles["background"]) {
@@ -662,7 +677,12 @@ async function processNode(
 
       // Process children
       for (const child of node.children) {
-        await processNode(child, frame, { ...styles, ...elementStyles });
+        await processNode(
+          child,
+          frame,
+          { ...styles, ...elementStyles },
+          useAutoLayout
+        );
       }
     }
   } catch (error) {
@@ -675,21 +695,24 @@ async function processNode(
 async function createFrame(
   node: any,
   parent: FrameNode | InstanceNode | ComponentNode | GroupNode,
-  styles: any
+  styles: any,
+  useAutoLayout: boolean = true
 ) {
   try {
     const frame = figma.createFrame();
     frame.name = node.tag || "Frame";
 
     // Default layout
-    frame.layoutMode = "VERTICAL";
-    frame.primaryAxisSizingMode = "AUTO";
-    frame.counterAxisSizingMode = "AUTO";
-    frame.itemSpacing = 8;
-    frame.paddingTop = 8;
-    frame.paddingRight = 8;
-    frame.paddingBottom = 8;
-    frame.paddingLeft = 8;
+    if (useAutoLayout) {
+      frame.layoutMode = "VERTICAL";
+      frame.primaryAxisSizingMode = "AUTO";
+      frame.counterAxisSizingMode = "AUTO";
+      frame.itemSpacing = 8;
+      frame.paddingTop = 8;
+      frame.paddingRight = 8;
+      frame.paddingBottom = 8;
+      frame.paddingLeft = 8;
+    }
 
     // Apply styles
     const elementStyles = styles;
@@ -767,7 +790,7 @@ async function createFrame(
     // Process children
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
-        await processNode(child, frame, styles);
+        await processNode(child, frame, styles, useAutoLayout);
       }
     }
 
@@ -871,13 +894,15 @@ async function createButton(
   button.name = "Button";
 
   // Default button styles
-  button.layoutMode = "HORIZONTAL";
-  button.primaryAxisSizingMode = "AUTO";
-  button.counterAxisSizingMode = "AUTO";
-  button.paddingTop = 8;
-  button.paddingRight = 16;
-  button.paddingBottom = 8;
-  button.paddingLeft = 16;
+  if (true) {
+    button.layoutMode = "HORIZONTAL";
+    button.primaryAxisSizingMode = "AUTO";
+    button.counterAxisSizingMode = "AUTO";
+    button.paddingTop = 8;
+    button.paddingRight = 16;
+    button.paddingBottom = 8;
+    button.paddingLeft = 16;
+  }
   button.cornerRadius = 4;
 
   // Apply styles
@@ -992,7 +1017,8 @@ async function createImage(
 // Main function to import HTML/CSS
 export async function importHTML(
   html: string,
-  css: string
+  css: string,
+  useAutoLayout: boolean = true
 ): Promise<FrameNode> {
   try {
     // Parse the HTML
@@ -1004,28 +1030,32 @@ export async function importHTML(
     // Create a frame to hold the imported content
     const frame = figma.createFrame();
     frame.name = "Imported HTML";
-    frame.layoutMode = "VERTICAL";
-    frame.primaryAxisSizingMode = "AUTO";
-    frame.counterAxisSizingMode = "AUTO";
-    frame.itemSpacing = 0;
-    frame.paddingTop = 20;
-    frame.paddingRight = 20;
-    frame.paddingBottom = 20;
-    frame.paddingLeft = 20;
+    if (useAutoLayout) {
+      frame.layoutMode = "VERTICAL";
+      frame.primaryAxisSizingMode = "AUTO";
+      frame.counterAxisSizingMode = "AUTO";
+      frame.itemSpacing = 0;
+      frame.paddingTop = 20;
+      frame.paddingRight = 20;
+      frame.paddingBottom = 20;
+      frame.paddingLeft = 20;
+    }
 
     // Process the root element's children
     if (doc.children && doc.children.length > 0) {
       for (const child of doc.children) {
-        await processNode(child, frame, styles);
+        await processNode(child, frame, styles, useAutoLayout);
       }
     } else {
       // If no children, try to process the root node itself
-      await processNode(doc, frame, styles);
+      await processNode(doc, frame, styles, useAutoLayout);
     }
 
     // Auto-layout setup
-    frame.layoutSizingHorizontal = "HUG";
-    frame.layoutSizingVertical = "HUG";
+    if (useAutoLayout) {
+      frame.layoutSizingHorizontal = "HUG";
+      frame.layoutSizingVertical = "HUG";
+    }
 
     // Apply some default styling if the frame is empty
     if (frame.children.length === 0) {
