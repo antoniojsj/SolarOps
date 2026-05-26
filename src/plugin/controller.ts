@@ -1638,22 +1638,9 @@ figma.ui.onmessage = async (msg: UIMessage) => {
 
       const landmarkGroup = figma.group(toGroupArray, figma.currentPage);
 
-      const landmarkFrame = figma.createFrame();
-      landmarkFrame.name = `Landmark: ${landmarkType} | ${selectedNode.name} | ${selectedNode.id}`;
-      landmarkFrame.x = landmarkGroup.x;
-      landmarkFrame.y = landmarkGroup.y;
-      landmarkFrame.resizeWithoutConstraints(
-        landmarkGroup.width,
-        landmarkGroup.height
-      );
-      landmarkFrame.fills = [];
-      landmarkFrame.clipsContent = false;
-      landmarkFrame.expanded = false;
-
-      const children = [...landmarkGroup.children];
-      children.forEach(child => landmarkFrame.appendChild(child));
-
-      landmarkGroup.remove();
+      landmarkGroup.name = `Landmark: ${landmarkType} | ${selectedNode.name} | ${selectedNode.id}`;
+      landmarkGroup.resizeWithoutConstraints(bounds.width, bounds.height);
+      landmarkGroup.expanded = false;
 
       figma.notify(
         `Landmark ${landmarkType.toUpperCase()} aplicado com sucesso!`,
