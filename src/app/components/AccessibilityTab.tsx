@@ -290,6 +290,18 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (activeSubPage === "contraste" && activeContrastTab === "auto") {
+      if (selectedNode) {
+        performAutoAnalysis();
+      } else {
+        setAutoAnalysisResults([]);
+        setAutoAnalysisError(null);
+        setAutoAnalysisLoading(false);
+      }
+    }
+  }, [selectedNode, activeSubPage, activeContrastTab]);
+
   // Ouvir mensagem com resultados de análise automática
   useEffect(() => {
     const handleAnalysisResults = async (event: MessageEvent) => {
@@ -1571,8 +1583,8 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                             lineHeight: 1.5
                           }}
                         >
-                          Selecione um objeto e clique em &quot;Analisar
-                          contraste&quot; para realizar a verificação.
+                          Selecione um objeto no canvas para verificar o
+                          contraste automaticamente.
                         </p>
                       </div>
                     )}
@@ -1585,56 +1597,6 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                 />
               )}
             </div>
-
-            {activeContrastTab === "auto" && (
-              <footer
-                className="initial-content-footer"
-                style={{
-                  padding: "16px",
-                  background: "#2A2A2A",
-                  borderTop: "1px solid rgba(255, 255, 255, 0.1)",
-                  display: "flex",
-                  justifyContent: "center",
-                  flexShrink: 0
-                }}
-              >
-                <button
-                  className="button button--primary"
-                  onClick={performAutoAnalysis}
-                  disabled={autoAnalysisLoading || !selectedNode}
-                  style={{
-                    background:
-                      autoAnalysisLoading || !selectedNode
-                        ? "#4A4A4A"
-                        : "#18A0FB",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "4px",
-                    padding: "12px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    cursor:
-                      autoAnalysisLoading || !selectedNode
-                        ? "not-allowed"
-                        : "pointer",
-                    opacity: autoAnalysisLoading || !selectedNode ? 0.6 : 1,
-                    transition: "background 0.2s, opacity 0.2s",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "100%",
-                    maxWidth: "100%",
-                    boxSizing: "border-box"
-                  }}
-                >
-                  {autoAnalysisLoading
-                    ? "Analisando..."
-                    : !selectedNode
-                    ? "Selecione um objeto"
-                    : "Realizar análise"}
-                </button>
-              </footer>
-            )}
           </div>
         );
       case "headermarker":

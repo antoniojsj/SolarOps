@@ -4581,31 +4581,37 @@ const analyzeSelectedContrast = async (msg?: any) => {
       page = figma.currentPage;
     }
 
-    // Resolver o frame a analisar: seleção atual ou primeiro frame da página (igual ao accessibility)
+    // Resolver o frame a analisar a partir da seleção
     let frameNode: SceneNode | PageNode | null = null;
     const currentSelection = figma.currentPage.selection;
-    for (const node of currentSelection) {
-      if (
-        node.type === "FRAME" ||
-        node.type === "COMPONENT" ||
-        node.type === "INSTANCE"
-      ) {
-        frameNode = node;
-        break;
+
+    if (currentSelection.length > 0) {
+      let node: any = currentSelection[0];
+      while (node && node.type !== "PAGE") {
+        if (
+          node.type === "FRAME" ||
+          node.type === "COMPONENT" ||
+          node.type === "INSTANCE" ||
+          node.type === "GROUP" ||
+          node.type === "SECTION"
+        ) {
+          frameNode = node;
+          break;
+        }
+        node = node.parent;
       }
     }
-    if (!frameNode && figma.currentPage.children.length > 0) {
-      const first = figma.currentPage.children[0];
-      if (
-        first.type === "FRAME" ||
-        first.type === "COMPONENT" ||
-        first.type === "INSTANCE"
-      ) {
-        frameNode = first;
-      }
-    }
+
     if (!frameNode) {
-      frameNode = figma.currentPage;
+      figma.ui.postMessage({
+        type: "color-contrast-result",
+        data: {
+          result: null,
+          error:
+            "Selecione um elemento válido (Frame, Grupo, etc.) para analisar o contraste."
+        }
+      });
+      return;
     }
 
     // Funções auxiliares para análise de contraste (idênticas ao accessibility)
