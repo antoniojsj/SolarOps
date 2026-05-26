@@ -4,6 +4,7 @@ import ContrastChecker from "./ContrastChecker";
 import WCAGContent from "./WCAGContent";
 import HeaderMarker from "./HeaderMarker";
 import Landmarks from "./Landmarks";
+import { VisionSimulatorTab } from "./VisionSimulatorTab";
 
 // Add CSS for scrollbar
 const scrollbarStyles = `
@@ -72,7 +73,12 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   selectedNode
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<
-    "main" | "contrate" | "documentacao" | "headermarker" | "landmarks"
+    | "main"
+    | "contraste"
+    | "documentacao"
+    | "headermarker"
+    | "landmarks"
+    | "vision"
   >("main");
 
   // Tabs dentro da subpágina de contraste
@@ -629,27 +635,36 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
 
   // Função para mudar de subpágina e comunicar com App.tsx
   const changeSubPage = (
-    page: "main" | "contrate" | "documentacao" | "headermarker" | "landmarks"
+    page:
+      | "main"
+      | "contraste"
+      | "documentacao"
+      | "headermarker"
+      | "landmarks"
+      | "vision"
   ) => {
     console.log("[AccessibilityTab] Mudando para subpágina:", page);
-    setActiveSubPage(page);
-
-    // Quando entramos na subpágina Contrate, resetamos para a aba Auto
-    if (page === "contrate") {
+    if (page === "main") {
+      setHoveredResultId(null);
+      parent.postMessage({ pluginMessage: { type: "clear-selection" } }, "*");
+    } else if (page === "contraste") {
       setActiveContrastTab("auto");
     }
+    setActiveSubPage(page);
 
     // Comunicar com App.tsx via window (não parent)
     const isSubPage = page !== "main";
     const title =
-      page === "contrate"
-        ? "Contrate"
+      page === "contraste"
+        ? "Contraste"
         : page === "documentacao"
         ? "Documentação"
         : page === "headermarker"
         ? "Header Marker"
         : page === "landmarks"
         ? "Landmarks"
+        : page === "vision"
+        ? "Simulador de Visão"
         : "";
 
     // Enviar mensagem diretamente para a janela atual
@@ -710,7 +725,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
       >
         {/* Card Contrate */}
         <div
-          onClick={() => changeSubPage("contrate")}
+          onClick={() => changeSubPage("contraste")}
           style={{
             background: "rgba(59, 130, 246, 0.12)",
             border: "1px solid rgba(59, 130, 246, 0.30)",
@@ -799,7 +814,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                 color: "#fff"
               }}
             >
-              Contrate
+              Contraste
             </h3>
             <p
               style={{
@@ -1097,6 +1112,95 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             </svg>
           </div>
         </div>
+
+        {/* Card Vision Simulator */}
+        <div
+          onClick={() => changeSubPage("vision")}
+          style={{
+            background: "rgba(236, 72, 153, 0.12)",
+            border: "1px solid rgba(236, 72, 153, 0.30)",
+            borderRadius: 8,
+            padding: 16,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 16
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(236, 72, 153, 0.18)";
+            e.currentTarget.style.borderColor = "rgba(236, 72, 153, 0.50)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(236, 72, 153, 0.12)";
+            e.currentTarget.style.borderColor = "rgba(236, 72, 153, 0.30)";
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              background: "rgba(236, 72, 153, 0.2)",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "#ec4899" }}
+            >
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                margin: "0 0 4px 0",
+                color: "#fff"
+              }}
+            >
+              Vision Simulator
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                margin: 0,
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: 1.4
+              }}
+            >
+              Simulador de daltonismo e baixa visão.
+            </p>
+          </div>
+          <div>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: "rgba(255, 255, 255, 0.5)" }}
+            >
+              <path d="M9 18l6-6-6-6"></path>
+            </svg>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1104,7 +1208,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   // Renderiza o conteúdo das subpáginas
   const renderSubPageContent = () => {
     switch (activeSubPage) {
-      case "contrate":
+      case "contraste":
         return (
           <div
             style={{
@@ -1569,6 +1673,8 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             />
           </div>
         );
+      case "vision":
+        return <VisionSimulatorTab selectedNode={selectedNode} />;
       default:
         return null;
     }

@@ -33,7 +33,8 @@ const Landmarks: React.FC<LandmarksProps> = ({
     { id: "section", label: "Seções temáticas", color: "#9333ea" },
     { id: "article", label: "Conteúdo independente", color: "#9333ea" },
     { id: "aside", label: "Conteúdo complementar", color: "#9333ea" },
-    { id: "footer", label: "Rodapé da página ou seção", color: "#9333ea" }
+    { id: "footer", label: "Rodapé da página ou seção", color: "#9333ea" },
+    { id: "search", label: "Campo ou área de busca", color: "#9333ea" }
   ];
 
   const applyLandmark = (landmarkType: string) => {
@@ -264,9 +265,13 @@ const Landmarks: React.FC<LandmarksProps> = ({
             <strong style={{ color: "#fff" }}>aside</strong> - Conteúdo
             complementar (sidebar).
           </div>
-          <div>
+          <div style={{ marginBottom: "6px" }}>
             <strong style={{ color: "#fff" }}>footer</strong> - Rodapé da página
             ou seção.
+          </div>
+          <div>
+            <strong style={{ color: "#fff" }}>search</strong> - Campo ou área de
+            busca.
           </div>
         </div>
       </div>

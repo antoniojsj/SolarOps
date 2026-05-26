@@ -1364,6 +1364,8 @@ async function loadAndFormatSavedTokens(): Promise<any[]> {
   }
 }
 
+import { simulateColorBlindness } from "./accessibility/visionSimulator";
+
 // Importar a função addNote do measurementController
 import { addNote } from "./measurementController";
 import { importHTML } from "./htmlImporter";
@@ -1372,6 +1374,16 @@ import { importRenderedDOM } from "./domImporter";
 // Listener para mensagens da UI
 figma.ui.onmessage = async (msg: UIMessage) => {
   console.log("[Controller] MENSAGEM RECEBIDA:", msg.type, msg);
+
+  if (msg.type === "simulate-color-blindness") {
+    try {
+      await simulateColorBlindness((msg as any).types);
+    } catch (e) {
+      console.error("[Controller] Erro no simulador de visão:", e);
+      figma.notify("Erro ao gerar simulação.", { error: true });
+    }
+    return;
+  }
 
   // Handlers para Header Marker - MOVIDO PARA O INÍCIO
   if (msg.type === "add-heading") {
@@ -1586,7 +1598,7 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       outline.resize(bounds.width + 16, bounds.height + 32);
       outline.x = bounds.x - 8;
       outline.y = bounds.y - 16;
-      outline.fills = [];
+      outline.fills = [{ type: "SOLID", color: landmarkColor, opacity: 0.16 }];
       outline.strokes = [{ type: "SOLID", color: landmarkColor }];
       outline.strokeWeight = 3;
       outline.opacity = 1;
@@ -1625,9 +1637,23 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       labelBackground.resize(labelText.width + 16, 29);
 
       const landmarkGroup = figma.group(toGroupArray, figma.currentPage);
-      landmarkGroup.name = `Landmark: ${landmarkType} | ${selectedNode.name} | ${selectedNode.id}`;
-      landmarkGroup.resizeWithoutConstraints(bounds.width, bounds.height);
-      landmarkGroup.expanded = false;
+
+      const landmarkFrame = figma.createFrame();
+      landmarkFrame.name = `Landmark: ${landmarkType} | ${selectedNode.name} | ${selectedNode.id}`;
+      landmarkFrame.x = landmarkGroup.x;
+      landmarkFrame.y = landmarkGroup.y;
+      landmarkFrame.resizeWithoutConstraints(
+        landmarkGroup.width,
+        landmarkGroup.height
+      );
+      landmarkFrame.fills = [];
+      landmarkFrame.clipsContent = false;
+      landmarkFrame.expanded = false;
+
+      const children = [...landmarkGroup.children];
+      children.forEach(child => landmarkFrame.appendChild(child));
+
+      landmarkGroup.remove();
 
       figma.notify(
         `Landmark ${landmarkType.toUpperCase()} aplicado com sucesso!`,
