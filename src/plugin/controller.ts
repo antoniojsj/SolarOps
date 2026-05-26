@@ -4876,7 +4876,8 @@ const analyzeSelectedContrast = async (msg?: any) => {
         type: "color-contrast-result",
         data: {
           result: null,
-          error: "Nenhum frame ou página disponível para análise."
+          error:
+            "Selecione um objeto no canvas para verificar o contraste automaticamente."
         }
       });
       return;
@@ -4912,7 +4913,12 @@ const analyzeSelectedContrast = async (msg?: any) => {
         "STAR",
         "VECTOR",
         "BOOLEAN_OPERATION",
-        "LINE"
+        "LINE",
+        "FRAME",
+        "COMPONENT",
+        "INSTANCE",
+        "GROUP",
+        "SECTION"
       ].includes(n.type);
 
     const getPrimarySolidColor = n => {

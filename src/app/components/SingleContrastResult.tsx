@@ -32,188 +32,315 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
     bgColor
   } = result;
 
-  const Pill = ({ active, label }: { active: boolean; label: string }) => {
-    return (
-      <div
-        style={{
-          width: 52,
-          height: 24,
-          borderRadius: 12,
-          background: active ? "#519C4A" : "rgba(255, 255, 255, 0.05)",
-          color: active ? "#FFFFFF" : "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 11,
-          fontWeight: 600,
-          fontFamily: "Inter, sans-serif"
-        }}
-      >
-        {active ? label : ""}
-      </div>
-    );
+  const getComplianceLevel = (
+    isLarge: boolean,
+    checkGraphic: boolean = false
+  ) => {
+    let level = "Falhou";
+    let isPassing = false;
+
+    if (checkGraphic) {
+      if (contrastRatio >= 3) {
+        level = "AA";
+        isPassing = true;
+      }
+    } else {
+      if (isLarge) {
+        if (contrastRatio >= 4.5) {
+          level = "AAA";
+          isPassing = true;
+        } else if (contrastRatio >= 3) {
+          level = "AA";
+          isPassing = true;
+        }
+      } else {
+        if (contrastRatio >= 7) {
+          level = "AAA";
+          isPassing = true;
+        } else if (contrastRatio >= 4.5) {
+          level = "AA";
+          isPassing = true;
+        }
+      }
+    }
+
+    return { level, isPassing };
   };
 
-  const isGraphicAA = isGraphic ? aa : contrastRatio >= 3;
-  const isNormalAA = isGraphic ? false : aa;
-  const isNormalAAA = isGraphic ? false : aaa;
-  const isLargeAA = isGraphic ? false : aaLarge;
-  const isLargeAAA = isGraphic ? false : aaa; // Large text requires 4.5 for AAA, same as Normal AA, wait...
-  // Wait, aaa for large text is >= 4.5. If the original aaa is for normal text (>=7), we can just check contrastRatio >= 4.5
-  const largeAAA = isGraphic ? false : contrastRatio >= 4.5;
+  const normalTextLevel = getComplianceLevel(false);
+  const largeTextLevel = getComplianceLevel(true);
+  const uiLevel = getComplianceLevel(false, true);
+
+  const items = [
+    {
+      title: "Texto normal",
+      level: normalTextLevel.level,
+      required:
+        normalTextLevel.level === "AAA"
+          ? "7:1+"
+          : normalTextLevel.level === "AA"
+          ? "4.5:1+"
+          : "3:1+",
+      isPassing: normalTextLevel.isPassing
+    },
+    {
+      title: "Texto grande",
+      level: largeTextLevel.level,
+      required:
+        largeTextLevel.level === "AAA"
+          ? "4.5:1+"
+          : largeTextLevel.level === "AA"
+          ? "3:1+"
+          : "3:1+",
+      isPassing: largeTextLevel.isPassing
+    },
+    {
+      title: "Elementos gráficos",
+      level: uiLevel.level,
+      required: "3:1+",
+      isPassing: uiLevel.isPassing
+    }
+  ];
+
+  const ratioBgColor =
+    contrastRatio >= 4.5
+      ? "#E8F5E9"
+      : contrastRatio >= 3
+      ? "#FFF9C4"
+      : "#FFEBEE";
 
   return (
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        fontFamily: "Inter, sans-serif"
-      }}
+      style={{ marginTop: "16px", padding: "0 16px", boxSizing: "border-box" }}
     >
-      {/* Preview Box */}
-      <div
-        style={{
-          background: "#F5F5F5",
-          padding: 16,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: 120,
-          position: "relative"
-        }}
-      >
-        {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt="Preview"
+      {/* Colors Inputs row */}
+      <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+        <div style={{ flex: 1 }}>
+          <label
             style={{
-              maxWidth: "100%",
-              maxHeight: 180,
-              objectFit: "contain",
-              display: "block"
+              display: "block",
+              marginBottom: "8px",
+              fontWeight: "400",
+              color: "white",
+              fontSize: "12px"
             }}
-          />
-        ) : (
-          <span style={{ color: "#999", fontSize: 12 }}>
-            Preview não disponível
-          </span>
-        )}
+          >
+            Primeiro plano
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              readOnly
+              value={textColor}
+              style={{
+                padding: "8px 36px 8px 12px",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "4px",
+                width: "100%",
+                boxSizing: "border-box",
+                backgroundColor: "rgba(0, 0, 0, 0.2)",
+                color: "white",
+                height: "36px"
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: "20px",
+                height: "20px",
+                backgroundColor: textColor,
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "4px",
+                overflow: "hidden"
+              }}
+            />
+          </div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontWeight: "400",
+              color: "white",
+              fontSize: "12px"
+            }}
+          >
+            Fundo
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              readOnly
+              value={bgColor}
+              style={{
+                padding: "8px 36px 8px 12px",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "4px",
+                width: "100%",
+                boxSizing: "border-box",
+                backgroundColor: "rgba(0, 0, 0, 0.2)",
+                color: "white",
+                height: "36px"
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: "20px",
+                height: "20px",
+                backgroundColor: bgColor,
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "4px",
+                overflow: "hidden"
+              }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Colors Row */}
+      {/* Large Contrast Ratio Box */}
+      <div
+        style={{
+          backgroundColor: ratioBgColor,
+          borderRadius: "8px",
+          padding: "20px 12px",
+          marginBottom: "20px",
+          marginTop: "20px",
+          textAlign: "center",
+          height: "120px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        <div
+          style={{
+            fontSize: "48px",
+            fontWeight: "bold",
+            color: textColor,
+            lineHeight: 1,
+            textShadow: "0 1px 2px rgba(0,0,0,0.1)"
+          }}
+        >
+          {contrastRatio.toFixed(2)}
+        </div>
+      </div>
+
+      {/* Cards Row */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
-          padding: "12px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
-          background: "#1E1E1E"
+          marginTop: "16px",
+          gap: "12px",
+          marginBottom: "32px"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {items.map((item, index) => (
           <div
+            key={index}
             style={{
-              width: 14,
-              height: 14,
-              borderRadius: 2,
-              background: textColor,
-              border: "1px solid rgba(255,255,255,0.2)"
+              flex: 1,
+              padding: "8px 8px",
+              backgroundColor: item.isPassing
+                ? "rgba(76, 175, 80, 0.1)"
+                : "rgba(244, 67, 54, 0.1)",
+              borderRadius: "8px",
+              border: `1px solid ${item.isPassing ? "#4CAF50" : "#F44336"}`,
+              textAlign: "center",
+              minHeight: "100px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              boxSizing: "border-box"
             }}
-          />
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#FFF" }}>
-            {textColor}
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#FFF" }}>
-            {bgColor}
-          </span>
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: 2,
-              background: bgColor,
-              border: "1px solid rgba(255,255,255,0.2)"
-            }}
-          />
-        </div>
-      </div>
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "white",
+                fontWeight: "500",
+                lineHeight: "1.1",
+                marginBottom: "4px"
+              }}
+            >
+              {item.title}
+            </div>
 
-      {/* Results Container */}
-      <div style={{ padding: "16px", background: "#222" }}>
-        {/* Contrast Ratio */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 20
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#E0E0E0" }}>
-            Contrast Ratio
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#E0E0E0" }}>
-            {contrastRatio.toFixed(2)} : 1
-          </span>
-        </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: "6px",
+                margin: "8px 0",
+                flexWrap: "wrap"
+              }}
+            >
+              {["AA", "AAA"].map(level => {
+                const isLargeTextItem = item.title === "Texto grande";
+                const isActiveForLargeText =
+                  isLargeTextItem && level === "A" && contrastRatio >= 3;
 
-        {/* Normal Text */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#E0E0E0" }}>
-            Normal Text
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Pill active={isNormalAA} label="AA" />
-            <Pill active={isNormalAAA} label="AAA" />
+                const isCurrentLevel = item.level === level;
+                const isHigherLevel = level === "AA" && item.level === "AAA";
+
+                const showLevel = isCurrentLevel || isHigherLevel;
+                const isActive = isCurrentLevel || isHigherLevel;
+
+                const isAFailure = !item.isPassing && item.level === level;
+
+                const cardBgColor = isActive
+                  ? isAFailure
+                    ? "#F44336"
+                    : "#4CAF50"
+                  : "rgba(255, 255, 255, 0.1)";
+
+                return (
+                  <div
+                    key={level}
+                    style={{
+                      minWidth: "32px",
+                      padding: "4px 8px",
+                      borderRadius: "12px",
+                      backgroundColor: isActive
+                        ? cardBgColor
+                        : "rgba(255, 255, 255, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "white",
+                      fontWeight: "bold",
+                      fontSize: "11px",
+                      opacity: showLevel ? 1 : 0.4,
+                      height: "24px",
+                      boxSizing: "border-box"
+                    }}
+                  >
+                    {level}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                color: "rgba(255, 255, 255, 0.7)",
+                lineHeight: "1.1",
+                marginTop: "4px"
+              }}
+            >
+              Mínimo: {item.required}
+            </div>
           </div>
-        </div>
-
-        {/* Large Text */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#E0E0E0" }}>
-            Large Text
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Pill active={isLargeAA} label="AA" />
-            <Pill active={largeAAA} label="AAA" />
-          </div>
-        </div>
-
-        {/* Graphics */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center"
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#E0E0E0" }}>
-            Graphics
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Pill active={isGraphicAA} label="AA" />
-            <Pill active={false} label="" />
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

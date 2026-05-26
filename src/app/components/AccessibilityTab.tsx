@@ -328,7 +328,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             setAutoAnalysisError(
               errorMsg && typeof errorMsg === "string"
                 ? errorMsg
-                : "Nenhum texto encontrado para análise. Selecione um frame com texto."
+                : "Selecione um objeto no canvas para verificar o contraste automaticamente."
             );
             setAutoAnalysisResults([]);
             setAutoAnalysisLoading(false);
@@ -1326,14 +1326,47 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                   {autoAnalysisError && (
                     <div
                       style={{
-                        padding: 12,
+                        padding:
+                          autoAnalysisError ===
+                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                            ? 0
+                            : 16,
+                        background:
+                          autoAnalysisError ===
+                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                            ? "transparent"
+                            : "rgba(239, 68, 68, 0.1)",
+                        border:
+                          autoAnalysisError ===
+                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                            ? "none"
+                            : "1px solid rgba(239, 68, 68, 0.2)",
                         borderRadius: 6,
-                        background: "rgba(239, 68, 68, 0.1)",
-                        border: "1px solid rgba(239, 68, 68, 0.2)",
-                        marginBottom: 16
+                        marginBottom: 16,
+                        marginTop:
+                          autoAnalysisError ===
+                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                            ? 100
+                            : 0,
+                        textAlign:
+                          autoAnalysisError ===
+                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                            ? "center"
+                            : "left"
                       }}
                     >
-                      <p style={{ margin: 0, color: "#ef4444", fontSize: 12 }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          color:
+                            autoAnalysisError ===
+                            "Selecione um objeto no canvas para verificar o contraste automaticamente."
+                              ? "rgba(255, 255, 255, 0.7)"
+                              : "#ef4444",
+                          fontSize: 13,
+                          lineHeight: 1.5
+                        }}
+                      >
                         {autoAnalysisError}
                       </p>
                     </div>
