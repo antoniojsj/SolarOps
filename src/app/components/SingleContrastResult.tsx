@@ -14,23 +14,24 @@ interface ContrastResult {
 }
 
 interface SingleContrastResultProps {
-  result: ContrastResult;
-  previewUrl: string | null;
+  result?: ContrastResult;
+  previewUrl?: string | null;
+  emptyMessage?: string;
 }
 
 export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
   result,
-  previewUrl
+  previewUrl,
+  emptyMessage = "Selecione um objeto no canvas para verificar o contraste automaticamente."
 }) => {
-  const {
-    isGraphic,
-    contrastRatio,
-    aa,
-    aaa,
-    aaLarge,
-    textColor,
-    bgColor
-  } = result;
+  // Configurações padrão quando não há resultado selecionado
+  const isGraphic = result?.isGraphic ?? false;
+  const contrastRatio = result?.contrastRatio ?? 0.0;
+  const textColor = result?.textColor ?? "#000000";
+  const bgColor = result?.bgColor ?? "#FFFFFF";
+
+  // Quando não tem resultado, todos os níveis falham visualmente
+  const hasResult = !!result;
 
   const getComplianceLevel = (
     isLarge: boolean,
@@ -38,6 +39,10 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
   ) => {
     let level = "Falhou";
     let isPassing = false;
+
+    if (!hasResult) {
+      return { level, isPassing };
+    }
 
     if (checkGraphic) {
       if (contrastRatio >= 3) {
@@ -102,106 +107,164 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
     }
   ];
 
-  const ratioBgColor =
-    contrastRatio >= 4.5
-      ? "#E8F5E9"
-      : contrastRatio >= 3
-      ? "#FFF9C4"
-      : "#FFEBEE";
+  const ratioBgColor = !hasResult
+    ? "rgba(255, 255, 255, 0.05)"
+    : contrastRatio >= 4.5
+    ? "#E8F5E9"
+    : contrastRatio >= 3
+    ? "#FFF9C4"
+    : "#FFEBEE";
 
   return (
     <div
-      style={{ marginTop: "16px", padding: "0 16px", boxSizing: "border-box" }}
+      style={{
+        padding: "0",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px"
+      }}
     >
-      {/* Colors Inputs row */}
-      <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
-        <div style={{ flex: 1 }}>
-          <label
+      {/* Preview Box - Now at the Top! */}
+      <div
+        style={{
+          background: "rgba(0, 0, 0, 0.2)",
+          borderRadius: 8,
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 120,
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          overflow: "hidden"
+        }}
+      >
+        {previewUrl && hasResult ? (
+          <img
+            src={previewUrl}
+            alt="Preview do elemento"
             style={{
-              display: "block",
-              marginBottom: "8px",
-              fontWeight: "400",
-              color: "white",
-              fontSize: "12px"
+              maxWidth: "100%",
+              maxHeight: 180,
+              objectFit: "contain",
+              display: "block"
+            }}
+          />
+        ) : (
+          <p
+            style={{
+              margin: 0,
+              color: "rgba(255, 255, 255, 0.7)",
+              fontSize: 13,
+              textAlign: "center",
+              lineHeight: 1.5,
+              maxWidth: "80%"
             }}
           >
-            Primeiro plano
-          </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type="text"
-              readOnly
-              value={textColor}
-              style={{
-                padding: "8px 36px 8px 12px",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "4px",
-                width: "100%",
-                boxSizing: "border-box",
-                backgroundColor: "rgba(0, 0, 0, 0.2)",
-                color: "white",
-                height: "36px"
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                right: "8px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                width: "20px",
-                height: "20px",
-                backgroundColor: textColor,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                borderRadius: "4px",
-                overflow: "hidden"
-              }}
-            />
-          </div>
+            {emptyMessage}
+          </p>
+        )}
+      </div>
+
+      {/* Colors Row */}
+      <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+        {/* Foreground */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            padding: "8px 12px",
+            background: "rgba(0,0,0,0.2)",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,255,255,0.1)"
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            <polyline points="4 7 4 4 20 4 20 7"></polyline>
+            <line x1="9" y1="20" x2="15" y2="20"></line>
+            <line x1="12" y1="4" x2="12" y2="20"></line>
+          </svg>
+          <div
+            style={{
+              width: "14px",
+              height: "14px",
+              backgroundColor: hasResult ? textColor : "transparent",
+              borderRadius: "3px",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              flexShrink: 0
+            }}
+          />
+          <span
+            style={{
+              color: hasResult ? "white" : "rgba(255,255,255,0.3)",
+              fontSize: "13px",
+              fontFamily: "monospace"
+            }}
+          >
+            {hasResult ? textColor : "#------"}
+          </span>
         </div>
-        <div style={{ flex: 1 }}>
-          <label
+
+        {/* Background */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            padding: "8px 12px",
+            background: "rgba(0,0,0,0.2)",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,255,255,0.1)"
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          </svg>
+          <div
             style={{
-              display: "block",
-              marginBottom: "8px",
-              fontWeight: "400",
-              color: "white",
-              fontSize: "12px"
+              width: "14px",
+              height: "14px",
+              backgroundColor: hasResult ? bgColor : "transparent",
+              borderRadius: "3px",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              flexShrink: 0
+            }}
+          />
+          <span
+            style={{
+              color: hasResult ? "white" : "rgba(255,255,255,0.3)",
+              fontSize: "13px",
+              fontFamily: "monospace"
             }}
           >
-            Fundo
-          </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type="text"
-              readOnly
-              value={bgColor}
-              style={{
-                padding: "8px 36px 8px 12px",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "4px",
-                width: "100%",
-                boxSizing: "border-box",
-                backgroundColor: "rgba(0, 0, 0, 0.2)",
-                color: "white",
-                height: "36px"
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                right: "8px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                width: "20px",
-                height: "20px",
-                backgroundColor: bgColor,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                borderRadius: "4px",
-                overflow: "hidden"
-              }}
-            />
-          </div>
+            {hasResult ? bgColor : "#------"}
+          </span>
         </div>
       </div>
 
@@ -211,22 +274,21 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
           backgroundColor: ratioBgColor,
           borderRadius: "8px",
           padding: "20px 12px",
-          marginBottom: "20px",
-          marginTop: "20px",
           textAlign: "center",
           height: "120px",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center"
+          justifyContent: "center",
+          border: hasResult ? "none" : "1px solid rgba(255,255,255,0.1)"
         }}
       >
         <div
           style={{
             fontSize: "48px",
             fontWeight: "bold",
-            color: textColor,
+            color: hasResult ? textColor : "rgba(255,255,255,0.2)",
             lineHeight: 1,
-            textShadow: "0 1px 2px rgba(0,0,0,0.1)"
+            textShadow: hasResult ? "0 1px 2px rgba(0,0,0,0.1)" : "none"
           }}
         >
           {contrastRatio.toFixed(2)}
@@ -238,7 +300,6 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          marginTop: "16px",
           gap: "12px",
           marginBottom: "32px"
         }}
@@ -249,11 +310,15 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
             style={{
               flex: 1,
               padding: "8px 8px",
-              backgroundColor: item.isPassing
-                ? "rgba(76, 175, 80, 0.1)"
-                : "rgba(244, 67, 54, 0.1)",
+              backgroundColor: hasResult
+                ? item.isPassing
+                  ? "rgba(76, 175, 80, 0.1)"
+                  : "rgba(244, 67, 54, 0.1)"
+                : "rgba(255, 255, 255, 0.05)",
               borderRadius: "8px",
-              border: `1px solid ${item.isPassing ? "#4CAF50" : "#F44336"}`,
+              border: hasResult
+                ? `1px solid ${item.isPassing ? "#4CAF50" : "#F44336"}`
+                : "1px solid rgba(255, 255, 255, 0.1)",
               textAlign: "center",
               minHeight: "100px",
               display: "flex",
@@ -265,7 +330,7 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
             <div
               style={{
                 fontSize: "11px",
-                color: "white",
+                color: hasResult ? "white" : "rgba(255, 255, 255, 0.4)",
                 fontWeight: "500",
                 lineHeight: "1.1",
                 marginBottom: "4px"
@@ -292,7 +357,7 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
                 const isHigherLevel = level === "AA" && item.level === "AAA";
 
                 const showLevel = isCurrentLevel || isHigherLevel;
-                const isActive = isCurrentLevel || isHigherLevel;
+                const isActive = hasResult && (isCurrentLevel || isHigherLevel);
 
                 const isAFailure = !item.isPassing && item.level === level;
 
@@ -315,10 +380,10 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "white",
+                      color: hasResult ? "white" : "rgba(255, 255, 255, 0.3)",
                       fontWeight: "bold",
                       fontSize: "11px",
-                      opacity: showLevel ? 1 : 0.4,
+                      opacity: hasResult && showLevel ? 1 : 0.4,
                       height: "24px",
                       boxSizing: "border-box"
                     }}
@@ -332,7 +397,7 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
             <div
               style={{
                 fontSize: "12px",
-                color: "rgba(255, 255, 255, 0.7)",
+                color: "rgba(255, 255, 255, 0.4)",
                 lineHeight: "1.1",
                 marginTop: "4px"
               }}

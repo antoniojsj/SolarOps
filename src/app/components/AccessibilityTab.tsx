@@ -464,43 +464,50 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                   b: number;
                 } | null = null;
 
-                // Sample background from image at each point
-                for (const [px, py] of samplePoints) {
-                  if (!bgImageData) break;
+                // Sample background from image at each point if not a Graphic
+                if (!sample.isGraphic) {
+                  for (const [px, py] of samplePoints) {
+                    if (!bgImageData) break;
 
-                  const bgPixel = getImageDataPixel(bgImageData, px, py, true);
-                  if (!bgPixel) continue;
+                    const bgPixel = getImageDataPixel(
+                      bgImageData,
+                      px,
+                      py,
+                      true
+                    );
+                    if (!bgPixel) continue;
 
-                  // Flatten background on white matte (handle transparency)
-                  const flattenedBg = flattenColors(bgPixel, whiteMatte);
+                    // Flatten background on white matte (handle transparency)
+                    const flattenedBg = flattenColors(bgPixel, whiteMatte);
 
-                  // Store first valid sample for display
-                  if (!sampledBgColor) {
-                    sampledBgColor = {
-                      r: flattenedBg.r,
-                      g: flattenedBg.g,
-                      b: flattenedBg.b
-                    };
+                    // Store first valid sample for display
+                    if (!sampledBgColor) {
+                      sampledBgColor = {
+                        r: flattenedBg.r,
+                        g: flattenedBg.g,
+                        b: flattenedBg.b
+                      };
+                    }
+
+                    // Blend text color with background based on opacity
+                    const blendedText = mixColors(
+                      flattenedBg,
+                      textColor,
+                      textColor.a * textOpacity
+                    );
+
+                    // Calculate luminance
+                    const textLum = srgbLuminance(blendedText);
+                    const bgLum = srgbLuminance(flattenedBg);
+
+                    // Calculate contrast ratio
+                    const lighter = Math.max(textLum, bgLum);
+                    const darker = Math.min(textLum, bgLum);
+                    const contrastRatio = (lighter + 0.05) / (darker + 0.05);
+
+                    totalContrastRatio += contrastRatio;
+                    validSamples++;
                   }
-
-                  // Blend text color with background based on opacity
-                  const blendedText = mixColors(
-                    flattenedBg,
-                    textColor,
-                    textColor.a * textOpacity
-                  );
-
-                  // Calculate luminance
-                  const textLum = srgbLuminance(blendedText);
-                  const bgLum = srgbLuminance(flattenedBg);
-
-                  // Calculate contrast ratio
-                  const lighter = Math.max(textLum, bgLum);
-                  const darker = Math.min(textLum, bgLum);
-                  const contrastRatio = (lighter + 0.05) / (darker + 0.05);
-
-                  totalContrastRatio += contrastRatio;
-                  validSamples++;
                 }
 
                 // If no image samples, fallback to page background
@@ -1323,59 +1330,11 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                     flexDirection: "column"
                   }}
                 >
-                  {autoAnalysisError && (
-                    <div
-                      style={{
-                        padding:
-                          autoAnalysisError ===
-                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                            ? 0
-                            : 16,
-                        background:
-                          autoAnalysisError ===
-                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                            ? "transparent"
-                            : "rgba(239, 68, 68, 0.1)",
-                        border:
-                          autoAnalysisError ===
-                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                            ? "none"
-                            : "1px solid rgba(239, 68, 68, 0.2)",
-                        borderRadius: 6,
-                        marginBottom: 16,
-                        marginTop:
-                          autoAnalysisError ===
-                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                            ? 100
-                            : 0,
-                        textAlign:
-                          autoAnalysisError ===
-                          "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                            ? "center"
-                            : "left"
-                      }}
-                    >
-                      <p
-                        style={{
-                          margin: 0,
-                          color:
-                            autoAnalysisError ===
-                            "Selecione um objeto no canvas para verificar o contraste automaticamente."
-                              ? "rgba(255, 255, 255, 0.7)"
-                              : "#ef4444",
-                          fontSize: 13,
-                          lineHeight: 1.5
-                        }}
-                      >
-                        {autoAnalysisError}
-                      </p>
-                    </div>
-                  )}
-
-                  {autoAnalysisResults.length === 1 ? (
+                  {autoAnalysisResults.length <= 1 ? (
                     <SingleContrastResult
                       result={autoAnalysisResults[0]}
                       previewUrl={contrastPreviewImageUrl}
+                      emptyMessage={autoAnalysisError || undefined}
                     />
                   ) : (
                     <>
@@ -1637,33 +1596,6 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                       )}
                     </>
                   )}
-
-                  {autoAnalysisResults.length === 0 &&
-                    !autoAnalysisLoading &&
-                    !autoAnalysisError && (
-                      <div
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: 24,
-                          textAlign: "center"
-                        }}
-                      >
-                        <p
-                          style={{
-                            margin: 0,
-                            color: "rgba(255, 255, 255, 0.7)",
-                            fontSize: 13,
-                            lineHeight: 1.5
-                          }}
-                        >
-                          Selecione um objeto no canvas para verificar o
-                          contraste automaticamente.
-                        </p>
-                      </div>
-                    )}
                 </div>
               ) : (
                 <ContrastChecker
