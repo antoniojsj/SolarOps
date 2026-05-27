@@ -249,7 +249,46 @@ import { renameLayersWithHtmlSemantics } from "./semanticRenamer";
 
 // Debounce selection updates to avoid flooding and UI jank
 let selectionTimer: number | undefined;
+let isFocusingNode = false;
+let isFocusingForDoc = false; // suppresses documentchange-triggered refresh during focus
+
+let documentChangeTimer: number | undefined;
+export let isScanningContrast = false; // exported so it can be updated elsewhere if needed, or just let
+
+figma
+  .loadAllPagesAsync()
+  .then(() => {
+    figma.on("documentchange", event => {
+      if (isScanningContrast) return; // Prevent infinite loop during our own scan modifications
+      if (isFocusingForDoc) return; // Suppress refresh when we programmatically scrolled/zoomed
+
+      const hasVisualChange = event.documentChanges.some(
+        change =>
+          change.type === "PROPERTY_CHANGE" &&
+          change.properties.some(prop =>
+            ["fills", "strokes", "opacity", "visible", "characters"].includes(
+              prop
+            )
+          )
+      );
+      if (hasVisualChange) {
+        if (documentChangeTimer) {
+          // @ts-ignore
+          clearTimeout(documentChangeTimer);
+        }
+        // @ts-ignore
+        documentChangeTimer = setTimeout(() => {
+          figma.ui.postMessage({ type: "refresh-accessibility" });
+        }, 500); // debounce visual changes to avoid excessive re-scans
+      }
+    });
+  })
+  .catch(err => console.error("Error loading pages for documentchange:", err));
 figma.on("selectionchange", () => {
+  if (isFocusingNode) {
+    isFocusingNode = false;
+    return;
+  }
   console.log("[DEBUG] Selection change event fired");
   if (selectionTimer) {
     // @ts-ignore
@@ -3266,15 +3305,25 @@ figma.ui.onmessage = async (msg: UIMessage) => {
               "[Controller] Nó encontrado, focando e fazendo zoom:",
               node.name
             );
+            isFocusingNode = true;
+            isFocusingForDoc = true;
             // Primeiro seleciona o nó
             figma.currentPage.selection = [node];
             // Depois faz o zoom e scroll para o nó
             figma.viewport.scrollAndZoomIntoView([node]);
+            setTimeout(() => {
+              isFocusingNode = false;
+            }, 200);
+            // Keep doc guard active longer to swallow any pending documentchange
+            setTimeout(() => {
+              isFocusingForDoc = false;
+            }, 1500);
             console.log("[Controller] Foco e zoom aplicados com sucesso");
           } else {
             console.log("[Controller] Nó não encontrado:", msg.id);
           }
         } catch (error) {
+          isFocusingForDoc = false;
           console.log(
             "[Controller] Erro ao buscar nó com getNodeByIdAsync, tentando método síncrono:",
             error
@@ -4572,6 +4621,7 @@ figma.on("selectionchange", () => {
 // Função para analisar contraste dos elementos selecionados (implementação idêntica ao accessibility)
 const analyzeSelectedContrast = async (msg?: any) => {
   try {
+    isScanningContrast = true;
     // Extrair page da mensagem se disponível, igual ao plugin accessibility
     let page;
     if (msg && msg.page) {
@@ -4587,6 +4637,7 @@ const analyzeSelectedContrast = async (msg?: any) => {
 
     if (currentSelection.length > 0) {
       let node: any = currentSelection[0];
+      let topContainer: any = null;
       while (node && node.type !== "PAGE") {
         if (
           node.type === "FRAME" ||
@@ -4595,10 +4646,14 @@ const analyzeSelectedContrast = async (msg?: any) => {
           node.type === "GROUP" ||
           node.type === "SECTION"
         ) {
-          frameNode = node;
-          break;
+          topContainer = node;
         }
         node = node.parent;
+      }
+      if (topContainer) {
+        frameNode = topContainer;
+      } else {
+        frameNode = currentSelection[0] as any;
       }
     }
 
@@ -4949,30 +5004,33 @@ const analyzeSelectedContrast = async (msg?: any) => {
         }
 
         if (node.visible !== false) {
-          if (node.type === "TEXT") {
-            analysisNodes.push({
-              node,
-              isText: true,
-              effectiveOpacity: newOpacity * node.opacity
-            });
-          } else if (isGraphicNode(node)) {
-            const solidColor = getPrimarySolidColor(node);
-            if (solidColor) {
+          const originalId = nodeIdMap.get(node.id);
+          const isSelected = currentSelection.some(
+            sel => sel.id === originalId
+          );
+
+          if (deepScan || isSelected) {
+            if (node.type === "TEXT") {
               analysisNodes.push({
                 node,
-                isText: false,
-                primaryColor: solidColor,
+                isText: true,
                 effectiveOpacity: newOpacity * node.opacity
               });
+            } else if (isGraphicNode(node)) {
+              const solidColor = getPrimarySolidColor(node);
+              if (solidColor) {
+                analysisNodes.push({
+                  node,
+                  isText: false,
+                  primaryColor: solidColor,
+                  effectiveOpacity: newOpacity * node.opacity
+                });
+              }
             }
           }
         }
 
         if (!("visible" in node) || !node.visible) {
-          return "skipchildren";
-        }
-
-        if (!deepScan && node === duplicate) {
           return "skipchildren";
         }
 
@@ -5191,6 +5249,10 @@ const analyzeSelectedContrast = async (msg?: any) => {
         error: error.message || "Erro desconhecido"
       }
     });
+  } finally {
+    setTimeout(() => {
+      isScanningContrast = false;
+    }, 1000);
   }
 
   // Handlers para Header Marker

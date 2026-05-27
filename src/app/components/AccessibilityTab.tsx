@@ -97,6 +97,10 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   );
   const [hoveredResultId, setHoveredResultId] = useState<string | null>(null);
   const [deepScan, setDeepScan] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const isAnalyzingRef = React.useRef(false);
+  const deepScanResultsRef = React.useRef<ContrastResult[]>([]);
+
   // Screenshot do frame analisado (como no plugin accessibility)
   const [contrastPreviewImageUrl, setContrastPreviewImageUrl] = useState<
     string | null
@@ -116,8 +120,11 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`.toUpperCase();
   };
 
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+
   const handleSelectNode = (nodeId: string) => {
     if (!nodeId) return;
+    setFocusedNodeId(nodeId);
     parent.postMessage(
       {
         pluginMessage: {
@@ -261,9 +268,12 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
   };
 
   const performAutoAnalysis = async () => {
+    if (isAnalyzingRef.current) return;
+    isAnalyzingRef.current = true;
     setAutoAnalysisLoading(true);
     setAutoAnalysisError(null);
     setAutoAnalysisResults([]);
+    deepScanResultsRef.current = [];
     if (contrastPreviewImageUrl) {
       URL.revokeObjectURL(contrastPreviewImageUrl);
       setContrastPreviewImageUrl(null);
@@ -290,14 +300,20 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         err instanceof Error ? err.message : "Erro ao analisar contraste";
       setAutoAnalysisError(errorMsg);
       setAutoAnalysisLoading(false);
+      isAnalyzingRef.current = false;
     }
   };
 
+  // Re-run when tab/mode changes, node changes, or deepScan is toggled
   useEffect(() => {
     if (activeSubPage === "contraste" && activeContrastTab === "auto") {
       if (selectedNode) {
+        // Clear deep scan results whenever the primary selection changes
+        deepScanResultsRef.current = [];
+        setFocusedNodeId(null);
         performAutoAnalysis();
       } else {
+        deepScanResultsRef.current = [];
         setAutoAnalysisResults([]);
         setAutoAnalysisError(null);
         setAutoAnalysisLoading(false);
@@ -305,12 +321,45 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
     }
   }, [activeSubPage, activeContrastTab, selectedNode, deepScan]);
 
+  // refreshCounter is only used for document visual changes (fills/strokes changed)
+  // When deepScan is active and we already have results, skip the re-analysis
+  // to prevent the list from flickering when the user focuses a node
+  useEffect(() => {
+    if (refreshCounter === 0) return;
+    if (activeSubPage === "contraste" && activeContrastTab === "auto") {
+      if (deepScan && deepScanResultsRef.current.length > 0) {
+        // There is an active deep scan list — don't reset it, just re-run in place
+        if (!isAnalyzingRef.current) {
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "color-contrast-scan",
+                deepScan,
+                page: { id: "current-page" }
+              }
+            },
+            "*"
+          );
+        }
+        return;
+      }
+      if (selectedNode) {
+        performAutoAnalysis();
+      }
+    }
+  }, [refreshCounter]);
+
   // Ouvir mensagem com resultados de análise automática
   useEffect(() => {
     const handleAnalysisResults = async (event: MessageEvent) => {
       try {
         // Acessar dados corretamente do plugin Figma
         const pluginMessage = event.data?.pluginMessage || event.data || {};
+
+        if (pluginMessage.type === "refresh-accessibility") {
+          setRefreshCounter(c => c + 1);
+          return;
+        }
 
         if (pluginMessage.type === "color-contrast-result") {
           console.log(
@@ -466,50 +515,49 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
                   b: number;
                 } | null = null;
 
-                // Sample background from image at each point if not a Graphic
-                if (!sample.isGraphic) {
-                  for (const [px, py] of samplePoints) {
-                    if (!bgImageData) break;
+                // Sample background from image at each point
+                for (const [px, py] of samplePoints) {
+                  if (!bgImageData) break;
 
-                    const bgPixel = getImageDataPixel(
-                      bgImageData,
-                      px,
-                      py,
-                      true
-                    );
-                    if (!bgPixel) continue;
+                  const bgPixel = getImageDataPixel(bgImageData, px, py, true);
+                  if (!bgPixel) continue;
 
-                    // Flatten background on white matte (handle transparency)
-                    const flattenedBg = flattenColors(bgPixel, whiteMatte);
+                  // Se a imagem exportada for transparente (alpha < 1),
+                  // o background verdadeiro deve ser a cor da página, e não branco absoluto.
+                  const pageMatte = result.pageBgColorRgb
+                    ? { ...result.pageBgColorRgb, a: 1 }
+                    : { r: 1, g: 1, b: 1, a: 1 };
 
-                    // Store first valid sample for display
-                    if (!sampledBgColor) {
-                      sampledBgColor = {
-                        r: flattenedBg.r,
-                        g: flattenedBg.g,
-                        b: flattenedBg.b
-                      };
-                    }
+                  // Flatten background on the page matte (handle transparency)
+                  const flattenedBg = flattenColors(bgPixel, pageMatte);
 
-                    // Blend text color with background based on opacity
-                    const blendedText = mixColors(
-                      flattenedBg,
-                      textColor,
-                      textColor.a * textOpacity
-                    );
-
-                    // Calculate luminance
-                    const textLum = srgbLuminance(blendedText);
-                    const bgLum = srgbLuminance(flattenedBg);
-
-                    // Calculate contrast ratio
-                    const lighter = Math.max(textLum, bgLum);
-                    const darker = Math.min(textLum, bgLum);
-                    const contrastRatio = (lighter + 0.05) / (darker + 0.05);
-
-                    totalContrastRatio += contrastRatio;
-                    validSamples++;
+                  // Store first valid sample for display
+                  if (!sampledBgColor) {
+                    sampledBgColor = {
+                      r: flattenedBg.r,
+                      g: flattenedBg.g,
+                      b: flattenedBg.b
+                    };
                   }
+
+                  // Blend text color with background based on opacity
+                  const blendedText = mixColors(
+                    flattenedBg,
+                    textColor,
+                    textColor.a * textOpacity
+                  );
+
+                  // Calculate luminance
+                  const textLum = srgbLuminance(blendedText);
+                  const bgLum = srgbLuminance(flattenedBg);
+
+                  // Calculate contrast ratio
+                  const lighter = Math.max(textLum, bgLum);
+                  const darker = Math.min(textLum, bgLum);
+                  const contrastRatio = (lighter + 0.05) / (darker + 0.05);
+
+                  totalContrastRatio += contrastRatio;
+                  validSamples++;
                 }
 
                 // If no image samples, fallback to page background
@@ -607,6 +655,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
           });
 
           setAutoAnalysisResults(processedResults);
+          deepScanResultsRef.current = processedResults;
 
           // Screenshot do frame (como no plugin accessibility): criar URL a partir dos bytes da imagem
           if (contrastPreviewImageUrl) {
@@ -622,11 +671,49 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
             const blob = new Blob([imageBytes as BlobPart], {
               type: "image/png"
             });
-            const url = URL.createObjectURL(blob);
-            setContrastPreviewImageUrl(url);
-            const w = Number(result.width) || 0;
-            const h = Number(result.height) || 0;
-            setContrastPreviewSize(w && h ? { width: w, height: h } : null);
+            const fullUrl = URL.createObjectURL(blob);
+
+            if (result.textNodeInfos && result.textNodeInfos.length === 1) {
+              const textInfo = result.textNodeInfos[0];
+              const { x, y, w, h } = textInfo;
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const padding = 32; // Extra context padding
+                const cropX = Math.max(0, x - padding);
+                const cropY = Math.max(0, y - padding);
+                const cropW = Math.min(img.width - cropX, w + padding * 2);
+                const cropH = Math.min(img.height - cropY, h + padding * 2);
+
+                canvas.width = cropW;
+                canvas.height = cropH;
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                  ctx.drawImage(
+                    img,
+                    cropX,
+                    cropY,
+                    cropW,
+                    cropH,
+                    0,
+                    0,
+                    cropW,
+                    cropH
+                  );
+                  setContrastPreviewImageUrl(canvas.toDataURL("image/png"));
+                  setContrastPreviewSize({ width: cropW, height: cropH });
+                }
+                URL.revokeObjectURL(fullUrl);
+              };
+              img.src = fullUrl;
+            } else {
+              setContrastPreviewImageUrl(fullUrl);
+              const cw = Number(result.width) || 0;
+              const ch = Number(result.height) || 0;
+              setContrastPreviewSize(
+                cw && ch ? { width: cw, height: ch } : null
+              );
+            }
           } else {
             setContrastPreviewImageUrl(null);
             setContrastPreviewSize(null);
@@ -647,6 +734,7 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
         );
       } finally {
         setAutoAnalysisLoading(false);
+        isAnalyzingRef.current = false;
       }
     };
 
@@ -1311,371 +1399,404 @@ const AccessibilityTab: React.FC<AccessibilityTabProps> = ({
               </button>
             </div>
 
+            {/* Wrapper relativo para gradient + scroll */}
             <div
-              className="scrollable-content"
               style={{
                 flex: 1,
                 minHeight: 0,
-                margin: "8px 0 0 0",
-                overflowY: "auto",
+                position: "relative",
                 display: "flex",
-                flexDirection: "column",
-                paddingBottom: activeContrastTab === "auto" ? "80px" : 0
+                flexDirection: "column"
               }}
             >
-              {activeContrastTab === "auto" ? (
-                <div
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: "flex",
-                    flexDirection: "column"
-                  }}
-                >
-                  {autoAnalysisResults.length <= 1 ? (
-                    <SingleContrastResult
-                      result={autoAnalysisResults[0]}
-                      previewUrl={contrastPreviewImageUrl}
-                      emptyMessage={autoAnalysisError || undefined}
-                    />
-                  ) : (
-                    <>
-                      {contrastPreviewImageUrl && (
-                        <div style={{ marginBottom: 16 }}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowContrastPreview(!showContrastPreview)
-                            }
-                            style={{
-                              background: "transparent",
-                              border: "1px solid rgba(255,255,255,0.2)",
-                              borderRadius: 6,
-                              color: "#e0e0e0",
-                              fontSize: 12,
-                              padding: "6px 12px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6
-                            }}
-                          >
-                            <span
+              <div
+                className="scrollable-content"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  margin: "8px 0 0 0",
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  paddingBottom: activeContrastTab === "auto" ? "80px" : 0
+                }}
+              >
+                {activeContrastTab === "auto" ? (
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      display: "flex",
+                      flexDirection: "column"
+                    }}
+                  >
+                    {autoAnalysisResults.length <= 1 ? (
+                      <SingleContrastResult
+                        result={autoAnalysisResults[0]}
+                        previewUrl={contrastPreviewImageUrl}
+                        emptyMessage={autoAnalysisError || undefined}
+                      />
+                    ) : (
+                      <>
+                        {contrastPreviewImageUrl && (
+                          <div style={{ marginBottom: 16 }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowContrastPreview(!showContrastPreview)
+                              }
                               style={{
-                                transform: showContrastPreview
-                                  ? "rotate(0deg)"
-                                  : "rotate(-90deg)",
-                                transition: "transform 0.2s"
-                              }}
-                            >
-                              ▼
-                            </span>
-                            {showContrastPreview
-                              ? "Ocultar preview"
-                              : "Mostrar preview"}
-                          </button>
-                          {showContrastPreview && (
-                            <div
-                              style={{
-                                marginTop: 12,
-                                borderRadius: 8,
-                                overflow: "hidden",
-                                background: "rgba(0,0,0,0.2)",
-                                maxWidth: "100%",
-                                maxHeight: 320,
-                                overflowY: "auto",
-                                overflowX: "auto"
-                              }}
-                            >
-                              <img
-                                src={contrastPreviewImageUrl}
-                                alt="Preview do frame analisado"
-                                style={{
-                                  display: "block",
-                                  maxWidth: "100%",
-                                  height: "auto",
-                                  width: contrastPreviewSize
-                                    ? undefined
-                                    : "100%"
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {autoAnalysisResults.length > 0 && (
-                        <div style={{ flex: 1, overflowY: "auto" }}>
-                          {autoAnalysisResults.map((result, index) => (
-                            <div
-                              key={result.id}
-                              style={{
-                                padding: 12,
+                                background: "transparent",
+                                border: "1px solid rgba(255,255,255,0.2)",
                                 borderRadius: 6,
-                                background: result.hasIssues
-                                  ? "rgba(239, 68, 68, 0.1)"
-                                  : "rgba(34, 197, 94, 0.1)",
-                                border: result.hasIssues
-                                  ? "1px solid rgba(239, 68, 68, 0.2)"
-                                  : "1px solid rgba(34, 197, 94, 0.2)",
-                                marginBottom: 8
+                                color: "#e0e0e0",
+                                fontSize: 12,
+                                padding: "6px 12px",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6
                               }}
                             >
+                              <span
+                                style={{
+                                  transform: showContrastPreview
+                                    ? "rotate(0deg)"
+                                    : "rotate(-90deg)",
+                                  transition: "transform 0.2s"
+                                }}
+                              >
+                                ▼
+                              </span>
+                              {showContrastPreview
+                                ? "Ocultar preview"
+                                : "Mostrar preview"}
+                            </button>
+                            {showContrastPreview && (
                               <div
                                 style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
+                                  marginTop: 12,
+                                  borderRadius: 8,
+                                  overflow: "hidden",
+                                  background: "rgba(0,0,0,0.2)",
+                                  maxWidth: "100%",
+                                  maxHeight: 320,
+                                  overflowY: "auto",
+                                  overflowX: "auto"
+                                }}
+                              >
+                                <img
+                                  src={contrastPreviewImageUrl}
+                                  alt="Preview do frame analisado"
+                                  style={{
+                                    display: "block",
+                                    maxWidth: "100%",
+                                    height: "auto",
+                                    width: contrastPreviewSize
+                                      ? undefined
+                                      : "100%"
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {autoAnalysisResults.length > 0 && (
+                          <div style={{ flex: 1, overflowY: "auto" }}>
+                            {autoAnalysisResults.map((result, index) => (
+                              <div
+                                key={result.id}
+                                style={{
+                                  padding: 12,
+                                  borderRadius: 6,
+                                  background: result.hasIssues
+                                    ? "rgba(239, 68, 68, 0.1)"
+                                    : "rgba(34, 197, 94, 0.1)",
+                                  border: result.hasIssues
+                                    ? "1px solid rgba(239, 68, 68, 0.2)"
+                                    : "1px solid rgba(34, 197, 94, 0.2)",
                                   marginBottom: 8
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: 500,
-                                    color: "#fff"
-                                  }}
-                                >
-                                  {result.nodeName}
-                                </span>
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: result.hasIssues
-                                      ? "#ef4444"
-                                      : "#22c55e"
-                                  }}
-                                >
-                                  {result.contrastRatio.toFixed(2)}:1
-                                </span>
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "rgba(255, 255, 255, 0.7)",
-                                  marginBottom: 4
-                                }}
-                              >
-                                <span style={{ marginRight: 8 }}>
-                                  Foreground: {result.textColor}
-                                </span>
-                                <span>Background: {result.bgColor}</span>
-                              </div>
-
-                              {result.text && (
-                                <div
-                                  style={{
-                                    fontSize: 11,
-                                    color: "rgba(255, 255, 255, 0.6)",
-                                    marginBottom: 4
-                                  }}
-                                >
-                                  "{result.text}"
-                                </div>
-                              )}
-
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "flex-start",
-                                  marginTop: 8
                                 }}
                               >
                                 <div
                                   style={{
                                     display: "flex",
-                                    gap: 4,
-                                    flexWrap: "wrap"
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    marginBottom: 8
                                   }}
                                 >
-                                  {result.aa && (
-                                    <span
-                                      style={{
-                                        fontSize: 10,
-                                        background: "rgba(34, 197, 94, 0.2)",
-                                        color: "#22c55e",
-                                        padding: "2px 6px",
-                                        borderRadius: 3
-                                      }}
-                                    >
-                                      AA
-                                    </span>
-                                  )}
-                                  {result.aaa && (
-                                    <span
-                                      style={{
-                                        fontSize: 10,
-                                        background: "rgba(34, 197, 94, 0.2)",
-                                        color: "#22c55e",
-                                        padding: "2px 6px",
-                                        borderRadius: 3
-                                      }}
-                                    >
-                                      AAA
-                                    </span>
-                                  )}
-                                  {result.aaLarge && (
-                                    <span
-                                      style={{
-                                        fontSize: 10,
-                                        background: "rgba(34, 197, 94, 0.2)",
-                                        color: "#22c55e",
-                                        padding: "2px 6px",
-                                        borderRadius: 3
-                                      }}
-                                    >
-                                      AA Large
-                                    </span>
-                                  )}
-                                  {result.hasIssues &&
-                                    result.issues.map((issue, i) => (
+                                  <span
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 500,
+                                      color: "#fff"
+                                    }}
+                                  >
+                                    {result.nodeName}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      color: result.hasIssues
+                                        ? "#ef4444"
+                                        : "#22c55e"
+                                    }}
+                                  >
+                                    {result.contrastRatio.toFixed(2)}:1
+                                  </span>
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: "rgba(255, 255, 255, 0.7)",
+                                    marginBottom: 4
+                                  }}
+                                >
+                                  <span style={{ marginRight: 8 }}>
+                                    Foreground: {result.textColor}
+                                  </span>
+                                  <span>Background: {result.bgColor}</span>
+                                </div>
+
+                                {result.text && (
+                                  <div
+                                    style={{
+                                      fontSize: 11,
+                                      color: "rgba(255, 255, 255, 0.6)",
+                                      marginBottom: 4
+                                    }}
+                                  >
+                                    "{result.text}"
+                                  </div>
+                                )}
+
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginTop: 8
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: 4,
+                                      flexWrap: "wrap"
+                                    }}
+                                  >
+                                    {result.aa && (
                                       <span
-                                        key={i}
                                         style={{
                                           fontSize: 10,
-                                          background: "rgba(239, 68, 68, 0.2)",
-                                          color: "#ef4444",
+                                          background: "rgba(34, 197, 94, 0.2)",
+                                          color: "#22c55e",
                                           padding: "2px 6px",
                                           borderRadius: 3
                                         }}
                                       >
-                                        {issue}
+                                        AA
                                       </span>
-                                    ))}
-                                </div>
-                                <button
-                                  onClick={() => handleSelectNode(result.id)}
-                                  onMouseEnter={() =>
-                                    setHoveredResultId(result.id)
-                                  }
-                                  onMouseLeave={() => setHoveredResultId(null)}
-                                  style={{
-                                    background:
-                                      hoveredResultId === result.id
-                                        ? "rgba(255, 255, 255, 0.1)"
-                                        : "none",
-                                    border: "none",
-                                    borderRadius: "4px",
-                                    cursor: "pointer",
-                                    padding: "4px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    flexShrink: 0
-                                  }}
-                                >
-                                  <svg
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 16 16"
-                                    fill="none"
-                                    xmlns="http://www.w3.org/2000/svg"
+                                    )}
+                                    {result.aaa && (
+                                      <span
+                                        style={{
+                                          fontSize: 10,
+                                          background: "rgba(34, 197, 94, 0.2)",
+                                          color: "#22c55e",
+                                          padding: "2px 6px",
+                                          borderRadius: 3
+                                        }}
+                                      >
+                                        AAA
+                                      </span>
+                                    )}
+                                    {result.aaLarge && (
+                                      <span
+                                        style={{
+                                          fontSize: 10,
+                                          background: "rgba(34, 197, 94, 0.2)",
+                                          color: "#22c55e",
+                                          padding: "2px 6px",
+                                          borderRadius: 3
+                                        }}
+                                      >
+                                        AA Large
+                                      </span>
+                                    )}
+                                    {result.hasIssues &&
+                                      result.issues.map((issue, i) => (
+                                        <span
+                                          key={i}
+                                          style={{
+                                            fontSize: 10,
+                                            background:
+                                              "rgba(239, 68, 68, 0.2)",
+                                            color: "#ef4444",
+                                            padding: "2px 6px",
+                                            borderRadius: 3
+                                          }}
+                                        >
+                                          {issue}
+                                        </span>
+                                      ))}
+                                  </div>
+                                  <button
+                                    onClick={() => handleSelectNode(result.id)}
+                                    onMouseEnter={() =>
+                                      setHoveredResultId(result.id)
+                                    }
+                                    onMouseLeave={() =>
+                                      setHoveredResultId(null)
+                                    }
+                                    style={{
+                                      background:
+                                        hoveredResultId === result.id
+                                          ? "rgba(255, 255, 255, 0.1)"
+                                          : "none",
+                                      border: "none",
+                                      borderRadius: "4px",
+                                      cursor: "pointer",
+                                      padding: "4px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      flexShrink: 0
+                                    }}
                                   >
-                                    <g>
-                                      <path
-                                        fillRule="evenodd"
-                                        clipRule="evenodd"
-                                        d="M7.5 6V3.025C5.138 3.259 3.26 5.138 3.025 7.5H6V8.5H3.025C3.259 10.862 5.138 12.74 7.5 12.975V10H8.5V12.975C10.862 12.741 12.74 10.862 12.975 8.5H10V7.5H12.975C12.741 5.138 10.862 3.26 8.5 3.025V6H7.5ZM13.98 7.5C13.739 4.585 11.415 2.261 8.5 2.02V0H7.5V2.02C4.585 2.261 2.261 4.585 2.02 7.5H0V8.5H2.02C2.261 11.415 4.585 13.739 7.5 13.98V16H8.5V13.98C11.415 13.739 13.739 11.415 13.98 8.5H16V7.5H13.98Z"
-                                        fill="white"
-                                      />
-                                    </g>
-                                    <defs>
-                                      <clipPath>
-                                        <rect
-                                          width="16"
-                                          height="16"
-                                          fill="white"
-                                        />
-                                      </clipPath>
-                                    </defs>
-                                  </svg>
-                                </button>
+                                    {focusedNodeId === result.id ? (
+                                      <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="#3b82f6"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      >
+                                        <polyline points="20 6 9 17 4 12" />
+                                      </svg>
+                                    ) : (
+                                      <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                      >
+                                        <g>
+                                          <path
+                                            fillRule="evenodd"
+                                            clipRule="evenodd"
+                                            d="M7.5 6V3.025C5.138 3.259 3.26 5.138 3.025 7.5H6V8.5H3.025C3.259 10.862 5.138 12.74 7.5 12.975V10H8.5V12.975C10.862 12.741 12.74 10.862 12.975 8.5H10V7.5H12.975C12.741 5.138 10.862 3.26 8.5 3.025V6H7.5ZM13.98 7.5C13.739 4.585 11.415 2.261 8.5 2.02V0H7.5V2.02C4.585 2.261 2.261 4.585 2.02 7.5H0V8.5H2.02C2.261 11.415 4.585 13.739 7.5 13.98V16H8.5V13.98C11.415 13.739 13.739 11.415 13.98 8.5H16V7.5H13.98Z"
+                                            fill="white"
+                                          />
+                                        </g>
+                                        <defs>
+                                          <clipPath>
+                                            <rect
+                                              width="16"
+                                              height="16"
+                                              fill="white"
+                                            />
+                                          </clipPath>
+                                        </defs>
+                                      </svg>
+                                    )}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <ContrastChecker
+                    isVisible={true}
+                    selectedNode={selectedNode}
+                    onBack={handleBack}
+                  />
+                )}
+              </div>
 
-                  {/* Switch de Deep Scan */}
+              {/* Switch de Deep Scan com gradient — fora do overflow */}
+              {activeContrastTab === "auto" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    padding: "16px",
+                    paddingTop: "56px",
+                    background:
+                      "linear-gradient(to top, #2a2a2a 55%, rgba(42,42,42,0) 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    zIndex: 10,
+                    pointerEvents: "none"
+                  }}
+                >
                   <div
                     style={{
-                      position: "absolute",
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      padding: "16px",
-                      background: "rgba(30, 30, 30, 0.95)",
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      zIndex: 10
+                      flexDirection: "column",
+                      gap: 2,
+                      pointerEvents: "auto"
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: "rgba(255,255,255,0.9)",
+                        fontWeight: 500
+                      }}
+                    >
+                      Análise em profundidade
+                    </span>
+                    <span
+                      style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}
+                    >
+                      Verifica todos os elementos internos
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setDeepScan(!deepScan)}
+                    style={{
+                      width: 36,
+                      height: 20,
+                      borderRadius: 10,
+                      background: deepScan
+                        ? "#3b82f6"
+                        : "rgba(255,255,255,0.2)",
+                      border: "none",
+                      position: "relative",
+                      cursor: "pointer",
+                      transition: "background 0.2s",
+                      flexShrink: 0,
+                      pointerEvents: "auto"
                     }}
                   >
                     <div
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        background: "white",
+                        position: "absolute",
+                        top: 2,
+                        left: deepScan ? 18 : 2,
+                        transition: "left 0.2s"
                       }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 13,
-                          color: "rgba(255, 255, 255, 0.9)",
-                          fontWeight: 500
-                        }}
-                      >
-                        Análise em profundidade
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: "rgba(255, 255, 255, 0.5)"
-                        }}
-                      >
-                        Verifica todos os elementos internos
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setDeepScan(!deepScan)}
-                      style={{
-                        width: 36,
-                        height: 20,
-                        borderRadius: 10,
-                        background: deepScan
-                          ? "#3b82f6"
-                          : "rgba(255, 255, 255, 0.2)",
-                        border: "none",
-                        position: "relative",
-                        cursor: "pointer",
-                        transition: "background 0.2s",
-                        flexShrink: 0
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: 8,
-                          background: "white",
-                          position: "absolute",
-                          top: 2,
-                          left: deepScan ? 18 : 2,
-                          transition: "left 0.2s"
-                        }}
-                      />
-                    </button>
-                  </div>
+                    />
+                  </button>
                 </div>
-              ) : (
-                <ContrastChecker
-                  isVisible={true}
-                  selectedNode={selectedNode}
-                  onBack={handleBack}
-                />
               )}
             </div>
           </div>

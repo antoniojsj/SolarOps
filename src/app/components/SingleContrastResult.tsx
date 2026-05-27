@@ -165,125 +165,126 @@ export const SingleContrastResult: React.FC<SingleContrastResultProps> = ({
             {emptyMessage}
           </p>
         )}
-        {/* Colors Row */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "0 8px"
-          }}
-        >
-          {/* Foreground */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ color: "rgba(255,255,255,0.7)" }}
-            >
-              <rect
-                x="3"
-                y="3"
-                width="14"
-                height="14"
-                rx="2"
-                ry="2"
-                fill="currentColor"
-              ></rect>
-              <rect
-                x="7"
-                y="7"
-                width="14"
-                height="14"
-                rx="2"
-                ry="2"
-                fill="none"
-                stroke="black"
-              ></rect>
-            </svg>
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                backgroundColor: hasResult ? textColor : "transparent",
-                borderRadius: "2px",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                flexShrink: 0
-              }}
-            />
-            <span
-              style={{
-                color: hasResult ? "white" : "rgba(255,255,255,0.3)",
-                fontSize: "12px",
-                fontFamily: "monospace",
-                fontWeight: 600
-              }}
-            >
-              {hasResult ? textColor : "#------"}
-            </span>
-          </div>
+      </div>
 
-          {/* Background */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                color: hasResult ? "white" : "rgba(255,255,255,0.3)",
-                fontSize: "12px",
-                fontFamily: "monospace",
-                fontWeight: 600
-              }}
-            >
-              {hasResult ? bgColor : "#------"}
-            </span>
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                backgroundColor: hasResult ? bgColor : "transparent",
-                borderRadius: "2px",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                flexShrink: 0
-              }}
-            />
-            <svg
+      {/* Colors Row */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "0 8px"
+        }}
+      >
+        {/* Foreground */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255,255,255,0.7)" }}
+          >
+            <rect
+              x="3"
+              y="3"
               width="14"
               height="14"
-              viewBox="0 0 24 24"
+              rx="2"
+              ry="2"
+              fill="currentColor"
+            ></rect>
+            <rect
+              x="7"
+              y="7"
+              width="14"
+              height="14"
+              rx="2"
+              ry="2"
               fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ color: "rgba(255,255,255,0.7)" }}
-            >
-              <rect
-                x="7"
-                y="7"
-                width="14"
-                height="14"
-                rx="2"
-                ry="2"
-                fill="currentColor"
-              ></rect>
-              <rect
-                x="3"
-                y="3"
-                width="14"
-                height="14"
-                rx="2"
-                ry="2"
-                fill="none"
-                stroke="black"
-              ></rect>
-            </svg>
-          </div>
-        </div>{" "}
+              stroke="black"
+            ></rect>
+          </svg>
+          <div
+            style={{
+              width: "12px",
+              height: "12px",
+              backgroundColor: hasResult ? textColor : "transparent",
+              borderRadius: "2px",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              flexShrink: 0
+            }}
+          />
+          <span
+            style={{
+              color: hasResult ? "white" : "rgba(255,255,255,0.3)",
+              fontSize: "12px",
+              fontFamily: "monospace",
+              fontWeight: 600
+            }}
+          >
+            {hasResult ? textColor : "#------"}
+          </span>
+        </div>
+
+        {/* Background */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span
+            style={{
+              color: hasResult ? "white" : "rgba(255,255,255,0.3)",
+              fontSize: "12px",
+              fontFamily: "monospace",
+              fontWeight: 600
+            }}
+          >
+            {hasResult ? bgColor : "#------"}
+          </span>
+          <div
+            style={{
+              width: "12px",
+              height: "12px",
+              backgroundColor: hasResult ? bgColor : "transparent",
+              borderRadius: "2px",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              flexShrink: 0
+            }}
+          />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ color: "rgba(255,255,255,0.7)" }}
+          >
+            <rect
+              x="7"
+              y="7"
+              width="14"
+              height="14"
+              rx="2"
+              ry="2"
+              fill="currentColor"
+            ></rect>
+            <rect
+              x="3"
+              y="3"
+              width="14"
+              height="14"
+              rx="2"
+              ry="2"
+              fill="none"
+              stroke="black"
+            ></rect>
+          </svg>
+        </div>
       </div>
 
       {/* Large Contrast Ratio Box */}
