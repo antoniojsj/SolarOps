@@ -94,34 +94,6 @@ function Navigation(props) {
           >
             Camadas
           </motion.div>
-          <motion.div
-            className={`nav-item ${activePage === "styles" ? "active" : ""}`}
-            onClick={stylesClick}
-            whileTap={{ scale: 0.98, opacity: 0.8 }}
-            style={{ cursor: "pointer" }}
-          >
-            Estilos
-          </motion.div>
-          <motion.div
-            className={`nav-item ${
-              activePage === "components" ? "active" : ""
-            }`}
-            onClick={componentsClick}
-            whileTap={{ scale: 0.98, opacity: 0.8 }}
-            style={{ cursor: "pointer" }}
-          >
-            Bibliotecas
-          </motion.div>
-          <motion.div
-            className={`nav-item ${
-              activePage === "documentation" ? "active" : ""
-            }`}
-            onClick={documentationClick}
-            whileTap={{ scale: 0.98, opacity: 0.8 }}
-            style={{ cursor: "pointer" }}
-          >
-            Documentação
-          </motion.div>
 
           <div className="nav-icon-wrapper" style={{ paddingRight: 16 }}>
             <motion.button
