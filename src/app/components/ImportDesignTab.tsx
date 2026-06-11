@@ -163,6 +163,41 @@ const SettingInput = styled.input`
   }
 `;
 
+const ToggleButtonGroup = styled.div`
+  display: flex;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  overflow: hidden;
+`;
+
+const ToggleButton = styled.button<{ active: boolean }>`
+  flex: 1;
+  background: ${props =>
+    props.active ? "rgba(255, 255, 255, 0.15)" : "transparent"};
+  color: ${props => (props.active ? "#fff" : "rgba(255, 255, 255, 0.6)")};
+  border: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${props =>
+      props.active ? "rgba(255, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.1)"};
+    color: #fff;
+  }
+
+  &:not(:last-child) {
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+`;
+
 const Divider = styled.div`
   height: 1px;
   background: rgba(255, 255, 255, 0.1);
@@ -623,21 +658,43 @@ async function serializeDomTree(
     const isIcon =
       !!iconId ||
       /material-symbols|material-icons/i.test(attrs.class || "") ||
-      /Material Symbols/i.test(styles.fontFamily || "");
+      /Material Symbols|Material Icons/i.test(styles.fontFamily || "");
     const iconName = isIcon
       ? (el.textContent || "").trim().replace(/\s+/g, " ")
       : undefined;
 
-    // Para ícones, REMOVER backgroundColor E color completamente
-    // Isso garante que a cor do ícone não seja aplicada ao frame
-    // Apenas o imageData (PNG rasterizado) é usado
+    // Para ícones, REMOVER apenas backgroundColor se necessário,
+    // mas vamos manter o color, pois domImporter.ts precisa dele para pintar o vetor SVG!
     let finalStyles: typeof styles;
     if (isIcon) {
       finalStyles = { ...styles };
-      delete finalStyles.backgroundColor; // Não aplicar fundo
-      delete finalStyles.color; // Não aplicar cor (já está no PNG rasterizado)
+      delete finalStyles.backgroundColor; // Não aplicar fundo no ícone
+      // NÃO deletar color! O fallback vetor precisa de finalStyles.color!
     } else {
       finalStyles = styles;
+    }
+
+    let svgText: string | undefined = undefined;
+    if (isIcon && iconName) {
+      const normalized = iconName
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_]/g, "");
+      const svgUrl = `https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/${normalized}/default/24px.svg`;
+      try {
+        const res = await fetch(svgUrl);
+        if (res.ok) {
+          svgText = await res.text();
+        } else {
+          console.warn(
+            "[ImportDesignTab] Falha ao baixar SVG do ícone:",
+            res.status
+          );
+        }
+      } catch (err) {
+        console.warn("[ImportDesignTab] Erro de rede ao baixar SVG:", err);
+      }
     }
 
     const children: SerializedNode[] = [];
@@ -658,13 +715,13 @@ async function serializeDomTree(
       nodeType: "element",
       tagName,
       attrs,
-      rect,
       styles: finalStyles,
-      imageUrl,
-      imageData: embeddedImageData,
+      rect,
+      children,
       isIcon,
       iconName,
-      children
+      svgText,
+      imageData: embeddedImageData
     };
   };
 
@@ -750,11 +807,13 @@ async function renderHtmlInIframeAndSerialize(
   const looksLikeFullDoc =
     /<html[\s>]/i.test(fullHtml) && /<body[\s>]/i.test(fullHtml);
   const cssTag = rawCss.trim() ? `<style>${rawCss}</style>` : "";
+  const fontLink = `<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&family=Material+Symbols+Sharp:opsz,wght,FILL,GRAD@24,400,0,0&family=Material+Icons&family=Material+Icons+Outlined&family=Material+Icons+Round&family=Material+Icons+Sharp&display=block" rel="stylesheet" />`;
+  const headInject = `${fontLink}\n${cssTag}`;
   const htmlWithCss = looksLikeFullDoc
     ? /<\/head>/i.test(fullHtml)
-      ? fullHtml.replace(/<\/head>/i, `${cssTag}</head>`)
-      : fullHtml.replace(/<body/i, `<head>${cssTag}</head><body`)
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cssTag}</head><body>${fullHtml}</body></html>`;
+      ? fullHtml.replace(/<\/head>/i, `${headInject}</head>`)
+      : fullHtml.replace(/<body/i, `<head>${headInject}</head><body`)
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"/>${headInject}</head><body>${fullHtml}</body></html>`;
   let html = normalizeTailwindConfigOrder(htmlWithCss);
   // Injeta as cores do tailwind.config como CSS vars no :root para que
   // getComputedStyle() possa resolver bg-primary, text-on-surface etc.
@@ -846,76 +905,10 @@ async function renderHtmlInIframeAndSerialize(
       }
     }
 
-    // Pré-capturar ícones como imagens rasterizadas
+    // Não usamos mais html2canvas para rasterizar ícones Material.
+    // Em vez disso, confiamos no domImporter.ts para baixar o SVG real (vetor),
+    // o que previne problemas com fontes não carregadas e garante qualidade infinita.
     const iconImageMap = new Map<string, string>();
-    const iconSelectors = [
-      ".material-symbols-outlined",
-      ".material-symbols-rounded",
-      ".material-icons"
-    ];
-    const iconElements = iconSelectors
-      .flatMap(sel => Array.from(doc.querySelectorAll(sel)))
-      .filter((el, idx, arr) => arr.indexOf(el) === idx) as HTMLElement[];
-
-    let iconIndex = 0;
-    for (const el of iconElements) {
-      const id = `icon-${iconIndex++}`;
-      el.setAttribute("data-fig-icon-id", id);
-      try {
-        // Obter as cores computadas do ícone original
-        const computedStyle = win.getComputedStyle(el);
-        const iconColor = computedStyle.color || "#000000";
-        const iconFontSize = computedStyle.fontSize || "24px";
-        const iconFontWeight = computedStyle.fontWeight || "400";
-
-        // Criar wrapper temporário TRANSPARENTE para Material Symbols
-        // A transparência permite que o ícone seja capturado sem background branco
-        const wrapper = doc.createElement("div");
-        wrapper.style.display = "inline-flex";
-        wrapper.style.alignItems = "center";
-        wrapper.style.justifyContent = "center";
-        wrapper.style.backgroundColor = "transparent"; // ← TRANSPARÊNCIA para evitar cor de fundo
-        wrapper.style.padding = "4px";
-        wrapper.style.borderRadius = "0px";
-
-        const clonedEl = el.cloneNode(true) as HTMLElement;
-
-        // CRÍTICO: Aplicar as cores e estilos computados ao clone
-        // Isso garante que html2canvas capture a cor correta do ícone
-        clonedEl.style.color = iconColor;
-        clonedEl.style.fontSize = iconFontSize;
-        clonedEl.style.fontWeight = iconFontWeight;
-        clonedEl.style.display = "inline-flex";
-        clonedEl.style.alignItems = "center";
-        clonedEl.style.justifyContent = "center";
-        clonedEl.style.backgroundColor = "transparent"; // Remover background do ícone também
-
-        wrapper.appendChild(clonedEl);
-        doc.body.appendChild(wrapper);
-
-        console.log(
-          `[ImportDesignTab] Rasterizando ícone com cor: ${iconColor}, tamanho: ${iconFontSize}`
-        );
-
-        const canvas = await html2canvas(wrapper, {
-          backgroundColor: null, // null para capturar com transparência
-          windowWidth: viewport.width,
-          windowHeight: viewport.height,
-          scale: 2,
-          logging: false,
-          // Garantir que use o contexto do iframe
-          // @ts-ignore - opção não tipada em todas as versões
-          window: win
-        } as any);
-        const dataUrl = canvas.toDataURL("image/png");
-        iconImageMap.set(id, dataUrl);
-        doc.body.removeChild(wrapper);
-
-        console.log(`[ImportDesignTab] ✓ Ícone ${id} rasterizado com sucesso`);
-      } catch (err) {
-        console.warn("[ImportDesignTab] ❌ Falha ao rasterizar ícone", err);
-      }
-    }
 
     const tree = await serializeDomTree(
       body,
@@ -2766,6 +2759,16 @@ async function waitForRenderedStylesAndAssets(
       console.warn(
         `[ImportDesignTab] ⚠️ Timeout aguardando Tailwind (${maxWaitMs}ms). Usando fallback.`
       );
+      // Aplicar estilos Tailwind via JS quando CDN falha
+      applyTailwindFallbackStyles(doc, win);
+    }
+
+    // Se Tailwind foi detectado mas parece não ter processado, aplicar fallback
+    if (!isTailwindReady(doc, win, body)) {
+      console.warn(
+        "[ImportDesignTab] Tailwind detectado mas não processou. Aplicando fallback..."
+      );
+      applyTailwindFallbackStyles(doc, win);
     }
 
     // Aguardar mais um frame para garantir que re-layouts foram feitos
@@ -2827,9 +2830,12 @@ const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
     const [css, setCss] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingUrl, setIsLoadingUrl] = useState(false);
-    const [viewportWidth, setViewportWidth] = useState(1440);
-    const [viewportHeight, setViewportHeight] = useState(900);
-    const [useAutoLayout, setUseAutoLayout] = useState(true);
+    const [viewportMode, setViewportMode] = useState<"desktop" | "mobile">(
+      "desktop"
+    );
+    const viewportWidth = viewportMode === "desktop" ? 1440 : 390;
+    const viewportHeight = viewportMode === "desktop" ? 900 : 844;
+    const [useAutoLayout, setUseAutoLayout] = useState(false);
     const lastImportErrorRef = useRef<string | null>(null);
 
     const hasTailwindCdn = useMemo(() => /cdn\.tailwindcss\.com/i.test(html), [
@@ -3066,7 +3072,7 @@ const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
         canImport: html.trim().length > 0 || css.trim().length > 0,
         isLoading
       }),
-      [html, css, isLoading, useAutoLayout, viewportWidth, viewportHeight]
+      [html, css, isLoading, useAutoLayout, viewportMode]
     );
 
     return (
@@ -3119,28 +3125,48 @@ const ImportDesignTab = forwardRef<ImportDesignTabRef, ImportDesignTabProps>(
 
         <SettingsBox>
           <SettingItem>
-            <span>Viewport (W × H)</span>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <SettingInput
-                type="number"
-                min={320}
-                max={3840}
-                value={viewportWidth}
-                onChange={e =>
-                  setViewportWidth(parseInt(e.target.value || "0", 10) || 1440)
-                }
-              />
-              <span style={{ color: "rgba(255,255,255,0.6)" }}>×</span>
-              <SettingInput
-                type="number"
-                min={320}
-                max={2160}
-                value={viewportHeight}
-                onChange={e =>
-                  setViewportHeight(parseInt(e.target.value || "0", 10) || 900)
-                }
-              />
-            </div>
+            <span>Viewport</span>
+            <ToggleButtonGroup>
+              <ToggleButton
+                active={viewportMode === "desktop"}
+                onClick={() => setViewportMode("desktop")}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+                Desktop
+              </ToggleButton>
+              <ToggleButton
+                active={viewportMode === "mobile"}
+                onClick={() => setViewportMode("mobile")}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                  <line x1="12" y1="18" x2="12.01" y2="18" />
+                </svg>
+                Mobile
+              </ToggleButton>
+            </ToggleButtonGroup>
           </SettingItem>
           <SettingItem>
             <span>Auto Layout</span>

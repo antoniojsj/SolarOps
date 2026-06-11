@@ -21,6 +21,7 @@ type SerializedNode =
       imageData?: string;
       isIcon?: boolean;
       iconName?: string;
+      svgText?: string;
       children: SerializedNode[];
     };
 
@@ -831,6 +832,7 @@ function parseLetterSpacing(
 
 async function tryCreateMaterialSymbolVector(
   iconName: string,
+  svgTextFallback: string | undefined,
   colorCss: string | undefined,
   targetWidth: number,
   targetHeight: number
@@ -838,20 +840,36 @@ async function tryCreateMaterialSymbolVector(
   const normalized = normalizeMaterialSymbolName(iconName);
   if (!normalized) return null;
 
-  // Unofficial but widely used gstatic endpoint pattern
-  const svgUrl = `https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/${normalized}/default/24px.svg`;
-  try {
-    const res = await fetchWithRetry(svgUrl, { timeout: 5000, retries: 2 });
-    if (!res.ok) {
+  let svgText = svgTextFallback;
+
+  if (!svgText) {
+    // Unofficial but widely used gstatic endpoint pattern
+    const svgUrl = `https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/${normalized}/default/24px.svg`;
+    try {
+      const res = await fetchWithRetry(svgUrl, { timeout: 5000, retries: 2 });
+      if (!res.ok) {
+        console.warn(
+          "[domImporter] Failed to fetch material symbol (status " +
+            res.status +
+            "):",
+          svgUrl
+        );
+        return null;
+      }
+      svgText = await res.text();
+    } catch (e) {
       console.warn(
-        "[domImporter] Failed to fetch material symbol (status " +
-          res.status +
-          "):",
-        svgUrl
+        "[domImporter] Failed to fetch material symbol SVG",
+        svgUrl,
+        e
       );
       return null;
     }
-    const svgText = await res.text();
+  }
+
+  if (!svgText) return null;
+
+  try {
     const node = figma.createNodeFromSvg(svgText);
 
     // Apply color (best-effort) by setting fills on vector descendants
@@ -869,7 +887,10 @@ async function tryCreateMaterialSymbolVector(
           // @ts-ignore
           for (const ch of cur.children) stack.push(ch);
         }
-        if ("fills" in cur) {
+        if (
+          "fills" in cur &&
+          (cur.type === "VECTOR" || cur.type === "BOOLEAN_OPERATION")
+        ) {
           try {
             // @ts-ignore
             cur.fills = [paint];
@@ -880,14 +901,24 @@ async function tryCreateMaterialSymbolVector(
       }
     }
 
-    // Resize to match the icon rect
-    if ("resizeWithoutConstraints" in node) {
-      // @ts-ignore
-      node.resizeWithoutConstraints(
-        Math.max(1, targetWidth),
-        Math.max(1, targetHeight)
-      );
+    // Nomear o Frame para o nome do ícone (ex: 'apparel') em vez de 'Frame'
+    node.name = iconName;
+
+    // Configurar as constraints dos vetores para SCALE, SCALE para que redimensionem
+    // corretamente quando o Frame container for redimensionado.
+    for (const child of node.children) {
+      if ("constraints" in child) {
+        child.constraints = {
+          horizontal: "SCALE",
+          vertical: "SCALE"
+        };
+      }
     }
+
+    // Usar resize normal (que respeita constraints) em vez de resizeWithoutConstraints
+    // para que o ícone vetor escale junto com o Frame e fique perfeitamente centralizado!
+    node.resize(Math.max(1, targetWidth), Math.max(1, targetHeight));
+
     return node as any;
   } catch (e) {
     console.warn(
@@ -934,13 +965,19 @@ function applyAutoLayout(
     }
 
     // ── Gap (itemSpacing e counterAxisSpacing) ────────────────────────────
-    const gap = pxToNumber(styles.gap);
+    // getComputedStyle pode retornar "normal" quando gap não é definido explicitamente
+    const gapStr = styles.gap;
+    const gap = gapStr && gapStr !== "normal" ? pxToNumber(gapStr) : 0;
     const rowGapStr = styles.rowGap;
     const colGapStr = styles.columnGap;
     const rowGap =
-      rowGapStr !== undefined && rowGapStr !== "" ? pxToNumber(rowGapStr) : gap;
+      rowGapStr && rowGapStr !== "" && rowGapStr !== "normal"
+        ? pxToNumber(rowGapStr)
+        : gap;
     const colGap =
-      colGapStr !== undefined && colGapStr !== "" ? pxToNumber(colGapStr) : gap;
+      colGapStr && colGapStr !== "" && colGapStr !== "normal"
+        ? pxToNumber(colGapStr)
+        : gap;
 
     if (frame.layoutMode === "VERTICAL") {
       frame.itemSpacing = rowGap;
@@ -969,10 +1006,32 @@ function applyAutoLayout(
     frame.counterAxisAlignItems = mapAlignItems(styles.alignItems);
 
     // ── Sizing do container ───────────────────────────────────────────────
-    // Se for flex-wrap e altura fixa, manter FIXED. Senão, tentar deixar o layout fluir mais natural.
-    // Deixaremos FIXED por padrão para não quebrar caixas exatas, mas o texto interno será HUG.
-    frame.primaryAxisSizingMode = "FIXED";
-    frame.counterAxisSizingMode = "FIXED";
+    // Lógica inteligente: usar HUG quando o container não tem dimensão fixa,
+    // permitindo que o frame se ajuste ao conteúdo (como code.to.design faz).
+    // FIXED quando há dimensão em px definida pelo CSS.
+    // IMPORTANTE: Se algum filho usa layoutGrow (FILL), o pai DEVE ser FIXED nesse eixo.
+    const isVertical = frame.layoutMode === "VERTICAL";
+    const primaryDim = isVertical ? "height" : "width";
+    const counterDim = isVertical ? "width" : "height";
+    const primarySize = styles[primaryDim] || "";
+    const counterSize = styles[counterDim] || "";
+
+    // Verificar se algum filho tem flex-grow > 0 (precisa de FIXED no eixo principal)
+    const hasGrowingChild = childrenData.some(({ styles: cs }) => {
+      const fg = parseFloat(cs.flexGrow || "0");
+      return fg > 0;
+    });
+
+    // Eixo principal: FIXED se tem dimensão em px ou se algum filho faz FILL
+    const primaryIsFixedPx =
+      primarySize && /^\d/.test(primarySize) && primarySize.includes("px");
+    frame.primaryAxisSizingMode =
+      primaryIsFixedPx || hasGrowingChild ? "FIXED" : "AUTO";
+
+    // Eixo cruzado: FIXED se tem dimensão em px explícita
+    const counterIsFixedPx =
+      counterSize && /^\d/.test(counterSize) && counterSize.includes("px");
+    frame.counterAxisSizingMode = counterIsFixedPx ? "FIXED" : "AUTO";
 
     // ── Configurar cada filho ─────────────────────────────────────────────
     for (const { node: child, styles: childStyles } of childrenData) {
@@ -991,26 +1050,37 @@ function applyAutoLayout(
           continue; // não aplicar layoutGrow/layoutAlign
         }
 
-        // layoutGrow: flex-grow > 0
+        // layoutGrow: flex-grow > 0 → Figma aceita apenas 0 ou 1
         const flexGrow = parseFloat(childStyles.flexGrow || "0");
         if (flexGrow > 0 && "layoutGrow" in child) {
           try {
-            (child as any).layoutGrow = flexGrow;
+            (child as any).layoutGrow = 1;
           } catch {
             /* ignore */
           }
         }
 
-        // layoutAlign: align-self ou width:100%
+        // layoutAlign: detectar STRETCH no eixo cruzado.
+        // getComputedStyle retorna pixels (ex: "1440px"), nunca "100%",
+        // então comparamos a dimensão do filho com a do pai.
         const alignSelf = (childStyles.alignSelf || "").toLowerCase();
-        const childWidth = childStyles.width || "";
+        const childCrossSize = isVertical
+          ? pxToNumber(childStyles.width)
+          : pxToNumber(childStyles.height);
+        const parentCrossSize = isVertical ? frame.width : frame.height;
+        // Considerar stretch se a dimensão cruzada do filho é ~igual à do pai
+        const isCrossSizeMatch =
+          childCrossSize > 0 &&
+          parentCrossSize > 0 &&
+          Math.abs(childCrossSize - parentCrossSize) < 2;
+        const parentAlignItems = (styles.alignItems || "").toLowerCase();
         const stretchSelf =
           alignSelf === "stretch" ||
-          childWidth === "100%" ||
-          (frame.layoutMode === "HORIZONTAL" &&
-            childStyles.alignItems === "stretch") ||
-          (frame.layoutMode === "VERTICAL" &&
-            childStyles.justifyContent === "stretch");
+          isCrossSizeMatch ||
+          (parentAlignItems === "stretch" &&
+            alignSelf !== "center" &&
+            alignSelf !== "flex-start" &&
+            alignSelf !== "flex-end");
 
         if ("layoutAlign" in child) {
           try {
@@ -1210,6 +1280,7 @@ async function importNode(
   if (node.isIcon && node.iconName) {
     const iconVec = await tryCreateMaterialSymbolVector(
       node.iconName,
+      node.svgText,
       node.styles.color,
       node.rect.width,
       node.rect.height
@@ -1594,7 +1665,17 @@ export async function importRenderedDOM(
   root.resizeWithoutConstraints(viewport.width, viewport.height);
   root.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
   root.clipsContent = false; // Disable clipping on root frame
-  root.layoutMode = "NONE";
+
+  // O usuário solicitou que o frame principal SEMPRE tenha auto layout (HUG/HUG)
+  // independentemente do switch de auto layout estar ativado ou não.
+  root.layoutMode = "VERTICAL";
+  root.primaryAxisSizingMode = "AUTO";
+  root.counterAxisSizingMode = "AUTO";
+  root.paddingLeft = 0;
+  root.paddingRight = 0;
+  root.paddingTop = 0;
+  root.paddingBottom = 0;
+  root.itemSpacing = 0;
 
   // Place in viewport
   root.x = figma.viewport.bounds.x + 80;
